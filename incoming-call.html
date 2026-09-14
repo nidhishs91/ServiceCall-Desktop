@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+
+    <title>
+        Incoming ServiceCall
+    </title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family:
+                Arial,
+                sans-serif;
+            background:
+                #f4f8f7;
+            color:
+                #1f2d2a;
+        }
+
+        .topbar {
+            background:
+                #0b4f46;
+            color:
+                white;
+            padding:
+                16px 20px;
+            font-size:
+                18px;
+            font-weight:
+                bold;
+        }
+
+        .container {
+            padding:
+                40px 30px;
+            text-align:
+                center;
+        }
+
+        .avatar {
+            width:
+                90px;
+            height:
+                90px;
+            border-radius:
+                50%;
+            background:
+                #dcefeb;
+            margin:
+                0 auto 20px auto;
+            display:
+                flex;
+            align-items:
+                center;
+            justify-content:
+                center;
+            font-size:
+                30px;
+            font-weight:
+                bold;
+            color:
+                #0b4f46;
+        }
+
+        .caller-name {
+            font-size:
+                24px;
+            font-weight:
+                bold;
+            margin-bottom:
+                8px;
+        }
+
+        .department {
+            font-size:
+                14px;
+            color:
+                #65736f;
+            margin-bottom:
+                12px;
+        }
+
+        .status {
+            font-size:
+                16px;
+            margin-bottom:
+                10px;
+        }
+
+        .call-number {
+            font-size:
+                13px;
+            color:
+                #7b8582;
+            margin-bottom:
+                35px;
+        }
+
+        .buttons {
+            display:
+                flex;
+            justify-content:
+                center;
+            gap:
+                20px;
+        }
+
+        button {
+            border:
+                none;
+            border-radius:
+                8px;
+            padding:
+                14px 28px;
+            font-size:
+                15px;
+            cursor:
+                pointer;
+        }
+
+        .decline {
+            background:
+                #d64545;
+            color:
+                white;
+        }
+
+        .accept {
+            background:
+                #16856d;
+            color:
+                white;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="topbar">
+        ServiceCall
+    </div>
+
+    <div class="container">
+
+        <div class="avatar" id="avatar">
+        </div>
+
+        <div class="caller-name" id="callerName">
+        </div>
+
+        <div class="department" id="callerDepartment">
+        </div>
+
+        <div class="status">
+            is calling you...
+        </div>
+
+        <div class="call-number" id="callNumber">
+        </div>
+
+        <div class="buttons">
+
+            <button class="decline" id="declineButton">
+                Decline
+            </button>
+
+            <button class="accept" id="acceptButton">
+                Accept
+            </button>
+
+        </div>
+
+    </div>
+
+    <script>
+
+        const params =
+            new URLSearchParams(
+                window.location.search
+            );
+
+        const callerName =
+            params.get(
+                'callerName'
+            ) || 'Unknown Caller';
+
+        const callerDepartment =
+            params.get(
+                'callerDepartment'
+            ) || '';
+
+        const callNumber =
+            params.get(
+                'callNumber'
+            ) || '';
+
+        document
+            .getElementById(
+                'callerName'
+            )
+            .textContent =
+            callerName;
+
+        document
+            .getElementById(
+                'callerDepartment'
+            )
+            .textContent =
+            callerDepartment;
+
+        document
+            .getElementById(
+                'callNumber'
+            )
+            .textContent =
+            callNumber;
+
+        const initials =
+            callerName
+                .split(' ')
+                .filter(Boolean)
+                .slice(0, 2)
+                .map(
+                    part =>
+                        part[0]
+                            .toUpperCase()
+                )
+                .join('');
+
+        document
+            .getElementById(
+                'avatar'
+            )
+            .textContent =
+            initials || '?';
+
+    </script>
+
+</body>
+
+</html>
