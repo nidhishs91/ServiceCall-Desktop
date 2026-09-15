@@ -877,6 +877,22 @@ async function exchangeAuthorizationCode(
     config.tokenObtainedAt =
         Date.now();
 
+    if (tokenData.refresh_token) {
+ 
+    config.refreshToken =
+        tokenData.refresh_token;
+ 
+    console.log(
+        'ServiceCall refresh token received successfully.'
+    );
+ 
+} else {
+ 
+    console.log(
+        'ServiceCall refresh token was NOT returned.'
+    );
+}
+
     /*
        We no longer need these after
        successful authentication.
