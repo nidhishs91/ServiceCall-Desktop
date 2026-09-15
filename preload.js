@@ -73,6 +73,12 @@ getCallStatus:
             callSysId
         ),
 
+        getAgoraConfig:
+    () =>
+        ipcRenderer.invoke(
+            'servicecall-get-agora-config'
+        ),
+
         onAuthStatus:
             (callback) => {
 

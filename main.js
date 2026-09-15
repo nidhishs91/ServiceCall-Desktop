@@ -2739,3 +2739,92 @@ ipcMain.handle(
         };
     }
 );
+
+/* -------------------------------------------------------
+   AGORA DEVELOPMENT CONFIG
+------------------------------------------------------- */
+
+ipcMain.handle(
+    'servicecall-get-agora-config',
+
+    async () => {
+
+        try {
+
+            const agoraConfigPath =
+                path.join(
+                    __dirname,
+                    'agora-config.json'
+                );
+
+
+            if (
+                !fs.existsSync(
+                    agoraConfigPath
+                )
+            ) {
+
+                return {
+                    success: false,
+
+                    message:
+                        'Local Agora development configuration was not found.'
+                };
+            }
+
+
+            const agoraConfig =
+                JSON.parse(
+                    fs.readFileSync(
+                        agoraConfigPath,
+                        'utf8'
+                    )
+                );
+
+
+            if (
+                !agoraConfig.appId ||
+                !agoraConfig.token ||
+                !agoraConfig.channel
+            ) {
+
+                return {
+                    success: false,
+
+                    message:
+                        'Agora development configuration is incomplete.'
+                };
+            }
+
+
+            return {
+                success: true,
+
+                appId:
+                    agoraConfig.appId,
+
+                token:
+                    agoraConfig.token,
+
+                channel:
+                    agoraConfig.channel
+            };
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to read Agora configuration:',
+                error
+            );
+
+
+            return {
+                success: false,
+
+                message:
+                    'Unable to load Agora development configuration.'
+            };
+        }
+    }
+);
