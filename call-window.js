@@ -503,21 +503,23 @@ function setMode(
 
 
     if (
-        newMode ===
-        'completed'
-    ) {
+    newMode ===
+    'completed'
+) {
 
-        stopRingtone();
+    stopRingtone();
 
-        statusText.textContent =
+    statusText.textContent =
         'Call ended';
- 
+
     stopAllTimers();
- 
+
+    stopAgoraAudio();
+
     closeCallWindowAfterDelay();
- 
+
     return;
-    }
+}
 }
 
 
@@ -826,6 +828,77 @@ document
         }
     );
 
+/* -------------------------
+   MUTE / UNMUTE
+------------------------- */
+
+document
+    .getElementById(
+        'muteButton'
+    )
+    .addEventListener(
+        'click',
+        async () => {
+
+            try {
+
+                if (
+                    !window.ServiceCallAgora ||
+                    !window.ServiceCallAgora.isJoined()
+                ) {
+
+                    statusText.textContent =
+                        'Audio is not connected';
+
+                    return;
+                }
+
+
+                const currentlyMuted =
+                    window.ServiceCallAgora
+                        .isMuted();
+
+
+                const result =
+                    await window.ServiceCallAgora
+                        .setMuted(
+                            !currentlyMuted
+                        );
+
+
+                if (result.success) {
+
+                    document
+                        .getElementById(
+                            'muteButton'
+                        )
+                        .textContent =
+                            result.muted
+                                ? 'Unmute'
+                                : 'Mute';
+
+
+                    console.log(
+                        result.muted
+                            ? 'ServiceCall microphone muted.'
+                            : 'ServiceCall microphone unmuted.'
+                    );
+                }
+
+
+            } catch (error) {
+
+                console.error(
+                    'ServiceCall mute failed:',
+                    error
+                );
+
+
+                statusText.textContent =
+                    'Unable to change microphone state';
+            }
+        }
+    );
 
 /* -------------------------
    END
@@ -850,8 +923,11 @@ document
 
 
                 if (
+                    result &&
                     result.success
                 ) {
+
+                    await stopAgoraAudio();
 
                     setMode(
                         'completed'
@@ -938,5 +1014,18 @@ startCallStatusPolling();
 
 window.addEventListener(
     'beforeunload',
-    stopAllTimers
+    () => {
+
+        stopAllTimers();
+
+        stopRingtone();
+
+        /*
+         * Final media safety cleanup.
+         *
+         * Do not await here because the window
+         * is already being destroyed.
+         */
+        stopAgoraAudio();
+    }
 );
