@@ -111,6 +111,8 @@ async function sendHeartbeatOnce() {
         );
     }
 
+    const validAccessToken = await ensureValidAccessToken();
+
     const heartbeatUrl =
         config.instanceUrl +
         config.heartbeatPath;
@@ -131,30 +133,91 @@ async function sendHeartbeatOnce() {
             app.getVersion()
     };
 
-    const response =
-        await fetch(
-            heartbeatUrl,
-            {
-                method: 'POST',
-
-                headers: {
-                    'Authorization':
-                        'Bearer ' +
-                        config.accessToken,
-
-                    'Content-Type':
-                        'application/json',
-
-                    'Accept':
-                        'application/json'
-                },
-
-                body:
-                    JSON.stringify(
-                        payload
-                    )
-            }
-        );
+    let response =
+    await fetch(
+        heartbeatUrl,
+        {
+            method: 'POST',
+ 
+            headers: {
+                'Authorization':
+                    'Bearer ' +
+                    validAccessToken,
+ 
+                'Content-Type':
+                    'application/json',
+ 
+                'Accept':
+                    'application/json'
+            },
+ 
+            body:
+                JSON.stringify(
+                    payload
+                )
+        }
+    );
+ 
+ 
+/*
+* If the short-lived access token expired,
+* automatically renew it and retry heartbeat once.
+*/
+if (
+    response.status === 401 ||
+    response.status === 403
+) {
+ 
+    console.log(
+        'Heartbeat authorization expired. Attempting automatic renewal...'
+    );
+ 
+ 
+    try {
+ 
+        const newAccessToken =
+            await refreshAccessToken();
+ 
+ 
+        response =
+            await fetch(
+                heartbeatUrl,
+                {
+                    method: 'POST',
+ 
+                    headers: {
+                        'Authorization':
+                            'Bearer ' +
+                            newAccessToken,
+ 
+                        'Content-Type':
+                            'application/json',
+ 
+                        'Accept':
+                            'application/json'
+                    },
+ 
+                    body:
+                        JSON.stringify(
+                            payload
+                        )
+                }
+            );
+ 
+ 
+    } catch (refreshError) {
+ 
+        const authError =
+            new Error(
+                'Your ServiceCall authorization has expired. Please sign in again.'
+            );
+ 
+        authError.code =
+            'AUTHENTICATION_REQUIRED';
+ 
+        throw authError;
+    }
+}
 
     const responseText =
         await response.text();
@@ -248,189 +311,94 @@ async function sendHeartbeatOnce() {
 }
 
 async function checkIncomingCallOnce() {
-
-    const config = loadConfig();
-
-    if (
-        !config ||
-        !config.instanceUrl ||
-        !config.accessToken
-    ) {
-        return;
-    }
-
-
+ 
     try {
-
-        const url =
-            config.instanceUrl.replace(/\/$/, '') +
-            '/api/x_1806573_servic_0/servicecall_desktop_api/incoming-call';
-
-
-        const response =
-            await fetch(
-                url,
-                {
-                    method: 'GET',
-
-                    headers: {
-                        'Accept': 'application/json',
-
-                        'Authorization':
-                            'Bearer ' +
-                            config.accessToken
-                    }
-                }
-            );
-
-
-        if (
-            response.status === 401 ||
-            response.status === 403
-        ) {
-
-            const error =
-                new Error(
-                    'Your ServiceNow session has expired. Please sign in again.'
-                );
-
-            error.code =
-                'AUTHENTICATION_REQUIRED';
-
-            throw error;
-        }
-
-
-        let data = {};
-
-        try {
-
-            data =
-                await response.json();
-
-        } catch (jsonError) {
-
-            console.error(
-                'Incoming call JSON parse error:',
-                jsonError
-            );
-
-            return;
-        }
-
-
+ 
         const result =
-            data.result || data;
-
-
-        if (!response.ok) {
-
-            console.error(
-                'Incoming call request failed:',
-                result
+            await serviceCallApiRequest(
+                '/incoming-call',
+                'GET'
             );
-
-            return;
-        }
-
-
-        /*
-         * Incoming ringing call found
-         */
+ 
+ 
         if (
             result &&
             result.success &&
             result.incoming_call
         ) {
-
+ 
             const incomingCallId =
                 result.call_sys_id;
-
-
-            /*
-             * Prevent the same incoming call
-             * from reopening every polling cycle.
-             */
+ 
+ 
             if (
                 incomingCallId &&
                 incomingCallId !==
                     activeIncomingCallId
             ) {
-
+ 
                 activeIncomingCallId =
                     incomingCallId;
-
-
+ 
+ 
                 console.log(
                     'Incoming ServiceCall:',
                     result
                 );
-
-
+ 
+ 
                 showCallWindow(
                     'incoming',
                     {
                         callSysId:
                             result.call_sys_id,
-
+ 
                         callNumber:
                             result.call_number,
-
+ 
                         name:
                             result.caller_name ||
                             'Unknown User',
-
+ 
                         department:
                             result.caller_department ||
                             ''
                     }
                 );
             }
-
-
+ 
+ 
             return;
         }
-
-
+ 
+ 
         /*
-         * No incoming ringing call currently exists.
-         * Reset this so a future call can open.
+         * No incoming ringing call.
          */
         activeIncomingCallId =
             null;
-
+ 
+ 
     } catch (error) {
-
+ 
         console.error(
             'Incoming call check failed:',
             error
         );
-
-
+ 
+ 
         if (
             error.code ===
             'AUTHENTICATION_REQUIRED'
         ) {
-
+ 
             stopIncomingCallLoop();
-
-
-            if (
-                mainWindow &&
-                !mainWindow.isDestroyed()
-            ) {
-
-                mainWindow.webContents.send(
-                    'servicecall-auth-status',
-                    {
-                        status:
-                            'authentication_required',
-
-                        message:
-                            'Your ServiceNow session has expired. Please sign in again.'
-                    }
-                );
-            }
+ 
+ 
+            sendAuthStatus(
+                'authentication_required',
+                'Your ServiceCall authorization has expired. Please sign in to ServiceNow again.'
+            );
         }
     }
 }
@@ -910,7 +878,229 @@ startOutgoingCallLoop();
 return tokenData;
 }
 
+async function ensureValidAccessToken() {
+ 
+    const config =
+        loadConfig();
+ 
+ 
+    if (!config.accessToken) {
+ 
+        const error =
+            new Error(
+                'ServiceCall is not authenticated.'
+            );
+ 
+        error.code =
+            'AUTHENTICATION_REQUIRED';
+ 
+        throw error;
+    }
+ 
+ 
+    /*
+     * If expiry information is unavailable,
+     * keep using the current token.
+     *
+     * The normal 401/403 refresh mechanism
+     * remains our fallback.
+     */
+    if (
+        !config.expiresIn ||
+        !config.tokenObtainedAt
+    ) {
+        return config.accessToken;
+    }
+ 
+ 
+    const expiresAt =
+        config.tokenObtainedAt +
+        (Number(config.expiresIn) * 1000);
+ 
+ 
+    /*
+     * Refresh 60 seconds before actual expiry.
+     */
+    const refreshAt =
+        expiresAt - 60000;
+ 
+ 
+    if (Date.now() >= refreshAt) {
+ 
+        console.log(
+            'ServiceCall access token is close to expiry. Renewing automatically...'
+        );
+ 
+        return await refreshAccessToken();
+    }
+ 
+ 
+    return config.accessToken;
+}
 
+async function refreshAccessToken() {
+ 
+    const config =
+        loadConfig();
+ 
+    if (
+        !config.instanceUrl ||
+        !config.oauthClientId ||
+        !config.refreshToken
+    ) {
+ 
+        const error =
+            new Error(
+                'A ServiceCall refresh token is not available.'
+            );
+ 
+        error.code =
+            'REAUTHENTICATION_REQUIRED';
+ 
+        throw error;
+    }
+ 
+ 
+    console.log(
+        'ServiceCall access token expired. Attempting automatic renewal...'
+    );
+ 
+ 
+    const tokenUrl =
+        config.instanceUrl.replace(/\/$/, '') +
+        '/oauth_token.do';
+ 
+ 
+    const body =
+        new URLSearchParams();
+ 
+    body.set(
+        'grant_type',
+        'refresh_token'
+    );
+ 
+    body.set(
+        'refresh_token',
+        config.refreshToken
+    );
+ 
+    body.set(
+        'client_id',
+        config.oauthClientId
+    );
+ 
+ 
+    const response =
+        await fetch(
+            tokenUrl,
+            {
+                method: 'POST',
+ 
+                headers: {
+                    'Content-Type':
+                        'application/x-www-form-urlencoded',
+ 
+                    'Accept':
+                        'application/json'
+                },
+ 
+                body:
+                    body.toString()
+            }
+        );
+ 
+ 
+    const responseText =
+        await response.text();
+ 
+ 
+    let tokenData;
+ 
+    try {
+ 
+        tokenData =
+            JSON.parse(
+                responseText
+            );
+ 
+    } catch (error) {
+ 
+        const refreshError =
+            new Error(
+                'ServiceNow returned an invalid token renewal response.'
+            );
+ 
+        refreshError.code =
+            'TOKEN_REFRESH_FAILED';
+ 
+        throw refreshError;
+    }
+ 
+ 
+    if (
+        !response.ok ||
+        !tokenData.access_token
+    ) {
+ 
+        console.error(
+            'ServiceCall automatic token renewal failed.'
+        );
+ 
+ 
+        const refreshError =
+            new Error(
+                tokenData.error_description ||
+                tokenData.error ||
+                'ServiceNow authorization must be renewed.'
+            );
+ 
+        refreshError.code =
+            'REAUTHENTICATION_REQUIRED';
+ 
+        throw refreshError;
+    }
+ 
+ 
+    /*
+     * Store the NEW short-lived access token.
+     */
+    config.accessToken =
+        tokenData.access_token;
+ 
+    config.tokenType =
+        tokenData.token_type ||
+        'Bearer';
+ 
+    config.expiresIn =
+        tokenData.expires_in || 0;
+ 
+    config.tokenObtainedAt =
+        Date.now();
+ 
+ 
+    /*
+     * Some OAuth servers rotate refresh tokens.
+     * If ServiceNow gives us a new one,
+     * replace the previous refresh token.
+     */
+    if (tokenData.refresh_token) {
+ 
+        config.refreshToken =
+            tokenData.refresh_token;
+    }
+ 
+ 
+    saveConfig(config);
+ 
+ 
+    console.log(
+        'ServiceCall access token renewed automatically.'
+    );
+ 
+ 
+    return config.accessToken;
+}
+ 
 /* -------------------------------------------------------
    LOCAL OAUTH CALLBACK SERVER
 ------------------------------------------------------- */
@@ -2122,12 +2312,16 @@ function showCallWindow(
 async function serviceCallApiRequest(
     pathName,
     method = 'GET',
-    body = null
+    body = null,
+    allowRefresh = true
 ) {
-
-    const config =
+ 
+    let config =
         loadConfig();
 
+    const validAccessToken =
+    await ensureValidAccessToken();
+ 
     if (
         !config ||
         !config.instanceUrl ||
@@ -2137,89 +2331,165 @@ async function serviceCallApiRequest(
             'ServiceCall Desktop is not connected to ServiceNow.'
         );
     }
-
-
+ 
+ 
     const url =
         config.instanceUrl.replace(/\/$/, '') +
         '/api/x_1806573_servic_0/servicecall_desktop_api' +
         pathName;
-
-
+ 
+ 
     const options = {
         method: method,
-
+ 
         headers: {
-            'Accept': 'application/json',
+            'Accept':
+                'application/json',
+ 
             'Authorization':
-                'Bearer ' + config.accessToken
+                'Bearer ' +
+                validAccessToken
         }
     };
-
-
+ 
+ 
     if (body) {
+ 
         options.headers['Content-Type'] =
             'application/json';
-
+ 
         options.body =
             JSON.stringify(body);
     }
-
-
-    const response =
+ 
+ 
+    let response =
         await fetch(
             url,
             options
         );
-
-
+ 
+ 
+    /*
+     * -------------------------------------------------
+     * ACCESS TOKEN EXPIRED
+     * -------------------------------------------------
+     *
+     * Try ONE automatic refresh.
+     *
+     * We only retry once so a bad/revoked refresh
+     * token cannot create an infinite loop.
+     */
+    if (
+        (
+            response.status === 401 ||
+            response.status === 403
+        ) &&
+        allowRefresh
+    ) {
+ 
+        console.log(
+            'ServiceCall API authorization expired. Trying automatic renewal...'
+        );
+ 
+ 
+        try {
+ 
+            const newAccessToken =
+                await refreshAccessToken();
+ 
+ 
+            /*
+             * Retry the ORIGINAL request using
+             * the newly issued access token.
+             */
+            options.headers['Authorization'] =
+                'Bearer ' +
+                newAccessToken;
+ 
+ 
+            response =
+                await fetch(
+                    url,
+                    options
+                );
+ 
+ 
+        } catch (refreshError) {
+ 
+            console.error(
+                'Automatic ServiceCall authorization renewal failed:',
+                refreshError.message
+            );
+ 
+ 
+            const error =
+                new Error(
+                    'Your ServiceCall authorization has expired. Please sign in to ServiceNow again.'
+                );
+ 
+            error.code =
+                'AUTHENTICATION_REQUIRED';
+ 
+            throw error;
+        }
+    }
+ 
+ 
     let data = {};
-
+ 
     try {
+ 
         data =
             await response.json();
-    } catch (e) {
+ 
+    } catch (error) {
+ 
         data = {};
     }
-
-
+ 
+ 
     const result =
         data.result || data;
-
-
+ 
+ 
+    /*
+     * If we're STILL unauthorized after refreshing,
+     * the long-lived authorization is no longer usable.
+     */
     if (
         response.status === 401 ||
         response.status === 403
     ) {
-
+ 
         const error =
             new Error(
-                result.message ||
-                'ServiceNow authentication is required.'
+                'Your ServiceCall authorization has expired. Please sign in to ServiceNow again.'
             );
-
+ 
         error.code =
             'AUTHENTICATION_REQUIRED';
-
+ 
         throw error;
     }
-
-
+ 
+ 
     if (!response.ok) {
-
+ 
         const error =
             new Error(
                 result.message ||
                 'ServiceCall request failed.'
             );
-
+ 
         error.code =
             result.code ||
             'SERVICECALL_API_ERROR';
-
+ 
         throw error;
     }
-
-
+ 
+ 
     return result;
 }
 
@@ -2317,184 +2587,97 @@ ipcMain.handle(
 );
 
 async function checkOutgoingCallOnce() {
-
-    const config = loadConfig();
-
-    if (
-        !config ||
-        !config.instanceUrl ||
-        !config.accessToken
-    ) {
-        return;
-    }
-
-
+ 
     try {
-
-        const url =
-            config.instanceUrl.replace(/\/$/, '') +
-            '/api/x_1806573_servic_0/servicecall_desktop_api/outgoing-call';
-
-
-        const response =
-            await fetch(
-                url,
-                {
-                    method: 'GET',
-
-                    headers: {
-                        'Accept': 'application/json',
-
-                        'Authorization':
-                            'Bearer ' +
-                            config.accessToken
-                    }
-                }
-            );
-
-
-        if (
-            response.status === 401 ||
-            response.status === 403
-        ) {
-
-            const error =
-                new Error(
-                    'Your ServiceNow session has expired. Please sign in again.'
-                );
-
-            error.code =
-                'AUTHENTICATION_REQUIRED';
-
-            throw error;
-        }
-
-
-        let data = {};
-
-        try {
-
-            data =
-                await response.json();
-
-        } catch (jsonError) {
-
-            console.error(
-                'Outgoing call JSON parse error:',
-                jsonError
-            );
-
-            return;
-        }
-
-
+ 
         const result =
-            data.result || data;
-
-
-        if (!response.ok) {
-
-            console.error(
-                'Outgoing call request failed:',
-                result
+            await serviceCallApiRequest(
+                '/outgoing-call',
+                'GET'
             );
-
-            return;
-        }
-
-
+ 
+ 
         if (
             result &&
             result.success &&
             result.outgoing_call
         ) {
-
+ 
             const outgoingCallId =
                 result.call_sys_id;
-
-
+ 
+ 
             if (
                 outgoingCallId &&
                 outgoingCallId !==
                     activeOutgoingCallId
             ) {
-
+ 
                 activeOutgoingCallId =
                     outgoingCallId;
-
-
+ 
+ 
                 console.log(
                     'Outgoing ServiceCall:',
                     result
                 );
-
-
+ 
+ 
                 showCallWindow(
                     result.state === 'connected'
                         ? 'connected'
                         : 'calling',
-
+ 
                     {
                         callSysId:
                             result.call_sys_id,
-
+ 
                         callNumber:
                             result.call_number,
-
+ 
                         name:
                             result.target_user_name ||
                             'Unknown User',
-
+ 
                         department:
                             result.target_department ||
                             ''
                     }
                 );
             }
-
-
+ 
+ 
             return;
         }
-
-
+ 
+ 
         /*
-         * No current outgoing ringing/connected call.
+         * No outgoing ringing/connected call.
          */
         activeOutgoingCallId =
             null;
-
+ 
+ 
     } catch (error) {
-
+ 
         console.error(
             'Outgoing call check failed:',
             error
         );
-
-
+ 
+ 
         if (
             error.code ===
             'AUTHENTICATION_REQUIRED'
         ) {
-
+ 
             stopOutgoingCallLoop();
-
-
-            if (
-                mainWindow &&
-                !mainWindow.isDestroyed()
-            ) {
-
-                mainWindow.webContents.send(
-                    'servicecall-auth-status',
-                    {
-                        status:
-                            'authentication_required',
-
-                        message:
-                            'Your ServiceNow session has expired. Please sign in again.'
-                    }
-                );
-            }
+ 
+ 
+            sendAuthStatus(
+                'authentication_required',
+                'Your ServiceCall authorization has expired. Please sign in to ServiceNow again.'
+            );
         }
     }
 }
