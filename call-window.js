@@ -38,6 +38,9 @@ let durationTimer =
 
 let closeTimer = null;
 
+let ringtoneInterval = null;
+let audioContext = null;
+
 /* -------------------------
    ELEMENTS
 ------------------------- */
@@ -118,6 +121,133 @@ const initials =
 avatar.textContent =
     initials || '?';
 
+/* -------------------------
+   RINGTONE
+------------------------- */
+ 
+function playRingTone(
+    frequency = 440
+) {
+ 
+    try {
+ 
+        if (!audioContext) {
+ 
+            audioContext =
+                new (
+                    window.AudioContext ||
+                    window.webkitAudioContext
+                )();
+        }
+ 
+ 
+        const oscillator =
+            audioContext.createOscillator();
+ 
+        const gain =
+            audioContext.createGain();
+ 
+ 
+        oscillator.type =
+            'sine';
+ 
+        oscillator.frequency.value =
+            frequency;
+ 
+ 
+        gain.gain.value =
+            0.08;
+ 
+ 
+        oscillator.connect(
+            gain
+        );
+ 
+        gain.connect(
+            audioContext.destination
+        );
+ 
+ 
+        oscillator.start();
+ 
+ 
+        setTimeout(
+            () => {
+ 
+                try {
+ 
+                    oscillator.stop();
+ 
+                } catch (error) {
+                    // Already stopped.
+                }
+ 
+            },
+            500
+        );
+ 
+    } catch (error) {
+ 
+        console.error(
+            'Unable to play ServiceCall ringtone:',
+            error
+        );
+    }
+}
+ 
+ 
+function startRingtone(
+    type
+) {
+ 
+    stopRingtone();
+ 
+ 
+    /*
+     * Incoming call:
+     * slightly higher tone.
+     *
+     * Outgoing call:
+     * lower ringback tone.
+     */
+    const frequency =
+        type === 'incoming'
+            ? 520
+            : 420;
+ 
+ 
+    playRingTone(
+        frequency
+    );
+ 
+ 
+    ringtoneInterval =
+        setInterval(
+            () => {
+ 
+                playRingTone(
+                    frequency
+                );
+ 
+            },
+            1800
+        );
+}
+ 
+ 
+function stopRingtone() {
+ 
+    if (ringtoneInterval) {
+ 
+        clearInterval(
+            ringtoneInterval
+        );
+ 
+        ringtoneInterval =
+            null;
+    }
+}
+
 
 /* -------------------------
    UI STATE
@@ -160,6 +290,8 @@ function setMode(
             .classList
             .remove('hidden');
 
+
+        startRingtone('incoming');
         return;
     }
 
@@ -176,6 +308,8 @@ function setMode(
             .classList
             .remove('hidden');
 
+        startRingtone('outgoing');
+
         return;
     }
 
@@ -184,6 +318,8 @@ function setMode(
         newMode ===
         'connected'
     ) {
+
+        stopRingtone();
 
         statusText.textContent =
             'Connected';
@@ -206,6 +342,8 @@ function setMode(
     newMode ===
     'declined'
 ) {
+
+    stopRingtone();
  
     statusText.textContent =
         'Call declined';
@@ -222,6 +360,8 @@ function setMode(
     newMode ===
     'cancelled'
 ) {
+
+    stopRingtone();
  
     statusText.textContent =
         'Call cancelled';
@@ -239,7 +379,9 @@ function setMode(
         'completed'
     ) {
 
-        sstatusText.textContent =
+        stopRingtone();
+
+        statusText.textContent =
         'Call ended';
  
     stopAllTimers();
