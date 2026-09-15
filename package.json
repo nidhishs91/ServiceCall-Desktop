@@ -39,5 +39,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "ServiceCall Desktop"
     }
+  },
+  "dependencies": {
+    "agora-rtc-sdk-ng": "^4.24.8"
   }
 }
