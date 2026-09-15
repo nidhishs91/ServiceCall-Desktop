@@ -248,6 +248,132 @@ function stopRingtone() {
     }
 }
 
+/* -------------------------
+   AGORA AUDIO
+------------------------- */
+
+let agoraJoining = false;
+
+
+async function startAgoraAudio() {
+
+    if (
+        !window.ServiceCallAgora
+    ) {
+
+        console.error(
+            'ServiceCall Agora media service is not available.'
+        );
+
+        statusText.textContent =
+            'Audio service unavailable';
+
+        return;
+    }
+
+
+    if (
+        window.ServiceCallAgora.isJoined() ||
+        agoraJoining
+    ) {
+        return;
+    }
+
+
+    agoraJoining =
+        true;
+
+
+    try {
+
+        console.log(
+            'ServiceCall preparing Agora audio...'
+        );
+
+
+        const config =
+            await window.serviceCall
+                .getAgoraConfig();
+
+
+        if (
+            !config ||
+            !config.success
+        ) {
+
+            throw new Error(
+                config &&
+                config.message
+                    ? config.message
+                    : 'Agora configuration could not be loaded.'
+            );
+        }
+
+
+        console.log(
+            'ServiceCall joining Agora audio channel...'
+        );
+
+
+        await window.ServiceCallAgora.join({
+            appId:
+                config.appId,
+
+            token:
+                config.token,
+
+            channel:
+                config.channel
+        });
+
+
+        console.log(
+            'ServiceCall audio connected successfully.'
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            'ServiceCall audio connection failed:',
+            error
+        );
+
+
+        statusText.textContent =
+            'Connected - audio unavailable';
+
+
+    } finally {
+
+        agoraJoining =
+            false;
+    }
+}
+
+
+async function stopAgoraAudio() {
+
+    if (
+        !window.ServiceCallAgora
+    ) {
+        return;
+    }
+
+
+    try {
+
+        await window.ServiceCallAgora
+            .leave();
+
+    } catch (error) {
+
+        console.error(
+            'Unable to leave ServiceCall audio:',
+            error
+        );
+    }
+}
 
 /* -------------------------
    UI STATE
@@ -333,6 +459,8 @@ function setMode(
             .remove('hidden');
 
         startDurationTimer();
+
+        startAgoraAudio();
 
         return;
     }
