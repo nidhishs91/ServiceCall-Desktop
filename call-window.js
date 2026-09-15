@@ -2,8 +2,7 @@ const params =
     new URLSearchParams(
         window.location.search
     );
-
-
+    
 const mode =
     params.get('mode') ||
     'incoming';
@@ -37,6 +36,7 @@ let callStartedAt =
 let durationTimer =
     null;
 
+let closeTimer = null;
 
 /* -------------------------
    ELEMENTS
@@ -203,31 +203,35 @@ function setMode(
 
 
     if (
-        newMode ===
-        'declined'
-    ) {
-
-        statusText.textContent =
-            'Call declined';
-
-        stopAllTimers();
-
-        return;
-    }
+    newMode ===
+    'declined'
+) {
+ 
+    statusText.textContent =
+        'Call declined';
+ 
+    stopAllTimers();
+ 
+    closeCallWindowAfterDelay();
+ 
+    return;
+}
 
 
     if (
-        newMode ===
-        'cancelled'
-    ) {
-
-        statusText.textContent =
-            'Call cancelled';
-
-        stopAllTimers();
-
-        return;
-    }
+    newMode ===
+    'cancelled'
+) {
+ 
+    statusText.textContent =
+        'Call cancelled';
+ 
+    stopAllTimers();
+ 
+    closeCallWindowAfterDelay();
+ 
+    return;
+}
 
 
     if (
@@ -235,12 +239,14 @@ function setMode(
         'completed'
     ) {
 
-        statusText.textContent =
-            'Call ended';
-
-        stopAllTimers();
-
-        return;
+        sstatusText.textContent =
+        'Call ended';
+ 
+    stopAllTimers();
+ 
+    closeCallWindowAfterDelay();
+ 
+    return;
     }
 }
 
@@ -596,6 +602,29 @@ document
         }
     );
 
+/* -------------------------
+   CLOSE CALL WINDOW
+------------------------- */
+ 
+function closeCallWindowAfterDelay() {
+ 
+    if (closeTimer) {
+        return;
+    }
+ 
+ 
+    closeTimer =
+        setTimeout(
+            () => {
+ 
+                stopAllTimers();
+ 
+                window.close();
+ 
+            },
+            1000
+        );
+}
 
 /* -------------------------
    STOP TIMERS
