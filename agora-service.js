@@ -207,8 +207,12 @@ async function joinAudioCall(
          * permission and create microphone track.
          */
         localAudioTrack =
-            await AgoraRTC
-                .createMicrophoneAudioTrack();
+    await AgoraRTC
+        .createMicrophoneAudioTrack({
+            AEC: true,
+            ANS: true,
+            AGC: true
+        });
 
 
         /*

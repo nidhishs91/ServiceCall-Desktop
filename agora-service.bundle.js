@@ -32889,7 +32889,11 @@
         "UID:",
         joinedUid
       );
-      localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+      localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+        AEC: true,
+        ANS: true,
+        AGC: true
+      });
       await rtcClient.publish(
         [
           localAudioTrack
