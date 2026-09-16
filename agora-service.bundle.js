@@ -32796,6 +32796,7 @@
   var muted = false;
   var tokenRenewalHandler = null;
   var tokenRenewalInProgress = false;
+  var remoteAudioTracks = /* @__PURE__ */ new Map();
   function createClient() {
     if (client) {
       return client;
@@ -32818,10 +32819,18 @@
             mediaType
           );
           if (mediaType === "audio") {
+            remoteAudioTracks.set(
+              String(user.uid),
+              user.audioTrack
+            );
             user.audioTrack.play();
             console.log(
               "ServiceCall remote audio playing:",
               user.uid
+            );
+            console.log(
+              "ServiceCall remote audio tracks available:",
+              remoteAudioTracks.size
             );
           }
         } catch (error) {
@@ -32835,6 +32844,15 @@
     client.on(
       "user-unpublished",
       (user, mediaType) => {
+        if (mediaType === "audio") {
+          remoteAudioTracks.delete(
+            String(user.uid)
+          );
+          console.log(
+            "ServiceCall remote audio track removed:",
+            user.uid
+          );
+        }
         console.log(
           "ServiceCall remote user unpublished:",
           user.uid,
@@ -32845,9 +32863,16 @@
     client.on(
       "user-left",
       (user) => {
+        remoteAudioTracks.delete(
+          String(user.uid)
+        );
         console.log(
           "ServiceCall remote user left:",
           user.uid
+        );
+        console.log(
+          "ServiceCall remote audio tracks available:",
+          remoteAudioTracks.size
         );
       }
     );
@@ -32985,6 +33010,17 @@
       muted
     };
   }
+  function getLocalAudioTrack() {
+    return localAudioTrack;
+  }
+  function getRemoteAudioTracks() {
+    return Array.from(
+      remoteAudioTracks.values()
+    );
+  }
+  function getRemoteAudioTrackCount() {
+    return remoteAudioTracks.size;
+  }
   async function leaveAudioCall() {
     try {
       if (localAudioTrack) {
@@ -33009,6 +33045,7 @@
         }
       }
     } finally {
+      remoteAudioTracks.clear();
       client = null;
       joined = false;
       muted = false;
@@ -33033,7 +33070,17 @@
     leave: leaveAudioCall,
     setMuted,
     isJoined,
-    isMuted
+    isMuted,
+    /*
+     * Recording support.
+     *
+     * These expose only the active media
+     * track objects to our local recorder.
+     * They do not expose Agora credentials.
+     */
+    getLocalAudioTrack,
+    getRemoteAudioTracks,
+    getRemoteAudioTrackCount
   };
 })();
 /*! Bundled license information:

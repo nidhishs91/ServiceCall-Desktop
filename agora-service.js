@@ -11,6 +11,21 @@ let tokenRenewalHandler = null;
 let tokenRenewalInProgress = false;
 
 
+/*
+ * Remote Agora audio tracks currently
+ * subscribed in this call.
+ *
+ * Key   = Agora UID
+ * Value = Agora remote audio track
+ *
+ * Later our ServiceCall recorder will use
+ * these tracks together with the local
+ * microphone to create one recording.
+ */
+const remoteAudioTracks =
+    new Map();
+
+
 /* -------------------------------------------------------
    CREATE CLIENT
 ------------------------------------------------------- */
@@ -30,7 +45,7 @@ function createClient() {
 
 
     /*
-     * Another participant publishes audio.
+     * Another participant publishes media.
      */
     client.on(
         'user-published',
@@ -60,6 +75,19 @@ function createClient() {
                     'audio'
                 ) {
 
+                    /*
+                     * Keep a reference to the
+                     * subscribed remote audio track.
+                     *
+                     * Normal playback continues exactly
+                     * as before.
+                     */
+                    remoteAudioTracks.set(
+                        String(user.uid),
+                        user.audioTrack
+                    );
+
+
                     user.audioTrack.play();
 
 
@@ -67,7 +95,14 @@ function createClient() {
                         'ServiceCall remote audio playing:',
                         user.uid
                     );
+
+
+                    console.log(
+                        'ServiceCall remote audio tracks available:',
+                        remoteAudioTracks.size
+                    );
                 }
+
 
             } catch (error) {
 
@@ -81,7 +116,7 @@ function createClient() {
 
 
     /*
-     * Remote participant stops publishing.
+     * Remote participant stops publishing media.
      */
     client.on(
         'user-unpublished',
@@ -90,6 +125,23 @@ function createClient() {
             user,
             mediaType
         ) => {
+
+            if (
+                mediaType ===
+                'audio'
+            ) {
+
+                remoteAudioTracks.delete(
+                    String(user.uid)
+                );
+
+
+                console.log(
+                    'ServiceCall remote audio track removed:',
+                    user.uid
+                );
+            }
+
 
             console.log(
                 'ServiceCall remote user unpublished:',
@@ -108,9 +160,20 @@ function createClient() {
 
         (user) => {
 
+            remoteAudioTracks.delete(
+                String(user.uid)
+            );
+
+
             console.log(
                 'ServiceCall remote user left:',
                 user.uid
+            );
+
+
+            console.log(
+                'ServiceCall remote audio tracks available:',
+                remoteAudioTracks.size
             );
         }
     );
@@ -134,7 +197,9 @@ function createClient() {
             );
 
 
-            if (tokenRenewalInProgress) {
+            if (
+                tokenRenewalInProgress
+            ) {
 
                 console.log(
                     'ServiceCall token renewal is already in progress.'
@@ -241,6 +306,7 @@ async function joinAudioCall(
         console.log(
             'ServiceCall is already connected to Agora.'
         );
+
 
         return {
             success: true
@@ -426,6 +492,37 @@ async function setMuted(
 
 
 /* -------------------------------------------------------
+   RECORDING TRACK ACCESS
+------------------------------------------------------- */
+
+/*
+ * These methods DO NOT start recording.
+ *
+ * They only give the future ServiceCall
+ * recorder access to the active Agora tracks.
+ */
+
+function getLocalAudioTrack() {
+
+    return localAudioTrack;
+}
+
+
+function getRemoteAudioTracks() {
+
+    return Array.from(
+        remoteAudioTracks.values()
+    );
+}
+
+
+function getRemoteAudioTrackCount() {
+
+    return remoteAudioTracks.size;
+}
+
+
+/* -------------------------------------------------------
    LEAVE AUDIO CALL
 ------------------------------------------------------- */
 
@@ -475,6 +572,14 @@ async function leaveAudioCall() {
 
 
     } finally {
+
+        /*
+         * Remove all references to remote
+         * participant audio when this
+         * desktop leaves the Agora channel.
+         */
+        remoteAudioTracks.clear();
+
 
         client =
             null;
@@ -539,5 +644,22 @@ window.ServiceCallAgora = {
         isJoined,
 
     isMuted:
-        isMuted
+        isMuted,
+
+
+    /*
+     * Recording support.
+     *
+     * These expose only the active media
+     * track objects to our local recorder.
+     * They do not expose Agora credentials.
+     */
+    getLocalAudioTrack:
+        getLocalAudioTrack,
+
+    getRemoteAudioTracks:
+        getRemoteAudioTracks,
+
+    getRemoteAudioTrackCount:
+        getRemoteAudioTrackCount
 };

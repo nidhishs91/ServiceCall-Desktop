@@ -1705,6 +1705,362 @@ participantSearch.addEventListener(
 );
 
 /* -------------------------
+   LOCAL CALL RECORDING
+------------------------- */
+
+const recordButton =
+    document.getElementById(
+        'recordButton'
+    );
+
+const recordingText =
+    document.getElementById(
+        'recordingText'
+    );
+
+
+let recordingStartedAt =
+    null;
+
+
+/* -------------------------
+   DOWNLOAD TEST RECORDING
+------------------------- */
+
+function downloadTestRecording(
+    blob
+) {
+
+    if (!blob) {
+        return;
+    }
+
+
+    /*
+     * This is TEMPORARY for our proof.
+     *
+     * Later:
+     * Electron -> ServiceNow attachment.
+     *
+     * For now we download the recording
+     * so we can verify both participants
+     * are actually present in the file.
+     */
+    const url =
+        URL.createObjectURL(
+            blob
+        );
+
+
+    const link =
+        document.createElement(
+            'a'
+        );
+
+
+    const timestamp =
+        new Date()
+            .toISOString()
+            .replace(
+                /[:.]/g,
+                '-'
+            );
+
+
+    link.href =
+        url;
+
+    link.download =
+        'ServiceCall-' +
+        timestamp +
+        '.webm';
+
+
+    document.body.appendChild(
+        link
+    );
+
+
+    link.click();
+
+
+    link.remove();
+
+
+    /*
+     * Give Chromium time to begin
+     * processing the download before
+     * releasing the object URL.
+     */
+    setTimeout(
+        () => {
+
+            URL.revokeObjectURL(
+                url
+            );
+
+        },
+        5000
+    );
+}
+
+
+/* -------------------------
+   START RECORDING
+------------------------- */
+
+async function startServiceCallRecording() {
+
+    if (
+        !window.ServiceCallRecorder
+    ) {
+
+        throw new Error(
+            'ServiceCall recording service is unavailable.'
+        );
+    }
+
+
+    if (
+        !window.ServiceCallAgora ||
+        !window.ServiceCallAgora.isJoined()
+    ) {
+
+        throw new Error(
+            'Call audio is not connected yet.'
+        );
+    }
+
+
+    const result =
+        await window.ServiceCallRecorder
+            .start();
+
+
+    if (
+        !result ||
+        !result.success
+    ) {
+
+        throw new Error(
+            result &&
+            result.message
+                ? result.message
+                : 'Unable to start recording.'
+        );
+    }
+
+
+    recordingStartedAt =
+        Date.now();
+
+
+    recordButton.textContent =
+        'Stop Recording';
+
+
+    recordingText.textContent =
+        'Call is being recorded';
+
+
+    recordingText
+        .classList
+        .remove(
+            'hidden'
+        );
+
+
+    console.log(
+        'ServiceCall recording started.',
+        'Format:',
+        result.mimeType
+    );
+}
+
+
+/* -------------------------
+   STOP RECORDING
+------------------------- */
+
+async function stopServiceCallRecording() {
+
+    if (
+        !window.ServiceCallRecorder ||
+        !window.ServiceCallRecorder.isRecording()
+    ) {
+        return;
+    }
+
+
+    recordButton.disabled =
+        true;
+
+
+    recordingText.textContent =
+        'Finalizing recording...';
+
+
+    try {
+
+        const result =
+            await window.ServiceCallRecorder
+                .stop();
+
+
+        if (
+            !result ||
+            !result.success ||
+            !result.blob
+        ) {
+
+            throw new Error(
+                result &&
+                result.message
+                    ? result.message
+                    : 'Unable to finalize recording.'
+            );
+        }
+
+
+        const durationSeconds =
+            recordingStartedAt
+                ? Math.max(
+                    1,
+                    Math.round(
+                        (
+                            Date.now() -
+                            recordingStartedAt
+                        ) / 1000
+                    )
+                )
+                : 0;
+
+
+        console.log(
+            'ServiceCall recording finalized.',
+            'Duration:',
+            durationSeconds,
+            'seconds',
+            'Size:',
+            result.size
+        );
+
+
+        /*
+         * TEMPORARY TEST:
+         *
+         * Download the mixed WebM file.
+         *
+         * After we confirm both sides of
+         * the Agora call are present,
+         * this will be replaced by our
+         * MP3/MP4 + ServiceNow workflow.
+         */
+        downloadTestRecording(
+            result.blob
+        );
+
+
+        recordingStartedAt =
+            null;
+
+
+        recordingText.textContent =
+            'Recording saved for testing';
+
+
+        setTimeout(
+            () => {
+
+                if (
+                    !window.ServiceCallRecorder ||
+                    !window.ServiceCallRecorder.isRecording()
+                ) {
+
+                    recordingText
+                        .classList
+                        .add(
+                            'hidden'
+                        );
+                }
+
+            },
+            2500
+        );
+
+
+    } finally {
+
+        recordButton.disabled =
+            false;
+
+        recordButton.textContent =
+            'Record Call';
+    }
+}
+
+
+/* -------------------------
+   RECORD BUTTON
+------------------------- */
+
+recordButton.addEventListener(
+    'click',
+
+    async () => {
+
+        recordButton.disabled =
+            true;
+
+
+        try {
+
+            if (
+                window.ServiceCallRecorder &&
+                window.ServiceCallRecorder.isRecording()
+            ) {
+
+                await stopServiceCallRecording();
+
+            } else {
+
+                await startServiceCallRecording();
+            }
+
+
+        } catch (error) {
+
+            console.error(
+                'ServiceCall recording error:',
+                error
+            );
+
+
+            recordingText.textContent =
+                error.message ||
+                'Unable to record this call.';
+
+
+            recordingText
+                .classList
+                .remove(
+                    'hidden'
+                );
+
+
+            recordButton.textContent =
+                'Record Call';
+
+
+        } finally {
+
+            recordButton.disabled =
+                false;
+        }
+    }
+);
+
+/* -------------------------
    END CONFERENCE / LEAVE CALL
 ------------------------- */
 
