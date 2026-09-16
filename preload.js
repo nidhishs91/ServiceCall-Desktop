@@ -3,6 +3,7 @@ const {
     ipcRenderer
 } = require('electron');
 
+
 contextBridge.exposeInMainWorld(
     'serviceCall',
     {
@@ -21,10 +22,10 @@ contextBridge.exposeInMainWorld(
                 ),
 
         getConnectionStatus:
-    () =>
-        ipcRenderer.invoke(
-            'servicecall-get-connection-status'
-        ),
+            () =>
+                ipcRenderer.invoke(
+                    'servicecall-get-connection-status'
+                ),
 
         startLogin:
             () =>
@@ -33,51 +34,58 @@ contextBridge.exposeInMainWorld(
                 ),
 
         openActiveCall:
-    () =>
-        ipcRenderer.invoke(
-            'servicecall-open-active-call'
-        ),
+            () =>
+                ipcRenderer.invoke(
+                    'servicecall-open-active-call'
+                ),
 
         acceptCall:
-    (callSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-accept-call',
-            callSysId
-        ),
+            (callSysId) =>
+                ipcRenderer.invoke(
+                    'servicecall-accept-call',
+                    callSysId
+                ),
 
-declineCall:
-    (callSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-decline-call',
-            callSysId
-        ),
+        declineCall:
+            (callSysId) =>
+                ipcRenderer.invoke(
+                    'servicecall-decline-call',
+                    callSysId
+                ),
 
-cancelCall:
-    (callSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-cancel-call',
-            callSysId
-        ),
+        cancelCall:
+            (callSysId) =>
+                ipcRenderer.invoke(
+                    'servicecall-cancel-call',
+                    callSysId
+                ),
 
-endCall:
-    (callSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-end-call',
-            callSysId
-        ),
+        endCall:
+            (callSysId) =>
+                ipcRenderer.invoke(
+                    'servicecall-end-call',
+                    callSysId
+                ),
 
-getCallStatus:
-    (callSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-get-call-status',
-            callSysId
-        ),
+        getCallStatus:
+            (callSysId) =>
+                ipcRenderer.invoke(
+                    'servicecall-get-call-status',
+                    callSysId
+                ),
 
-        getAgoraConfig:
-    () =>
-        ipcRenderer.invoke(
-            'servicecall-get-agora-config'
-        ),
+
+        /* -------------------------
+           DYNAMIC MEDIA CREDENTIALS
+        ------------------------- */
+
+        getMediaCredentials:
+            (callSysId) =>
+                ipcRenderer.invoke(
+                    'servicecall-get-media-credentials',
+                    callSysId
+                ),
+
 
         onAuthStatus:
             (callback) => {

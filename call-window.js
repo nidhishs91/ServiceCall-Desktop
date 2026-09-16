@@ -280,6 +280,19 @@ async function startAgoraAudio() {
     }
 
 
+    if (!callSysId) {
+
+        console.error(
+            'ServiceCall call sys_id is missing.'
+        );
+
+        statusText.textContent =
+            'Audio configuration unavailable';
+
+        return;
+    }
+
+
     agoraJoining =
         true;
 
@@ -287,27 +300,70 @@ async function startAgoraAudio() {
     try {
 
         console.log(
-            'ServiceCall preparing Agora audio...'
+            'ServiceCall requesting dynamic media credentials...'
         );
 
 
-        const config =
+        /*
+         * Request short-lived credentials
+         * for THIS specific ServiceCall call.
+         *
+         * Electron -> ServiceNow
+         * -> Cloudflare Worker -> Agora token
+         */
+        const credentials =
             await window.serviceCall
-                .getAgoraConfig();
+                .getMediaCredentials(
+                    callSysId
+                );
 
 
         if (
-            !config ||
-            !config.success
+            !credentials ||
+            !credentials.success
         ) {
 
             throw new Error(
-                config &&
-                config.message
-                    ? config.message
-                    : 'Agora configuration could not be loaded.'
+                credentials &&
+                credentials.message
+                    ? credentials.message
+                    : 'Media credentials could not be obtained.'
             );
         }
+
+
+        const media =
+            credentials.media;
+
+
+        if (
+            !media ||
+            !media.app_id ||
+            !media.channel ||
+            !media.token ||
+            !media.uid
+        ) {
+
+            throw new Error(
+                'ServiceCall returned incomplete media credentials.'
+            );
+        }
+
+
+        console.log(
+            'ServiceCall media credentials received.',
+            'Channel:',
+            media.channel,
+            'UID:',
+            media.uid
+        );
+
+
+        /*
+         * IMPORTANT:
+         *
+         * Never log media.token.
+         */
 
 
         console.log(
@@ -316,14 +372,18 @@ async function startAgoraAudio() {
 
 
         await window.ServiceCallAgora.join({
+
             appId:
-                config.appId,
+                media.app_id,
 
             token:
-                config.token,
+                media.token,
 
             channel:
-                config.channel
+                media.channel,
+
+            uid:
+                media.uid
         });
 
 

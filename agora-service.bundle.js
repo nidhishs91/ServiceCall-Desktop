@@ -32860,24 +32860,34 @@
         success: true
       };
     }
-    if (!config || !config.appId || !config.channel) {
+    if (!config || !config.appId || !config.channel || !config.token || !config.uid) {
       throw new Error(
-        "Agora configuration is incomplete."
+        "Agora media credentials are incomplete."
+      );
+    }
+    const numericUid = Number(
+      config.uid
+    );
+    if (!Number.isInteger(
+      numericUid
+    ) || numericUid <= 0 || numericUid > 4294967295) {
+      throw new Error(
+        "Agora participant UID is invalid."
       );
     }
     try {
       const rtcClient = createClient();
-      const uid = await rtcClient.join(
+      const joinedUid = await rtcClient.join(
         config.appId,
         config.channel,
-        config.token || null,
-        null
+        config.token,
+        numericUid
       );
       console.log(
         "ServiceCall joined Agora channel:",
         config.channel,
         "UID:",
-        uid
+        joinedUid
       );
       localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
       await rtcClient.publish(
@@ -32892,7 +32902,7 @@
       );
       return {
         success: true,
-        uid
+        uid: joinedUid
       };
     } catch (error) {
       console.error(

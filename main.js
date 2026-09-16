@@ -2741,90 +2741,63 @@ ipcMain.handle(
 );
 
 /* -------------------------------------------------------
-   AGORA DEVELOPMENT CONFIG
+   DYNAMIC MEDIA CREDENTIALS
 ------------------------------------------------------- */
 
 ipcMain.handle(
-    'servicecall-get-agora-config',
+    'servicecall-get-media-credentials',
 
-    async () => {
+    async (
+        event,
+        callSysId
+    ) => {
+
+        if (!callSysId) {
+
+            return {
+                success: false,
+                code: 'CALL_ID_REQUIRED',
+                message:
+                    'Call ID was not provided.'
+            };
+        }
+
 
         try {
 
-            const agoraConfigPath =
-                path.join(
-                    __dirname,
-                    'agora-config.json'
+            const result =
+                await serviceCallApiRequest(
+                    '/media-credentials?call_sys_id=' +
+                    encodeURIComponent(
+                        callSysId
+                    ),
+                    'GET'
                 );
 
 
-            if (
-                !fs.existsSync(
-                    agoraConfigPath
-                )
-            ) {
-
-                return {
-                    success: false,
-
-                    message:
-                        'Local Agora development configuration was not found.'
-                };
-            }
-
-
-            const agoraConfig =
-                JSON.parse(
-                    fs.readFileSync(
-                        agoraConfigPath,
-                        'utf8'
-                    )
-                );
-
-
-            if (
-                !agoraConfig.appId ||
-                !agoraConfig.token ||
-                !agoraConfig.channel
-            ) {
-
-                return {
-                    success: false,
-
-                    message:
-                        'Agora development configuration is incomplete.'
-                };
-            }
-
-
-            return {
-                success: true,
-
-                appId:
-                    agoraConfig.appId,
-
-                token:
-                    agoraConfig.token,
-
-                channel:
-                    agoraConfig.channel
-            };
+            return result;
 
 
         } catch (error) {
 
             console.error(
-                'Unable to read Agora configuration:',
-                error
+                'Unable to get ServiceCall media credentials:',
+                error.message
             );
 
 
             return {
                 success: false,
 
+                code:
+                    error.code ||
+                    'MEDIA_CREDENTIALS_FAILED',
+
                 message:
-                    'Unable to load Agora development configuration.'
+                    error.message ||
+                    'Unable to obtain media credentials.'
             };
         }
     }
 );
+
