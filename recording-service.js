@@ -1,13 +1,21 @@
 /*
  * ServiceCall Local Recording Service
  *
- * V1 proof:
- * Mix the local Agora microphone and all
- * subscribed remote Agora audio tracks into
- * one MediaRecorder recording.
+ * V1:
  *
- * Final MP3 conversion comes after we prove
- * that the mixed recording contains both sides.
+ * - Mix local Agora microphone + all subscribed
+ *   remote Agora audio tracks.
+ *
+ * - Maintain a recording video canvas for the
+ *   lifetime of the recording.
+ *
+ * - If screen sharing is never used:
+ *      final output -> MP3
+ *
+ * - If screen sharing is used at any point:
+ *      final output -> MP4
+ *
+ * Camera/video feeds are NOT recorded.
  */
 
 
@@ -30,8 +38,52 @@ let remoteSyncTimer =
     null;
 
 
+/*
+ * Screen-recording state.
+ */
+let screenUsedDuringRecording =
+    false;
+
+let recordingCanvas =
+    null;
+
+let recordingCanvasContext =
+    null;
+
+let recordingCanvasStream =
+    null;
+
+let recordingVideoTrack =
+    null;
+
+let screenRenderTimer =
+    null;
+
+let screenPreviewVideo =
+    null;
+
+let activeScreenNativeTrack =
+    null;
+
+
+/*
+ * Recording video dimensions.
+ *
+ * 1280 x 720 keeps the prototype manageable
+ * while still producing a useful screen video.
+ */
+const RECORDING_VIDEO_WIDTH =
+    1280;
+
+const RECORDING_VIDEO_HEIGHT =
+    720;
+
+const RECORDING_VIDEO_FPS =
+    15;
+
+
 /* -------------------------------------------------------
-   GET NATIVE MEDIASTREAMTRACK
+   GET NATIVE AUDIO MEDIASTREAMTRACK
 ------------------------------------------------------- */
 
 function getNativeAudioTrack(
@@ -43,12 +95,9 @@ function getNativeAudioTrack(
     }
 
 
-    /*
-     * Agora local and remote audio tracks expose
-     * their underlying browser MediaStreamTrack.
-     */
     if (
-        typeof agoraTrack.getMediaStreamTrack ===
+        typeof agoraTrack
+            .getMediaStreamTrack ===
         'function'
     ) {
 
@@ -62,7 +111,35 @@ function getNativeAudioTrack(
 
 
 /* -------------------------------------------------------
-   CONNECT ONE TRACK TO MIXER
+   GET NATIVE VIDEO MEDIASTREAMTRACK
+------------------------------------------------------- */
+
+function getNativeVideoTrack(
+    agoraTrack
+) {
+
+    if (!agoraTrack) {
+        return null;
+    }
+
+
+    if (
+        typeof agoraTrack
+            .getMediaStreamTrack ===
+        'function'
+    ) {
+
+        return agoraTrack
+            .getMediaStreamTrack();
+    }
+
+
+    return null;
+}
+
+
+/* -------------------------------------------------------
+   CONNECT ONE AUDIO TRACK TO MIXER
 ------------------------------------------------------- */
 
 function connectTrack(
@@ -106,7 +183,7 @@ function connectTrack(
 
 
 /* -------------------------------------------------------
-   SYNC REMOTE PARTICIPANTS
+   SYNC REMOTE AUDIO PARTICIPANTS
 ------------------------------------------------------- */
 
 function syncRemoteTracks() {
@@ -145,11 +222,6 @@ function syncRemoteTracks() {
             }
 
 
-            /*
-             * MediaStreamTrack.id gives us a stable
-             * identifier while that remote audio
-             * track remains active.
-             */
             const trackId =
                 nativeTrack.id ||
                 String(index);
@@ -160,10 +232,6 @@ function syncRemoteTracks() {
             );
 
 
-            /*
-             * Participant already connected to
-             * our recording mixer.
-             */
             if (
                 remoteSources.has(
                     trackId
@@ -204,10 +272,6 @@ function syncRemoteTracks() {
     );
 
 
-    /*
-     * Remove tracks belonging to users who
-     * left/unpublished while recording.
-     */
     for (
         const [
             trackId,
@@ -247,6 +311,476 @@ function syncRemoteTracks() {
 
 
 /* -------------------------------------------------------
+   CREATE RECORDING VIDEO CANVAS
+------------------------------------------------------- */
+
+function createRecordingCanvas() {
+
+    recordingCanvas =
+        document.createElement(
+            'canvas'
+        );
+
+
+    recordingCanvas.width =
+        RECORDING_VIDEO_WIDTH;
+
+    recordingCanvas.height =
+        RECORDING_VIDEO_HEIGHT;
+
+
+    recordingCanvasContext =
+        recordingCanvas.getContext(
+            '2d',
+            {
+                alpha: false
+            }
+        );
+
+
+    if (!recordingCanvasContext) {
+
+        throw new Error(
+            'Unable to create the ServiceCall recording canvas.'
+        );
+    }
+
+
+    /*
+     * Start with a dark blank frame.
+     *
+     * If no screen is ever shared, this video
+     * track is ignored and the recording is
+     * finalized as audio-only MP3.
+     */
+    drawBlankRecordingFrame();
+
+
+    /*
+     * Keep one stable video track alive for the
+     * entire recording.
+     *
+     * This avoids adding/removing MediaStreamTracks
+     * from MediaRecorder after recording has begun.
+     */
+    recordingCanvasStream =
+        recordingCanvas.captureStream(
+            RECORDING_VIDEO_FPS
+        );
+
+
+    const videoTracks =
+        recordingCanvasStream
+            .getVideoTracks();
+
+
+    if (
+        videoTracks.length === 0
+    ) {
+
+        throw new Error(
+            'Unable to create the ServiceCall recording video track.'
+        );
+    }
+
+
+    recordingVideoTrack =
+        videoTracks[0];
+}
+
+
+/* -------------------------------------------------------
+   BLANK VIDEO FRAME
+------------------------------------------------------- */
+
+function drawBlankRecordingFrame() {
+
+    if (!recordingCanvasContext) {
+        return;
+    }
+
+
+    recordingCanvasContext.fillStyle =
+        '#101817';
+
+
+    recordingCanvasContext.fillRect(
+        0,
+        0,
+        RECORDING_VIDEO_WIDTH,
+        RECORDING_VIDEO_HEIGHT
+    );
+}
+
+
+/* -------------------------------------------------------
+   DRAW SHARED SCREEN INTO RECORDING
+------------------------------------------------------- */
+
+function drawScreenFrame() {
+
+    if (
+        !recording ||
+        !recordingCanvasContext
+    ) {
+        return;
+    }
+
+
+    if (
+        !screenPreviewVideo ||
+        !activeScreenNativeTrack ||
+        activeScreenNativeTrack.readyState ===
+            'ended' ||
+        screenPreviewVideo.readyState < 2
+    ) {
+
+        drawBlankRecordingFrame();
+
+        return;
+    }
+
+
+    const sourceWidth =
+        screenPreviewVideo.videoWidth;
+
+    const sourceHeight =
+        screenPreviewVideo.videoHeight;
+
+
+    if (
+        !sourceWidth ||
+        !sourceHeight
+    ) {
+
+        drawBlankRecordingFrame();
+
+        return;
+    }
+
+
+    /*
+     * Preserve the source aspect ratio.
+     * Letterbox where required.
+     */
+    const scale =
+        Math.min(
+            RECORDING_VIDEO_WIDTH /
+                sourceWidth,
+
+            RECORDING_VIDEO_HEIGHT /
+                sourceHeight
+        );
+
+
+    const drawWidth =
+        Math.round(
+            sourceWidth *
+            scale
+        );
+
+
+    const drawHeight =
+        Math.round(
+            sourceHeight *
+            scale
+        );
+
+
+    const x =
+        Math.round(
+            (
+                RECORDING_VIDEO_WIDTH -
+                drawWidth
+            ) / 2
+        );
+
+
+    const y =
+        Math.round(
+            (
+                RECORDING_VIDEO_HEIGHT -
+                drawHeight
+            ) / 2
+        );
+
+
+    drawBlankRecordingFrame();
+
+
+    try {
+
+        recordingCanvasContext.drawImage(
+            screenPreviewVideo,
+            x,
+            y,
+            drawWidth,
+            drawHeight
+        );
+
+    } catch (error) {
+
+        /*
+         * A screen track can disappear between
+         * readyState checks. Keep the recorder
+         * alive with a blank frame.
+         */
+        drawBlankRecordingFrame();
+    }
+}
+
+
+/* -------------------------------------------------------
+   START SCREEN RENDER LOOP
+------------------------------------------------------- */
+
+function startScreenRenderLoop() {
+
+    stopScreenRenderLoop();
+
+
+    screenRenderTimer =
+        setInterval(
+            drawScreenFrame,
+            Math.round(
+                1000 /
+                RECORDING_VIDEO_FPS
+            )
+        );
+}
+
+
+/* -------------------------------------------------------
+   STOP SCREEN RENDER LOOP
+------------------------------------------------------- */
+
+function stopScreenRenderLoop() {
+
+    if (screenRenderTimer) {
+
+        clearInterval(
+            screenRenderTimer
+        );
+
+
+        screenRenderTimer =
+            null;
+    }
+}
+
+
+/* -------------------------------------------------------
+   DETACH CURRENT RECORDING SCREEN
+------------------------------------------------------- */
+
+function detachScreenTrack() {
+
+    activeScreenNativeTrack =
+        null;
+
+
+    if (screenPreviewVideo) {
+
+        try {
+
+            screenPreviewVideo.pause();
+
+        } catch (error) {
+            // Ignore.
+        }
+
+
+        screenPreviewVideo.srcObject =
+            null;
+
+
+        screenPreviewVideo =
+            null;
+    }
+
+
+    drawBlankRecordingFrame();
+}
+
+
+/* -------------------------------------------------------
+   ATTACH SCREEN TO ACTIVE RECORDING
+------------------------------------------------------- */
+
+async function attachScreenTrack(
+    agoraScreenTrack
+) {
+
+    if (!recording) {
+
+        return {
+            success: false,
+            message:
+                'Recording is not active.'
+        };
+    }
+
+
+    const nativeTrack =
+        getNativeVideoTrack(
+            agoraScreenTrack
+        );
+
+
+    if (!nativeTrack) {
+
+        throw new Error(
+            'Unable to access the shared screen MediaStreamTrack.'
+        );
+    }
+
+
+    /*
+     * A screen has now been used at least once
+     * during this recording.
+     *
+     * Even if sharing stops later, final output
+     * remains MP4.
+     */
+    screenUsedDuringRecording =
+        true;
+
+
+    detachScreenTrack();
+
+
+    activeScreenNativeTrack =
+        nativeTrack;
+
+
+    const video =
+        document.createElement(
+            'video'
+        );
+
+
+    video.muted =
+        true;
+
+    video.autoplay =
+        true;
+
+    video.playsInline =
+        true;
+
+
+    video.srcObject =
+        new MediaStream([
+            nativeTrack
+        ]);
+
+
+    screenPreviewVideo =
+        video;
+
+
+    try {
+
+        await video.play();
+
+    } catch (error) {
+
+        /*
+         * Electron normally permits playback
+         * here because this is an active call.
+         */
+        console.warn(
+            'ServiceCall recorder screen preview play warning:',
+            error
+        );
+    }
+
+
+    drawScreenFrame();
+
+
+    console.log(
+        'ServiceCall recorder attached shared screen.'
+    );
+
+
+    return {
+        success: true,
+        screenUsed:
+            true
+    };
+}
+
+
+/* -------------------------------------------------------
+   SCREEN SHARE STOPPED DURING RECORDING
+------------------------------------------------------- */
+
+function detachScreen() {
+
+    if (!recording) {
+        return;
+    }
+
+
+    detachScreenTrack();
+
+
+    console.log(
+        'ServiceCall recorder detached shared screen.'
+    );
+}
+
+
+/* -------------------------------------------------------
+   CREATE RECORDING MEDIASTREAM
+------------------------------------------------------- */
+
+function createRecorderStream() {
+
+    if (!destination) {
+
+        throw new Error(
+            'ServiceCall audio recording destination is unavailable.'
+        );
+    }
+
+
+    const mixedAudioTracks =
+        destination.stream
+            .getAudioTracks();
+
+
+    if (
+        mixedAudioTracks.length === 0
+    ) {
+
+        throw new Error(
+            'ServiceCall mixed audio track is unavailable.'
+        );
+    }
+
+
+    if (!recordingVideoTrack) {
+
+        throw new Error(
+            'ServiceCall recording video track is unavailable.'
+        );
+    }
+
+
+    /*
+     * One mixed conference audio track +
+     * one persistent canvas video track.
+     */
+    return new MediaStream([
+        mixedAudioTracks[0],
+        recordingVideoTrack
+    ]);
+}
+
+
+/* -------------------------------------------------------
    START RECORDING
 ------------------------------------------------------- */
 
@@ -264,7 +798,8 @@ async function startRecording() {
 
     if (
         !window.ServiceCallAgora ||
-        !window.ServiceCallAgora.isJoined()
+        !window.ServiceCallAgora
+            .isJoined()
     ) {
 
         throw new Error(
@@ -284,6 +819,19 @@ async function startRecording() {
             'Local ServiceCall microphone track is unavailable.'
         );
     }
+
+
+    /*
+     * Reset recording-specific state.
+     */
+    screenUsedDuringRecording =
+        false;
+
+    activeScreenNativeTrack =
+        null;
+
+    screenPreviewVideo =
+        null;
 
 
     audioContext =
@@ -308,7 +856,7 @@ async function startRecording() {
 
 
     /*
-     * Add local microphone.
+     * Local microphone.
      */
     localSource =
         connectTrack(
@@ -317,16 +865,20 @@ async function startRecording() {
 
 
     /*
-     * Recording is marked active before remote
-     * sync so syncRemoteTracks() can proceed.
+     * Create the persistent video timeline
+     * before MediaRecorder starts.
+     */
+    createRecordingCanvas();
+
+
+    /*
+     * Recording must be true before remote
+     * synchronization.
      */
     recording =
         true;
 
 
-    /*
-     * Add everyone currently subscribed.
-     */
     syncRemoteTracks();
 
 
@@ -334,12 +886,25 @@ async function startRecording() {
         [];
 
 
+    const recorderStream =
+        createRecorderStream();
+
+
     /*
-     * Chromium/Electron normally supports
-     * WebM + Opus for audio recording.
+     * We intentionally record WebM here.
+     *
+     * Electron/Chromium can reliably produce
+     * VP8 + Opus WebM. FFmpeg later converts:
+     *
+     * screenUsed=false -> MP3
+     * screenUsed=true  -> MP4
      */
     const preferredMimeType =
-        'audio/webm;codecs=opus';
+        'video/webm;codecs=vp8,opus';
+
+
+    const fallbackMimeType =
+        'video/webm';
 
 
     const mimeType =
@@ -347,22 +912,28 @@ async function startRecording() {
             preferredMimeType
         )
             ? preferredMimeType
-            : 'audio/webm';
+            : fallbackMimeType;
 
 
     mediaRecorder =
         new MediaRecorder(
-            destination.stream,
+            recorderStream,
             {
-                mimeType: mimeType,
+                mimeType:
+                    mimeType,
+
                 audioBitsPerSecond:
-                    128000
+                    128000,
+
+                videoBitsPerSecond:
+                    2500000
             }
         );
 
 
     mediaRecorder.addEventListener(
         'dataavailable',
+
         (event) => {
 
             if (
@@ -383,12 +954,6 @@ async function startRecording() {
     );
 
 
-    /*
-     * Conference participants can join/leave
-     * during recording. Periodically synchronize
-     * Agora's current remote audio tracks with
-     * our recording mixer.
-     */
     remoteSyncTimer =
         setInterval(
             syncRemoteTracks,
@@ -396,14 +961,52 @@ async function startRecording() {
         );
 
 
+    startScreenRenderLoop();
+
+
+    /*
+     * Important:
+     *
+     * Recording may begin while THIS participant
+     * is already sharing their screen.
+     */
+    if (
+        window.ServiceCallAgora &&
+        typeof window.ServiceCallAgora
+            .isScreenSharing ===
+            'function' &&
+        window.ServiceCallAgora
+            .isScreenSharing() &&
+        typeof window.ServiceCallAgora
+            .getLocalScreenVideoTrack ===
+            'function'
+    ) {
+
+        const currentScreenTrack =
+            window.ServiceCallAgora
+                .getLocalScreenVideoTrack();
+
+
+        if (currentScreenTrack) {
+
+            await attachScreenTrack(
+                currentScreenTrack
+            );
+        }
+    }
+
+
     console.log(
-        'ServiceCall mixed audio recording started.'
+        'ServiceCall mixed recording started.'
     );
 
 
     return {
         success: true,
-        mimeType: mimeType
+        mimeType:
+            mimeType,
+        screenUsed:
+            screenUsedDuringRecording
     };
 }
 
@@ -420,9 +1023,16 @@ async function cleanupMixer() {
             remoteSyncTimer
         );
 
+
         remoteSyncTimer =
             null;
     }
+
+
+    stopScreenRenderLoop();
+
+
+    detachScreenTrack();
 
 
     if (localSource) {
@@ -457,6 +1067,41 @@ async function cleanupMixer() {
 
 
     remoteSources.clear();
+
+
+    /*
+     * Stop our canvas-generated video track.
+     */
+    if (recordingCanvasStream) {
+
+        recordingCanvasStream
+            .getTracks()
+            .forEach(
+                track => {
+
+                    try {
+
+                        track.stop();
+
+                    } catch (error) {
+                        // Ignore.
+                    }
+                }
+            );
+    }
+
+
+    recordingVideoTrack =
+        null;
+
+    recordingCanvasStream =
+        null;
+
+    recordingCanvasContext =
+        null;
+
+    recordingCanvas =
+        null;
 
 
     destination =
@@ -499,6 +1144,14 @@ async function stopRecording() {
     }
 
 
+    /*
+     * Capture this before cleanup resets
+     * recording-specific resources.
+     */
+    const finalScreenUsed =
+        screenUsedDuringRecording;
+
+
     return new Promise(
         (
             resolve,
@@ -514,7 +1167,7 @@ async function stopRecording() {
 
                         const mimeType =
                             mediaRecorder.mimeType ||
-                            'audio/webm';
+                            'video/webm';
 
 
                         const blob =
@@ -540,21 +1193,39 @@ async function stopRecording() {
                         await cleanupMixer();
 
 
+                        screenUsedDuringRecording =
+                            false;
+
+
                         console.log(
-                            'ServiceCall mixed audio recording stopped.',
+                            'ServiceCall mixed recording stopped.',
                             'Size:',
-                            blob.size
+                            blob.size,
+                            'Screen used:',
+                            finalScreenUsed
                         );
 
 
                         resolve({
-                            success: true,
-                            blob: blob,
-                            mimeType:
-                                mimeType,
-                            size:
-                                blob.size
-                        });
+    success: true,
+
+    blob:
+        blob,
+
+    mimeType:
+        mimeType,
+
+    size:
+        blob.size,
+
+    hadScreenShare:
+        finalScreenUsed,
+
+    finalFormat:
+        finalScreenUsed
+            ? 'mp4'
+            : 'mp3'
+});
 
 
                     } catch (error) {
@@ -562,13 +1233,20 @@ async function stopRecording() {
                         recording =
                             false;
 
+
                         await cleanupMixer();
+
+
+                        screenUsedDuringRecording =
+                            false;
+
 
                         reject(
                             error
                         );
                     }
                 },
+
                 {
                     once: true
                 }
@@ -584,7 +1262,13 @@ async function stopRecording() {
                 recording =
                     false;
 
+
                 cleanupMixer();
+
+
+                screenUsedDuringRecording =
+                    false;
+
 
                 reject(
                     error
@@ -605,6 +1289,12 @@ function isRecording() {
 }
 
 
+function hasUsedScreen() {
+
+    return screenUsedDuringRecording;
+}
+
+
 /* -------------------------------------------------------
    PUBLIC API
 ------------------------------------------------------- */
@@ -618,5 +1308,14 @@ window.ServiceCallRecorder = {
         stopRecording,
 
     isRecording:
-        isRecording
+        isRecording,
+
+    hasUsedScreen:
+        hasUsedScreen,
+
+    attachScreen:
+        attachScreenTrack,
+
+    detachScreen:
+        detachScreen
 };

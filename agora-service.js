@@ -1,29 +1,70 @@
+/*
+ * ServiceCall Agora Media Service
+ *
+ * Handles:
+ * - Agora RTC connection
+ * - Microphone audio
+ * - Remote conference audio
+ * - Screen-share video publication
+ * - Remote screen-share video
+ * - Token renewal
+ * - Recording track access
+ */
+
 const AgoraRTC =
     require('agora-rtc-sdk-ng');
 
 
 let client = null;
+
 let localAudioTrack = null;
+
+/*
+ * Local screen track while THIS participant
+ * is sharing their screen.
+ */
+let localScreenVideoTrack = null;
+
+
 let joined = false;
 let muted = false;
+let screenSharing = false;
 
 let tokenRenewalHandler = null;
 let tokenRenewalInProgress = false;
 
 
 /*
- * Remote Agora audio tracks currently
- * subscribed in this call.
+ * Remote Agora audio tracks.
  *
  * Key   = Agora UID
  * Value = Agora remote audio track
- *
- * Later our ServiceCall recorder will use
- * these tracks together with the local
- * microphone to create one recording.
  */
 const remoteAudioTracks =
     new Map();
+
+
+/*
+ * Remote Agora video tracks.
+ *
+ * For V1, ServiceCall does not publish camera
+ * video. Therefore remote video represents
+ * screen sharing.
+ *
+ * Key   = Agora UID
+ * Value = Agora remote video track
+ */
+const remoteScreenVideoTracks =
+    new Map();
+
+
+/*
+ * Callback supplied by call-window.js.
+ *
+ * This allows the UI to react when another
+ * participant starts/stops screen sharing.
+ */
+let remoteScreenHandler = null;
 
 
 /* -------------------------------------------------------
@@ -70,18 +111,15 @@ function createClient() {
                 );
 
 
+                /* --------------------------------
+                   REMOTE AUDIO
+                -------------------------------- */
+
                 if (
                     mediaType ===
                     'audio'
                 ) {
 
-                    /*
-                     * Keep a reference to the
-                     * subscribed remote audio track.
-                     *
-                     * Normal playback continues exactly
-                     * as before.
-                     */
                     remoteAudioTracks.set(
                         String(user.uid),
                         user.audioTrack
@@ -101,6 +139,66 @@ function createClient() {
                         'ServiceCall remote audio tracks available:',
                         remoteAudioTracks.size
                     );
+                }
+
+
+                /* --------------------------------
+                   REMOTE SCREEN VIDEO
+                -------------------------------- */
+
+                if (
+                    mediaType ===
+                    'video'
+                ) {
+
+                    if (!user.videoTrack) {
+
+                        console.error(
+                            'ServiceCall remote video track is unavailable:',
+                            user.uid
+                        );
+
+                        return;
+                    }
+
+
+                    remoteScreenVideoTracks.set(
+                        String(user.uid),
+                        user.videoTrack
+                    );
+
+
+                    console.log(
+                        'ServiceCall remote screen track received:',
+                        user.uid
+                    );
+
+
+                    /*
+                     * Tell call-window.js that a
+                     * participant is sharing video.
+                     *
+                     * call-window.js decides where
+                     * the track is rendered.
+                     */
+                    if (
+                        typeof remoteScreenHandler ===
+                        'function'
+                    ) {
+
+                        remoteScreenHandler({
+                            action:
+                                'started',
+
+                            uid:
+                                String(
+                                    user.uid
+                                ),
+
+                            track:
+                                user.videoTrack
+                        });
+                    }
                 }
 
 
@@ -126,6 +224,10 @@ function createClient() {
             mediaType
         ) => {
 
+            /* --------------------------------
+               AUDIO
+            -------------------------------- */
+
             if (
                 mediaType ===
                 'audio'
@@ -140,6 +242,67 @@ function createClient() {
                     'ServiceCall remote audio track removed:',
                     user.uid
                 );
+            }
+
+
+            /* --------------------------------
+               SCREEN VIDEO
+            -------------------------------- */
+
+            if (
+                mediaType ===
+                'video'
+            ) {
+
+                const uid =
+                    String(
+                        user.uid
+                    );
+
+
+                const remoteTrack =
+                    remoteScreenVideoTracks
+                        .get(
+                            uid
+                        );
+
+
+                if (remoteTrack) {
+
+                    try {
+
+                        remoteTrack.stop();
+
+                    } catch (error) {
+                        // Ignore playback stop error.
+                    }
+                }
+
+
+                remoteScreenVideoTracks.delete(
+                    uid
+                );
+
+
+                console.log(
+                    'ServiceCall remote screen track removed:',
+                    user.uid
+                );
+
+
+                if (
+                    typeof remoteScreenHandler ===
+                    'function'
+                ) {
+
+                    remoteScreenHandler({
+                        action:
+                            'stopped',
+
+                        uid:
+                            uid
+                    });
+                }
             }
 
 
@@ -160,9 +323,54 @@ function createClient() {
 
         (user) => {
 
+            const uid =
+                String(
+                    user.uid
+                );
+
+
             remoteAudioTracks.delete(
-                String(user.uid)
+                uid
             );
+
+
+            const remoteVideoTrack =
+                remoteScreenVideoTracks
+                    .get(
+                        uid
+                    );
+
+
+            if (remoteVideoTrack) {
+
+                try {
+
+                    remoteVideoTrack.stop();
+
+                } catch (error) {
+                    // Ignore playback stop error.
+                }
+            }
+
+
+            remoteScreenVideoTracks.delete(
+                uid
+            );
+
+
+            if (
+                typeof remoteScreenHandler ===
+                'function'
+            ) {
+
+                remoteScreenHandler({
+                    action:
+                        'stopped',
+
+                    uid:
+                        uid
+                });
+            }
 
 
             console.log(
@@ -180,12 +388,8 @@ function createClient() {
 
 
     /*
-     * Agora warns us shortly before the
+     * Agora warns shortly before the
      * current RTC token expires.
-     *
-     * We ask call-window.js for fresh
-     * media credentials and renew the
-     * Agora token without leaving the call.
      */
     client.on(
         'token-privilege-will-expire',
@@ -241,7 +445,7 @@ function createClient() {
 
 
                 /*
-                 * Never log newToken.
+                 * NEVER log newToken.
                  */
                 await client.renewToken(
                     newToken
@@ -270,13 +474,6 @@ function createClient() {
     );
 
 
-    /*
-     * This event means the token actually
-     * expired before we successfully renewed it.
-     *
-     * Do not automatically leave the call here.
-     * Log the condition so we can diagnose it.
-     */
     client.on(
         'token-privilege-did-expire',
 
@@ -328,14 +525,6 @@ async function joinAudioCall(
     }
 
 
-    /*
-     * Save the callback supplied by
-     * call-window.js.
-     *
-     * When Agora warns that the current
-     * token is expiring, this callback
-     * obtains another token from ServiceNow.
-     */
     tokenRenewalHandler =
         typeof config.renewToken ===
         'function'
@@ -369,14 +558,6 @@ async function joinAudioCall(
             createClient();
 
 
-        /*
-         * IMPORTANT:
-         *
-         * The token generated by our server is
-         * bound to this exact numeric UID.
-         *
-         * Therefore we must NOT use null here.
-         */
         const joinedUid =
             await rtcClient.join(
                 config.appId,
@@ -394,14 +575,6 @@ async function joinAudioCall(
         );
 
 
-        /*
-         * Create the microphone track with
-         * built-in audio processing.
-         *
-         * AEC = Acoustic Echo Cancellation
-         * ANS = Automatic Noise Suppression
-         * AGC = Automatic Gain Control
-         */
         localAudioTrack =
             await AgoraRTC
                 .createMicrophoneAudioTrack({
@@ -411,9 +584,6 @@ async function joinAudioCall(
                 });
 
 
-        /*
-         * Publish microphone into the channel.
-         */
         await rtcClient.publish(
             [
                 localAudioTrack
@@ -447,10 +617,6 @@ async function joinAudioCall(
         );
 
 
-        /*
-         * Clean up a partially established
-         * connection if anything failed.
-         */
         await leaveAudioCall();
 
 
@@ -492,15 +658,198 @@ async function setMuted(
 
 
 /* -------------------------------------------------------
-   RECORDING TRACK ACCESS
+   START SCREEN SHARE
 ------------------------------------------------------- */
 
 /*
- * These methods DO NOT start recording.
+ * screenTrack must be an Agora-compatible
+ * local video track created from the
+ * Electron-selected desktop source.
  *
- * They only give the future ServiceCall
- * recorder access to the active Agora tracks.
+ * Electron source selection will be wired
+ * in the next step.
  */
+async function startScreenShare(
+    screenTrack
+) {
+
+    if (
+        !joined ||
+        !client
+    ) {
+
+        throw new Error(
+            'ServiceCall must be connected before sharing a screen.'
+        );
+    }
+
+
+    if (screenSharing) {
+
+        return {
+            success: true,
+            alreadySharing: true
+        };
+    }
+
+
+    if (!screenTrack) {
+
+        throw new Error(
+            'A screen video track was not provided.'
+        );
+    }
+
+
+    try {
+
+        localScreenVideoTrack =
+            screenTrack;
+
+
+        await client.publish(
+            [
+                localScreenVideoTrack
+            ]
+        );
+
+
+        screenSharing =
+            true;
+
+
+        console.log(
+            'ServiceCall screen published successfully.'
+        );
+
+
+        return {
+            success: true
+        };
+
+
+    } catch (error) {
+
+        localScreenVideoTrack =
+            null;
+
+        screenSharing =
+            false;
+
+
+        console.error(
+            'Unable to publish ServiceCall screen:',
+            error
+        );
+
+
+        throw error;
+    }
+}
+
+
+/* -------------------------------------------------------
+   STOP SCREEN SHARE
+------------------------------------------------------- */
+
+async function stopScreenShare() {
+
+    const track =
+        localScreenVideoTrack;
+
+
+    if (!track) {
+
+        screenSharing =
+            false;
+
+
+        return {
+            success: true
+        };
+    }
+
+
+    try {
+
+        if (client) {
+
+            try {
+
+                await client.unpublish(
+                    [
+                        track
+                    ]
+                );
+
+            } catch (error) {
+
+                console.error(
+                    'Unable to unpublish ServiceCall screen:',
+                    error
+                );
+            }
+        }
+
+
+        try {
+
+            track.stop();
+
+        } catch (error) {
+            // Ignore track stop error.
+        }
+
+
+        try {
+
+            track.close();
+
+        } catch (error) {
+            // Ignore track close error.
+        }
+
+
+    } finally {
+
+        localScreenVideoTrack =
+            null;
+
+        screenSharing =
+            false;
+
+
+        console.log(
+            'ServiceCall screen sharing stopped.'
+        );
+    }
+
+
+    return {
+        success: true
+    };
+}
+
+
+/* -------------------------------------------------------
+   REMOTE SCREEN EVENT HANDLER
+------------------------------------------------------- */
+
+function setRemoteScreenHandler(
+    handler
+) {
+
+    remoteScreenHandler =
+        typeof handler ===
+        'function'
+            ? handler
+            : null;
+}
+
+
+/* -------------------------------------------------------
+   RECORDING TRACK ACCESS
+------------------------------------------------------- */
 
 function getLocalAudioTrack() {
 
@@ -522,6 +871,24 @@ function getRemoteAudioTrackCount() {
 }
 
 
+/*
+ * Later recording-service.js will use
+ * this track when producing MP4.
+ */
+function getLocalScreenVideoTrack() {
+
+    return localScreenVideoTrack;
+}
+
+
+function getRemoteScreenVideoTracks() {
+
+    return Array.from(
+        remoteScreenVideoTracks.values()
+    );
+}
+
+
 /* -------------------------------------------------------
    LEAVE AUDIO CALL
 ------------------------------------------------------- */
@@ -529,6 +896,16 @@ function getRemoteAudioTrackCount() {
 async function leaveAudioCall() {
 
     try {
+
+        /*
+         * Stop screen sharing first so the
+         * video publication is cleaned up.
+         */
+        if (localScreenVideoTrack) {
+
+            await stopScreenShare();
+        }
+
 
         if (localAudioTrack) {
 
@@ -555,6 +932,25 @@ async function leaveAudioCall() {
         }
 
 
+        /*
+         * Stop remote video playback before
+         * clearing our references.
+         */
+        remoteScreenVideoTracks
+            .forEach(
+                (track) => {
+
+                    try {
+
+                        track.stop();
+
+                    } catch (error) {
+                        // Ignore playback stop error.
+                    }
+                }
+            );
+
+
         if (client) {
 
             try {
@@ -573,16 +969,20 @@ async function leaveAudioCall() {
 
     } finally {
 
-        /*
-         * Remove all references to remote
-         * participant audio when this
-         * desktop leaves the Agora channel.
-         */
         remoteAudioTracks.clear();
+
+        remoteScreenVideoTracks.clear();
 
 
         client =
             null;
+
+        localAudioTrack =
+            null;
+
+        localScreenVideoTrack =
+            null;
+
 
         joined =
             false;
@@ -590,15 +990,22 @@ async function leaveAudioCall() {
         muted =
             false;
 
+        screenSharing =
+            false;
+
+
         tokenRenewalHandler =
             null;
 
         tokenRenewalInProgress =
             false;
 
+        remoteScreenHandler =
+            null;
+
 
         console.log(
-            'ServiceCall left Agora audio.'
+            'ServiceCall left Agora media.'
         );
     }
 
@@ -625,6 +1032,12 @@ function isMuted() {
 }
 
 
+function isScreenSharing() {
+
+    return screenSharing;
+}
+
+
 /* -------------------------------------------------------
    PUBLIC SERVICECALL MEDIA API
 ------------------------------------------------------- */
@@ -647,13 +1060,30 @@ window.ServiceCallAgora = {
         isMuted,
 
 
-    /*
-     * Recording support.
-     *
-     * These expose only the active media
-     * track objects to our local recorder.
-     * They do not expose Agora credentials.
-     */
+    /* -------------------------
+       SCREEN SHARING
+    ------------------------- */
+
+    createScreenVideoTrack:
+        createScreenVideoTrack,
+
+    startScreenShare:
+        startScreenShare,
+
+    stopScreenShare:
+        stopScreenShare,
+
+    isScreenSharing:
+        isScreenSharing,
+
+    setRemoteScreenHandler:
+        setRemoteScreenHandler,
+
+
+    /* -------------------------
+       RECORDING SUPPORT
+    ------------------------- */
+
     getLocalAudioTrack:
         getLocalAudioTrack,
 
@@ -661,5 +1091,33 @@ window.ServiceCallAgora = {
         getRemoteAudioTracks,
 
     getRemoteAudioTrackCount:
-        getRemoteAudioTrackCount
+        getRemoteAudioTrackCount,
+
+    getLocalScreenVideoTrack:
+        getLocalScreenVideoTrack,
+
+    getRemoteScreenVideoTracks:
+        getRemoteScreenVideoTracks
 };
+
+async function createScreenVideoTrack(
+    mediaStreamTrack
+) {
+
+    if (!mediaStreamTrack) {
+
+        throw new Error(
+            'Screen MediaStreamTrack was not provided.'
+        );
+    }
+
+
+    const agoraTrack =
+        AgoraRTC.createCustomVideoTrack({
+            mediaStreamTrack:
+                mediaStreamTrack
+        });
+
+
+    return agoraTrack;
+}

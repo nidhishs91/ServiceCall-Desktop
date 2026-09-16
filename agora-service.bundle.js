@@ -32792,11 +32792,15 @@
   var AgoraRTC = require_AgoraRTC_N_production();
   var client = null;
   var localAudioTrack = null;
+  var localScreenVideoTrack = null;
   var joined = false;
   var muted = false;
+  var screenSharing = false;
   var tokenRenewalHandler = null;
   var tokenRenewalInProgress = false;
   var remoteAudioTracks = /* @__PURE__ */ new Map();
+  var remoteScreenVideoTracks = /* @__PURE__ */ new Map();
+  var remoteScreenHandler = null;
   function createClient() {
     if (client) {
       return client;
@@ -32833,6 +32837,32 @@
               remoteAudioTracks.size
             );
           }
+          if (mediaType === "video") {
+            if (!user.videoTrack) {
+              console.error(
+                "ServiceCall remote video track is unavailable:",
+                user.uid
+              );
+              return;
+            }
+            remoteScreenVideoTracks.set(
+              String(user.uid),
+              user.videoTrack
+            );
+            console.log(
+              "ServiceCall remote screen track received:",
+              user.uid
+            );
+            if (typeof remoteScreenHandler === "function") {
+              remoteScreenHandler({
+                action: "started",
+                uid: String(
+                  user.uid
+                ),
+                track: user.videoTrack
+              });
+            }
+          }
         } catch (error) {
           console.error(
             "Unable to subscribe to remote ServiceCall user:",
@@ -32853,6 +32883,33 @@
             user.uid
           );
         }
+        if (mediaType === "video") {
+          const uid = String(
+            user.uid
+          );
+          const remoteTrack = remoteScreenVideoTracks.get(
+            uid
+          );
+          if (remoteTrack) {
+            try {
+              remoteTrack.stop();
+            } catch (error) {
+            }
+          }
+          remoteScreenVideoTracks.delete(
+            uid
+          );
+          console.log(
+            "ServiceCall remote screen track removed:",
+            user.uid
+          );
+          if (typeof remoteScreenHandler === "function") {
+            remoteScreenHandler({
+              action: "stopped",
+              uid
+            });
+          }
+        }
         console.log(
           "ServiceCall remote user unpublished:",
           user.uid,
@@ -32863,9 +32920,30 @@
     client.on(
       "user-left",
       (user) => {
-        remoteAudioTracks.delete(
-          String(user.uid)
+        const uid = String(
+          user.uid
         );
+        remoteAudioTracks.delete(
+          uid
+        );
+        const remoteVideoTrack = remoteScreenVideoTracks.get(
+          uid
+        );
+        if (remoteVideoTrack) {
+          try {
+            remoteVideoTrack.stop();
+          } catch (error) {
+          }
+        }
+        remoteScreenVideoTracks.delete(
+          uid
+        );
+        if (typeof remoteScreenHandler === "function") {
+          remoteScreenHandler({
+            action: "stopped",
+            uid
+          });
+        }
         console.log(
           "ServiceCall remote user left:",
           user.uid
@@ -33010,6 +33088,92 @@
       muted
     };
   }
+  async function startScreenShare(screenTrack) {
+    if (!joined || !client) {
+      throw new Error(
+        "ServiceCall must be connected before sharing a screen."
+      );
+    }
+    if (screenSharing) {
+      return {
+        success: true,
+        alreadySharing: true
+      };
+    }
+    if (!screenTrack) {
+      throw new Error(
+        "A screen video track was not provided."
+      );
+    }
+    try {
+      localScreenVideoTrack = screenTrack;
+      await client.publish(
+        [
+          localScreenVideoTrack
+        ]
+      );
+      screenSharing = true;
+      console.log(
+        "ServiceCall screen published successfully."
+      );
+      return {
+        success: true
+      };
+    } catch (error) {
+      localScreenVideoTrack = null;
+      screenSharing = false;
+      console.error(
+        "Unable to publish ServiceCall screen:",
+        error
+      );
+      throw error;
+    }
+  }
+  async function stopScreenShare() {
+    const track = localScreenVideoTrack;
+    if (!track) {
+      screenSharing = false;
+      return {
+        success: true
+      };
+    }
+    try {
+      if (client) {
+        try {
+          await client.unpublish(
+            [
+              track
+            ]
+          );
+        } catch (error) {
+          console.error(
+            "Unable to unpublish ServiceCall screen:",
+            error
+          );
+        }
+      }
+      try {
+        track.stop();
+      } catch (error) {
+      }
+      try {
+        track.close();
+      } catch (error) {
+      }
+    } finally {
+      localScreenVideoTrack = null;
+      screenSharing = false;
+      console.log(
+        "ServiceCall screen sharing stopped."
+      );
+    }
+    return {
+      success: true
+    };
+  }
+  function setRemoteScreenHandler(handler) {
+    remoteScreenHandler = typeof handler === "function" ? handler : null;
+  }
   function getLocalAudioTrack() {
     return localAudioTrack;
   }
@@ -33021,8 +33185,19 @@
   function getRemoteAudioTrackCount() {
     return remoteAudioTracks.size;
   }
+  function getLocalScreenVideoTrack() {
+    return localScreenVideoTrack;
+  }
+  function getRemoteScreenVideoTracks() {
+    return Array.from(
+      remoteScreenVideoTracks.values()
+    );
+  }
   async function leaveAudioCall() {
     try {
+      if (localScreenVideoTrack) {
+        await stopScreenShare();
+      }
       if (localAudioTrack) {
         try {
           localAudioTrack.stop();
@@ -33034,6 +33209,14 @@
         }
         localAudioTrack = null;
       }
+      remoteScreenVideoTracks.forEach(
+        (track) => {
+          try {
+            track.stop();
+          } catch (error) {
+          }
+        }
+      );
       if (client) {
         try {
           await client.leave();
@@ -33046,13 +33229,18 @@
       }
     } finally {
       remoteAudioTracks.clear();
+      remoteScreenVideoTracks.clear();
       client = null;
+      localAudioTrack = null;
+      localScreenVideoTrack = null;
       joined = false;
       muted = false;
+      screenSharing = false;
       tokenRenewalHandler = null;
       tokenRenewalInProgress = false;
+      remoteScreenHandler = null;
       console.log(
-        "ServiceCall left Agora audio."
+        "ServiceCall left Agora media."
       );
     }
     return {
@@ -33065,23 +33253,43 @@
   function isMuted() {
     return muted;
   }
+  function isScreenSharing() {
+    return screenSharing;
+  }
   window.ServiceCallAgora = {
     join: joinAudioCall,
     leave: leaveAudioCall,
     setMuted,
     isJoined,
     isMuted,
-    /*
-     * Recording support.
-     *
-     * These expose only the active media
-     * track objects to our local recorder.
-     * They do not expose Agora credentials.
-     */
+    /* -------------------------
+       SCREEN SHARING
+    ------------------------- */
+    createScreenVideoTrack,
+    startScreenShare,
+    stopScreenShare,
+    isScreenSharing,
+    setRemoteScreenHandler,
+    /* -------------------------
+       RECORDING SUPPORT
+    ------------------------- */
     getLocalAudioTrack,
     getRemoteAudioTracks,
-    getRemoteAudioTrackCount
+    getRemoteAudioTrackCount,
+    getLocalScreenVideoTrack,
+    getRemoteScreenVideoTracks
   };
+  async function createScreenVideoTrack(mediaStreamTrack) {
+    if (!mediaStreamTrack) {
+      throw new Error(
+        "Screen MediaStreamTrack was not provided."
+      );
+    }
+    const agoraTrack = AgoraRTC.createCustomVideoTrack({
+      mediaStreamTrack
+    });
+    return agoraTrack;
+  }
 })();
 /*! Bundled license information:
 

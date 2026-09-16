@@ -154,11 +154,101 @@ contextBridge.exposeInMainWorld(
         ------------------------- */
 
         getMediaCredentials:
-            (callSysId) =>
-                ipcRenderer.invoke(
-                    'servicecall-get-media-credentials',
-                    callSysId
-                )
+    (callSysId) =>
+        ipcRenderer.invoke(
+            'servicecall-get-media-credentials',
+            callSysId
+        ),
+
+
+/* -------------------------
+   SCREEN SHARING
+------------------------- */
+
+getScreenSources:
+    () =>
+        ipcRenderer.invoke(
+            'servicecall-get-screen-sources'
+        ),
+
+        setCallWindowLayout:
+    (layout) =>
+        ipcRenderer.invoke(
+            'servicecall-set-call-window-layout',
+            layout
+        ),
+
+
+/* -------------------------
+   RECORDING
+------------------------- */
+
+startRecording:
+    (callSysId) =>
+        ipcRenderer.invoke(
+            'servicecall-start-recording',
+            callSysId
+        ),
+
+
+finishRecording:
+    (recordingSysId) =>
+        ipcRenderer.invoke(
+            'servicecall-finish-recording',
+            recordingSysId
+        ),
+
+uploadRecording:
+    (
+        recordingSysId,
+        fileData,
+        fileName,
+        format
+    ) =>
+        ipcRenderer.invoke(
+            'servicecall-upload-recording',
+            recordingSysId,
+            fileData,
+            fileName,
+            format
+        ),
+
+finalizeVoiceRecording:
+    (
+        recordingSysId,
+        webmData
+    ) =>
+        ipcRenderer.invoke(
+            'servicecall-finalize-voice-recording',
+            recordingSysId,
+            webmData
+        ),
+
+        finalizeScreenRecording:
+    (
+        recordingSysId,
+        webmData
+    ) =>
+        ipcRenderer.invoke(
+            'servicecall-finalize-screen-recording',
+            recordingSysId,
+            webmData
+        ),
+
+
+completeRecording:
+    (
+        recordingSysId,
+        attachmentSysId,
+        format
+    ) =>
+        ipcRenderer.invoke(
+            'servicecall-complete-recording',
+            recordingSysId,
+            attachmentSysId,
+            format
+        )
 
     }
 );
+

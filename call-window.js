@@ -789,6 +789,18 @@ async function checkCallStatus() {
         const state =
             result.state;
 
+        /*
+ * Keep the recording indicator synchronized
+ * for every participant in the call.
+ *
+ * /call-status is already polled every
+ * 2 seconds, so no additional timer or
+ * REST request is required.
+ */
+syncRecordingIndicator(
+    result.recording_active === true
+);
+
         /* -------------------------
    OWNER / PARTICIPANT STATE
 ------------------------- */
@@ -1704,8 +1716,1295 @@ participantSearch.addEventListener(
     }
 );
 
+/* =======================================================
+   SERVICECALL SCREEN SHARING
+======================================================= */
+
+const shareScreenButton =
+    document.getElementById(
+        'shareScreenButton'
+    );
+
+const screenShareContainer =
+    document.getElementById(
+        'screenShareContainer'
+    );
+
+const screenShareVideo =
+    document.getElementById(
+        'screenShareVideo'
+    );
+
+const screenSharePlaceholder =
+    document.getElementById(
+        'screenSharePlaceholder'
+    );
+
+const screenShareTitle =
+    document.getElementById(
+        'screenShareTitle'
+    );
+
+const screenSourceModal =
+    document.getElementById(
+        'screenSourceModal'
+    );
+
+const screenSourceResults =
+    document.getElementById(
+        'screenSourceResults'
+    );
+
+const closeScreenSourceModalButton =
+    document.getElementById(
+        'closeScreenSourceModal'
+    );
+
+
+let localScreenStream =
+    null;
+
+let localScreenAgoraTrack =
+    null;
+
+let localScreenNativeTrack =
+    null;
+
+let screenShareActionInProgress =
+    false;
+
+let activeRemoteScreenUid =
+    null;
+
+
+/* -------------------------------------------------------
+   CALL WINDOW LAYOUT
+------------------------------------------------------- */
+
+async function setScreenCallLayout() {
+
+    if (
+        !window.serviceCall ||
+        typeof window.serviceCall
+            .setCallWindowLayout !==
+            'function'
+    ) {
+        return;
+    }
+
+
+    try {
+
+        await window.serviceCall
+            .setCallWindowLayout(
+                'screen'
+            );
+
+    } catch (error) {
+
+        console.error(
+            'Unable to expand ServiceCall window:',
+            error
+        );
+    }
+}
+
+
+async function setCompactCallLayout() {
+
+    if (
+        !window.serviceCall ||
+        typeof window.serviceCall
+            .setCallWindowLayout !==
+            'function'
+    ) {
+        return;
+    }
+
+
+    try {
+
+        await window.serviceCall
+            .setCallWindowLayout(
+                'compact'
+            );
+
+    } catch (error) {
+
+        console.error(
+            'Unable to restore ServiceCall window:',
+            error
+        );
+    }
+}
+
+
+/* -------------------------------------------------------
+   SCREEN VIEW
+------------------------------------------------------- */
+
+async function showScreenShareView(
+    title
+) {
+
+    screenShareTitle.textContent =
+        title ||
+        'Screen sharing';
+
+
+    screenShareContainer
+        .classList
+        .remove(
+            'hidden'
+        );
+
+
+    screenSharePlaceholder
+        .classList
+        .remove(
+            'hidden'
+        );
+
+
+    await setScreenCallLayout();
+}
+
+
+async function hideScreenShareView() {
+
+    screenShareVideo.innerHTML =
+        '';
+
+
+    screenSharePlaceholder
+        .classList
+        .remove(
+            'hidden'
+        );
+
+
+    screenShareContainer
+        .classList
+        .add(
+            'hidden'
+        );
+
+
+    activeRemoteScreenUid =
+        null;
+
+
+    /*
+     * Do not collapse if THIS participant
+     * is still sharing.
+     */
+    if (
+        !window.ServiceCallAgora ||
+        !window.ServiceCallAgora
+            .isScreenSharing()
+    ) {
+
+        await setCompactCallLayout();
+    }
+}
+
+
+/* -------------------------------------------------------
+   SOURCE MODAL
+------------------------------------------------------- */
+
+function closeScreenSourceModal() {
+
+    screenSourceModal
+        .classList
+        .add(
+            'hidden'
+        );
+
+
+    screenSourceResults.innerHTML =
+        '';
+}
+
+
+async function openScreenSourceModal() {
+
+    if (
+        currentMode !==
+        'connected'
+    ) {
+
+        statusText.textContent =
+            'The call must be connected before sharing your screen.';
+
+        return;
+    }
+
+
+    if (
+        !window.ServiceCallAgora ||
+        !window.ServiceCallAgora
+            .isJoined()
+    ) {
+
+        statusText.textContent =
+            'Call media is not connected yet.';
+
+        return;
+    }
+
+
+    if (
+        !window.serviceCall ||
+        typeof window.serviceCall
+            .getScreenSources !==
+            'function'
+    ) {
+
+        statusText.textContent =
+            'Screen sharing is unavailable.';
+
+        return;
+    }
+
+
+    screenSourceModal
+        .classList
+        .remove(
+            'hidden'
+        );
+
+
+    screenSourceResults.innerHTML =
+        '<div class="screen-source-message">' +
+        'Loading screens and windows...' +
+        '</div>';
+
+
+    try {
+
+        const result =
+            await window.serviceCall
+                .getScreenSources();
+
+
+        if (
+            !result ||
+            !result.success
+        ) {
+
+            throw new Error(
+                result &&
+                result.message
+                    ? result.message
+                    : 'Unable to retrieve screens and windows.'
+            );
+        }
+
+
+        const sources =
+            Array.isArray(
+                result.sources
+            )
+                ? result.sources
+                : [];
+
+
+        screenSourceResults.innerHTML =
+            '';
+
+
+        if (
+            sources.length === 0
+        ) {
+
+            screenSourceResults.innerHTML =
+                '<div class="screen-source-message">' +
+                'No screens or windows are available.' +
+                '</div>';
+
+            return;
+        }
+
+
+        sources.forEach(
+            (source) => {
+
+                const item =
+                    document.createElement(
+                        'button'
+                    );
+
+
+                item.type =
+                    'button';
+
+                item.className =
+                    'screen-source-item';
+
+
+                if (source.thumbnail) {
+
+                    const thumbnail =
+                        document.createElement(
+                            'img'
+                        );
+
+
+                    thumbnail.className =
+                        'screen-source-thumbnail';
+
+                    thumbnail.src =
+                        source.thumbnail;
+
+                    thumbnail.alt =
+                        '';
+
+
+                    item.appendChild(
+                        thumbnail
+                    );
+                }
+
+
+                const sourceName =
+                    document.createElement(
+                        'div'
+                    );
+
+
+                sourceName.className =
+                    'screen-source-name';
+
+                sourceName.textContent =
+                    source.name ||
+                    'Screen';
+
+
+                item.appendChild(
+                    sourceName
+                );
+
+
+                item.addEventListener(
+                    'click',
+
+                    async () => {
+
+                        await startServiceCallScreenShare(
+                            source
+                        );
+                    }
+                );
+
+
+                screenSourceResults.appendChild(
+                    item
+                );
+            }
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            'Unable to open ServiceCall screen picker:',
+            error
+        );
+
+
+        screenSourceResults.innerHTML =
+            '';
+
+
+        const message =
+            document.createElement(
+                'div'
+            );
+
+
+        message.className =
+            'screen-source-message';
+
+        message.textContent =
+            error.message ||
+            'Unable to load screens and windows.';
+
+
+        screenSourceResults.appendChild(
+            message
+        );
+    }
+}
+
+
+/* -------------------------------------------------------
+   CAPTURE ELECTRON SOURCE
+------------------------------------------------------- */
+
+async function captureDesktopSource(
+    sourceId
+) {
+
+    if (!sourceId) {
+
+        throw new Error(
+            'Screen source ID was not provided.'
+        );
+    }
+
+
+    /*
+     * Electron DesktopCapturerSource.id is passed
+     * to Chromium as chromeMediaSourceId.
+     *
+     * We deliberately capture VIDEO ONLY.
+     *
+     * Conference audio already comes from Agora,
+     * therefore desktop/system audio must not be
+     * injected into the call.
+     */
+    const stream =
+        await navigator.mediaDevices
+            .getUserMedia({
+
+                audio:
+                    false,
+
+                video: {
+
+                    mandatory: {
+
+                        chromeMediaSource:
+                            'desktop',
+
+                        chromeMediaSourceId:
+                            sourceId,
+
+                        maxWidth:
+                            1920,
+
+                        maxHeight:
+                            1080,
+
+                        maxFrameRate:
+                            30
+                    }
+                }
+            });
+
+
+    const videoTracks =
+        stream.getVideoTracks();
+
+
+    if (
+        videoTracks.length === 0
+    ) {
+
+        stream
+            .getTracks()
+            .forEach(
+                track =>
+                    track.stop()
+            );
+
+
+        throw new Error(
+            'The selected screen did not provide a video track.'
+        );
+    }
+
+
+    return stream;
+}
+
+
+/* -------------------------------------------------------
+   START LOCAL SCREEN SHARE
+------------------------------------------------------- */
+
+async function startServiceCallScreenShare(
+    source
+) {
+
+    if (screenShareActionInProgress) {
+        return;
+    }
+
+
+    screenShareActionInProgress =
+        true;
+
+    shareScreenButton.disabled =
+        true;
+
+
+    try {
+
+        if (
+            !source ||
+            !source.id
+        ) {
+
+            throw new Error(
+                'Please select a valid screen or window.'
+            );
+        }
+
+
+        if (
+            !window.ServiceCallAgora ||
+            !window.ServiceCallAgora
+                .isJoined()
+        ) {
+
+            throw new Error(
+                'Call media is not connected.'
+            );
+        }
+
+
+        closeScreenSourceModal();
+
+
+        statusText.textContent =
+            'Starting screen share...';
+
+
+        /*
+         * -----------------------------------------
+         * 1. CAPTURE WINDOWS SCREEN/WINDOW
+         * -----------------------------------------
+         */
+
+        const stream =
+            await captureDesktopSource(
+                source.id
+            );
+
+
+        const nativeTrack =
+            stream
+                .getVideoTracks()[0];
+
+
+        /*
+         * -----------------------------------------
+         * 2. CREATE AGORA VIDEO TRACK
+         * -----------------------------------------
+         */
+
+        const agoraTrack =
+            await window.ServiceCallAgora
+                .createScreenVideoTrack(
+                    nativeTrack
+                );
+
+
+        /*
+         * Keep references BEFORE publication so
+         * cleanup remains possible if publication
+         * fails.
+         */
+        localScreenStream =
+            stream;
+
+        localScreenNativeTrack =
+            nativeTrack;
+
+        localScreenAgoraTrack =
+            agoraTrack;
+
+
+        /*
+         * -----------------------------------------
+         * 3. HANDLE WINDOWS/OS STOP SHARING
+         * -----------------------------------------
+         */
+
+        nativeTrack.addEventListener(
+            'ended',
+
+            () => {
+
+                console.log(
+                    'ServiceCall screen capture ended by the operating system.'
+                );
+
+
+                stopServiceCallScreenShare()
+                    .catch(
+                        error => {
+
+                            console.error(
+                                'Unable to stop ServiceCall screen share:',
+                                error
+                            );
+                        }
+                    );
+            },
+
+            {
+                once: true
+            }
+        );
+
+
+        /*
+         * -----------------------------------------
+         * 4. PUBLISH THROUGH EXISTING AGORA CALL
+         * -----------------------------------------
+         */
+
+        await window.ServiceCallAgora
+            .startScreenShare(
+                agoraTrack
+            );
+
+        /*
+ * If recording is already running,
+ * tell the recorder that screen video
+ * has now entered the recording.
+ */
+if (
+    window.ServiceCallRecorder &&
+    window.ServiceCallRecorder
+        .isRecording()
+) {
+
+    await window.ServiceCallRecorder
+        .attachScreen(
+            agoraTrack
+        );
+}
+
+
+        /*
+         * -----------------------------------------
+         * 5. SHOW LOCAL PREVIEW
+         * -----------------------------------------
+         */
+
+        await showScreenShareView(
+            'You are sharing: ' +
+            (
+                source.name ||
+                'Screen'
+            )
+        );
+
+
+        screenShareVideo.innerHTML =
+            '';
+
+
+        screenSharePlaceholder
+            .classList
+            .add(
+                'hidden'
+            );
+
+
+        agoraTrack.play(
+            screenShareVideo
+        );
+
+
+        /*
+         * -----------------------------------------
+         * 6. BUTTON/UI
+         * -----------------------------------------
+         */
+
+        shareScreenButton.textContent =
+            'Stop Sharing';
+
+
+        shareScreenButton
+            .classList
+            .add(
+                'screen-sharing-active'
+            );
+
+
+        statusText.textContent =
+            'Connected';
+
+
+        console.log(
+            'ServiceCall screen sharing started:',
+            source.name ||
+            source.id
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            'Unable to start ServiceCall screen sharing:',
+            error
+        );
+
+
+        /*
+         * Clean up any partially-created capture.
+         */
+        if (localScreenAgoraTrack) {
+
+            try {
+
+                localScreenAgoraTrack.stop();
+
+            } catch (stopError) {
+                // Ignore.
+            }
+
+
+            try {
+
+                localScreenAgoraTrack.close();
+
+            } catch (closeError) {
+                // Ignore.
+            }
+        }
+
+
+        if (localScreenStream) {
+
+            localScreenStream
+                .getTracks()
+                .forEach(
+                    track => {
+
+                        try {
+                            track.stop();
+                        } catch (stopError) {
+                            // Ignore.
+                        }
+                    }
+                );
+        }
+
+
+        localScreenAgoraTrack =
+            null;
+
+        localScreenNativeTrack =
+            null;
+
+        localScreenStream =
+            null;
+
+
+        shareScreenButton.textContent =
+            'Share Screen';
+
+
+        shareScreenButton
+            .classList
+            .remove(
+                'screen-sharing-active'
+            );
+
+
+        statusText.textContent =
+            error.message ||
+            'Unable to share screen.';
+
+
+    } finally {
+
+        screenShareActionInProgress =
+            false;
+
+        shareScreenButton.disabled =
+            false;
+    }
+}
+
+
+/* -------------------------------------------------------
+   STOP LOCAL SCREEN SHARE
+------------------------------------------------------- */
+
+async function stopServiceCallScreenShare() {
+
+    if (screenShareActionInProgress) {
+        return;
+    }
+
+
+    screenShareActionInProgress =
+        true;
+
+    shareScreenButton.disabled =
+        true;
+
+
+    try {
+
+        /*
+ * Recording continues even though
+ * live screen sharing is stopping.
+ *
+ * The recorder returns to blank video,
+ * but remembers that screen sharing
+ * occurred, therefore final output
+ * remains MP4.
+ */
+if (
+    window.ServiceCallRecorder &&
+    window.ServiceCallRecorder
+        .isRecording()
+) {
+
+    window.ServiceCallRecorder
+        .detachScreen();
+}
+
+        /*
+         * Agora owns publication state.
+         */
+        if (
+            window.ServiceCallAgora &&
+            window.ServiceCallAgora
+                .isScreenSharing()
+        ) {
+
+            await window.ServiceCallAgora
+                .stopScreenShare();
+        }
+
+
+        /*
+         * Stop the underlying Electron capture.
+         */
+        if (localScreenStream) {
+
+            localScreenStream
+                .getTracks()
+                .forEach(
+                    track => {
+
+                        try {
+
+                            track.stop();
+
+                        } catch (error) {
+                            // Ignore cleanup error.
+                        }
+                    }
+                );
+        }
+
+
+        localScreenStream =
+            null;
+
+        localScreenNativeTrack =
+            null;
+
+        localScreenAgoraTrack =
+            null;
+
+
+        screenShareVideo.innerHTML =
+            '';
+
+
+        screenShareContainer
+            .classList
+            .add(
+                'hidden'
+            );
+
+
+        shareScreenButton.textContent =
+            'Share Screen';
+
+
+        shareScreenButton
+            .classList
+            .remove(
+                'screen-sharing-active'
+            );
+
+
+        /*
+         * If nobody else's screen is currently
+         * being displayed, return to compact mode.
+         */
+        if (!activeRemoteScreenUid) {
+
+            await setCompactCallLayout();
+        }
+
+
+        if (
+            currentMode ===
+            'connected'
+        ) {
+
+            statusText.textContent =
+                'Connected';
+        }
+
+
+        console.log(
+            'ServiceCall local screen sharing stopped.'
+        );
+
+
+    } finally {
+
+        screenShareActionInProgress =
+            false;
+
+        shareScreenButton.disabled =
+            false;
+    }
+}
+
+
+/* -------------------------------------------------------
+   REMOTE SCREEN SHARE
+------------------------------------------------------- */
+
+function configureRemoteScreenSharing() {
+
+    if (
+        !window.ServiceCallAgora ||
+        typeof window.ServiceCallAgora
+            .setRemoteScreenHandler !==
+            'function'
+    ) {
+
+        console.error(
+            'ServiceCall remote screen handler is unavailable.'
+        );
+
+        return;
+    }
+
+
+    window.ServiceCallAgora
+        .setRemoteScreenHandler(
+
+            async (event) => {
+
+                if (!event) {
+                    return;
+                }
+
+
+                /*
+                 * ---------------------------------
+                 * REMOTE SCREEN STARTED
+                 * ---------------------------------
+                 */
+                if (
+                    event.action ===
+                    'started' &&
+                    event.track
+                ) {
+
+                    activeRemoteScreenUid =
+                        String(
+                            event.uid
+                        );
+
+/*
+     * If I am recording and another
+     * participant starts sharing,
+     * include their screen in my recording.
+     */
+    if (
+        window.ServiceCallRecorder &&
+        window.ServiceCallRecorder
+            .isRecording()
+    ) {
+
+        await window.ServiceCallRecorder
+            .attachScreen(
+                event.track
+            );
+    }
+
+
+                    await showScreenShareView(
+                        'Participant is sharing their screen'
+                    );
+
+
+                    screenShareVideo.innerHTML =
+                        '';
+
+
+                    screenSharePlaceholder
+                        .classList
+                        .add(
+                            'hidden'
+                        );
+
+
+                    try {
+
+                        event.track.play(
+                            screenShareVideo
+                        );
+
+
+                        console.log(
+                            'ServiceCall remote screen displayed:',
+                            event.uid
+                        );
+
+
+                    } catch (error) {
+
+                        console.error(
+                            'Unable to display remote ServiceCall screen:',
+                            error
+                        );
+
+
+                        screenSharePlaceholder.textContent =
+                            'Unable to display shared screen.';
+
+                        screenSharePlaceholder
+                            .classList
+                            .remove(
+                                'hidden'
+                            );
+                    }
+
+
+                    return;
+                }
+
+
+                /*
+                 * ---------------------------------
+                 * REMOTE SCREEN STOPPED
+                 * ---------------------------------
+                 */
+                if (
+                    event.action ===
+                    'stopped'
+                ) {
+
+                    const stoppedUid =
+                        String(
+                            event.uid ||
+                            ''
+                        );
+
+
+                    /*
+                     * Ignore stop events for some
+                     * other remote video track.
+                     */
+                    if (
+                        activeRemoteScreenUid &&
+                        stoppedUid !==
+                            activeRemoteScreenUid
+                    ) {
+                        return;
+                    }
+
+
+                    activeRemoteScreenUid =
+                        null;
+
+                    /*
+ * The remote participant stopped
+ * sharing their screen.
+ *
+ * Recording itself continues.
+ * It still remembers that a screen
+ * was used, so final output remains MP4.
+ */
+if (
+    window.ServiceCallRecorder &&
+    window.ServiceCallRecorder
+        .isRecording()
+) {
+
+    window.ServiceCallRecorder
+        .detachScreen();
+}
+
+
+                    screenShareVideo.innerHTML =
+                        '';
+
+
+                    /*
+                     * If THIS user is sharing,
+                     * their local preview should
+                     * remain visible.
+                     */
+                    if (
+                        window.ServiceCallAgora &&
+                        window.ServiceCallAgora
+                            .isScreenSharing() &&
+                        localScreenAgoraTrack
+                    ) {
+
+                        screenShareTitle.textContent =
+                            'You are sharing your screen';
+
+
+                        screenSharePlaceholder
+                            .classList
+                            .add(
+                                'hidden'
+                            );
+
+
+                        try {
+
+                            localScreenAgoraTrack.play(
+                                screenShareVideo
+                            );
+
+                        } catch (error) {
+
+                            console.error(
+                                'Unable to restore local screen preview:',
+                                error
+                            );
+                        }
+
+
+                        return;
+                    }
+
+
+                    await hideScreenShareView();
+
+
+                    console.log(
+                        'ServiceCall remote screen sharing stopped.'
+                    );
+                }
+            }
+        );
+}
+
+
+/* -------------------------------------------------------
+   SHARE SCREEN BUTTON
+------------------------------------------------------- */
+
+shareScreenButton.addEventListener(
+    'click',
+
+    async () => {
+
+        if (
+            currentMode !==
+            'connected'
+        ) {
+            return;
+        }
+
+
+        try {
+
+            if (
+                window.ServiceCallAgora &&
+                window.ServiceCallAgora
+                    .isScreenSharing()
+            ) {
+
+                await stopServiceCallScreenShare();
+
+            } else {
+
+                await openScreenSourceModal();
+            }
+
+
+        } catch (error) {
+
+            console.error(
+                'ServiceCall screen sharing action failed:',
+                error
+            );
+
+
+            statusText.textContent =
+                error.message ||
+                'Unable to change screen sharing.';
+        }
+    }
+);
+
+
+/* -------------------------------------------------------
+   SCREEN MODAL EVENTS
+------------------------------------------------------- */
+
+closeScreenSourceModalButton
+    .addEventListener(
+        'click',
+        closeScreenSourceModal
+    );
+
+
+screenSourceModal.addEventListener(
+    'click',
+
+    (event) => {
+
+        if (
+            event.target ===
+            screenSourceModal
+        ) {
+
+            closeScreenSourceModal();
+        }
+    }
+);
+
+
+/*
+ * We already have an Escape handler for the
+ * participant modal. This separate listener is
+ * safe and handles only the screen picker.
+ */
+document.addEventListener(
+    'keydown',
+
+    (event) => {
+
+        if (
+            event.key ===
+            'Escape' &&
+            !screenSourceModal
+                .classList
+                .contains(
+                    'hidden'
+                )
+        ) {
+
+            closeScreenSourceModal();
+        }
+    }
+);
+
+
+/* -------------------------------------------------------
+   INITIALIZE REMOTE SCREEN HANDLER
+------------------------------------------------------- */
+
+configureRemoteScreenSharing();
+
 /* -------------------------
-   LOCAL CALL RECORDING
+   SERVICECALL RECORDING
 ------------------------- */
 
 const recordButton =
@@ -1722,86 +3021,132 @@ const recordingText =
 let recordingStartedAt =
     null;
 
+let serviceNowRecordingSysId =
+    null;
+
+let recordingActionInProgress =
+    false;
+
+let remoteRecordingActive = false;
+
 
 /* -------------------------
-   DOWNLOAD TEST RECORDING
+   SHOW RECORDING MESSAGE
 ------------------------- */
 
-function downloadTestRecording(
-    blob
+function showRecordingMessage(
+    message,
+    autoHide = false
 ) {
 
-    if (!blob) {
+    recordingText.textContent =
+        message;
+
+
+    recordingText
+        .classList
+        .remove(
+            'hidden'
+        );
+
+
+    if (autoHide) {
+
+        setTimeout(
+            () => {
+
+                /*
+                 * Do not hide the message if
+                 * another recording has started
+                 * during the timeout.
+                 */
+                if (
+                    !window.ServiceCallRecorder ||
+                    !window.ServiceCallRecorder
+                        .isRecording()
+                ) {
+
+                    recordingText
+                        .classList
+                        .add(
+                            'hidden'
+                        );
+                }
+
+            },
+            3000
+        );
+    }
+}
+
+/* -------------------------
+   SYNC RECORDING INDICATOR
+------------------------- */
+
+function syncRecordingIndicator(
+    recordingActive
+) {
+
+    remoteRecordingActive =
+        recordingActive === true;
+
+
+    /*
+     * Never overwrite local recording
+     * workflow messages such as:
+     *
+     * Starting recording...
+     * Processing recording...
+     * Saving recording...
+     */
+    if (recordingActionInProgress) {
         return;
     }
 
 
     /*
-     * This is TEMPORARY for our proof.
+     * This desktop is itself actively
+     * recording the call.
      *
-     * Later:
-     * Electron -> ServiceNow attachment.
-     *
-     * For now we download the recording
-     * so we can verify both participants
-     * are actually present in the file.
+     * Its local state is authoritative.
      */
-    const url =
-        URL.createObjectURL(
-            blob
+    if (
+        window.ServiceCallRecorder &&
+        window.ServiceCallRecorder
+            .isRecording()
+    ) {
+
+        showRecordingMessage(
+            'Call is being recorded'
         );
 
-
-    const link =
-        document.createElement(
-            'a'
-        );
-
-
-    const timestamp =
-        new Date()
-            .toISOString()
-            .replace(
-                /[:.]/g,
-                '-'
-            );
-
-
-    link.href =
-        url;
-
-    link.download =
-        'ServiceCall-' +
-        timestamp +
-        '.webm';
-
-
-    document.body.appendChild(
-        link
-    );
-
-
-    link.click();
-
-
-    link.remove();
+        return;
+    }
 
 
     /*
-     * Give Chromium time to begin
-     * processing the download before
-     * releasing the object URL.
+     * Another participant is recording,
+     * or this participant joined after
+     * recording had already started.
      */
-    setTimeout(
-        () => {
+    if (remoteRecordingActive) {
 
-            URL.revokeObjectURL(
-                url
-            );
+        showRecordingMessage(
+            'Call is being recorded'
+        );
 
-        },
-        5000
-    );
+        return;
+    }
+
+
+    /*
+     * No active recording exists.
+     */
+    recordingText
+        .classList
+        .add(
+            'hidden'
+        );
 }
 
 
@@ -1810,6 +3155,22 @@ function downloadTestRecording(
 ------------------------- */
 
 async function startServiceCallRecording() {
+
+    if (recordingActionInProgress) {
+        return;
+    }
+
+
+    if (
+        currentMode !==
+        'connected'
+    ) {
+
+        throw new Error(
+            'The call must be connected before recording.'
+        );
+    }
+
 
     if (
         !window.ServiceCallRecorder
@@ -1823,7 +3184,8 @@ async function startServiceCallRecording() {
 
     if (
         !window.ServiceCallAgora ||
-        !window.ServiceCallAgora.isJoined()
+        !window.ServiceCallAgora
+            .isJoined()
     ) {
 
         throw new Error(
@@ -1832,92 +3194,246 @@ async function startServiceCallRecording() {
     }
 
 
-    const result =
-        await window.ServiceCallRecorder
-            .start();
-
-
     if (
-        !result ||
-        !result.success
+        !window.serviceCall ||
+        typeof window.serviceCall
+            .startRecording !==
+            'function'
     ) {
 
         throw new Error(
-            result &&
-            result.message
-                ? result.message
-                : 'Unable to start recording.'
+            'ServiceCall recording API is unavailable.'
         );
     }
 
 
-    recordingStartedAt =
-        Date.now();
-
-
-    recordButton.textContent =
-        'Stop Recording';
-
-
-    recordingText.textContent =
-        'Call is being recorded';
-
-
-    recordingText
-        .classList
-        .remove(
-            'hidden'
-        );
-
-
-    console.log(
-        'ServiceCall recording started.',
-        'Format:',
-        result.mimeType
-    );
-}
-
-
-/* -------------------------
-   STOP RECORDING
-------------------------- */
-
-async function stopServiceCallRecording() {
-
-    if (
-        !window.ServiceCallRecorder ||
-        !window.ServiceCallRecorder.isRecording()
-    ) {
-        return;
-    }
+    recordingActionInProgress =
+        true;
 
 
     recordButton.disabled =
         true;
 
 
-    recordingText.textContent =
-        'Finalizing recording...';
+    showRecordingMessage(
+        'Starting recording...'
+    );
 
 
     try {
 
-        const result =
+        /*
+         * -----------------------------------------
+         * 1. CREATE SERVICENOW RECORDING SESSION
+         * -----------------------------------------
+         */
+
+        const serviceNowResult =
+            await window.serviceCall
+                .startRecording(
+                    callSysId
+                );
+
+
+        if (
+            !serviceNowResult ||
+            !serviceNowResult.success
+        ) {
+
+            throw new Error(
+                serviceNowResult &&
+                serviceNowResult.message
+                    ? serviceNowResult.message
+                    : 'Unable to create ServiceCall recording.'
+            );
+        }
+
+
+        const recordingSysId =
+            serviceNowResult
+                .recording_sys_id;
+
+
+        if (!recordingSysId) {
+
+            throw new Error(
+                'ServiceNow did not return a recording ID.'
+            );
+        }
+
+
+        serviceNowRecordingSysId =
+            recordingSysId;
+
+
+        /*
+         * -----------------------------------------
+         * 2. START LOCAL MIXED AUDIO CAPTURE
+         * -----------------------------------------
+         */
+
+        const localResult =
+            await window.ServiceCallRecorder
+                .start();
+
+
+        if (
+            !localResult ||
+            !localResult.success
+        ) {
+
+            throw new Error(
+                localResult &&
+                localResult.message
+                    ? localResult.message
+                    : 'Unable to start local recording.'
+            );
+        }
+
+
+        recordingStartedAt =
+            Date.now();
+
+
+        recordButton.textContent =
+            'Stop Recording';
+
+
+        showRecordingMessage(
+            'Call is being recorded'
+        );
+
+
+        console.log(
+            'ServiceCall recording started.',
+            'Recording:',
+            serviceNowRecordingSysId,
+            'Capture format:',
+            localResult.mimeType
+        );
+
+
+    } catch (error) {
+
+        /*
+         * If ServiceNow successfully created the
+         * recording record but local capture could
+         * not start, keep the sys_id for diagnostics.
+         *
+         * Later we can add a dedicated failed-state
+         * endpoint. Do not falsely mark it Available.
+         */
+
+        console.error(
+            'Unable to start ServiceCall recording:',
+            error
+        );
+
+
+        recordButton.textContent =
+            'Record Call';
+
+
+        showRecordingMessage(
+            error.message ||
+            'Unable to start recording.',
+            true
+        );
+
+
+        throw error;
+
+
+    } finally {
+
+        recordingActionInProgress =
+            false;
+
+        recordButton.disabled =
+            false;
+    }
+}
+
+
+/* -------------------------
+   STOP + FINALIZE RECORDING
+------------------------- */
+
+async function stopServiceCallRecording() {
+
+    if (recordingActionInProgress) {
+        return;
+    }
+
+
+    if (
+        !window.ServiceCallRecorder ||
+        !window.ServiceCallRecorder
+            .isRecording()
+    ) {
+
+        return;
+    }
+
+
+    if (!serviceNowRecordingSysId) {
+
+        throw new Error(
+            'ServiceNow recording ID is unavailable.'
+        );
+    }
+
+
+    if (
+        !window.serviceCall ||
+        typeof window.serviceCall
+            .finalizeVoiceRecording !==
+            'function'
+    ) {
+
+        throw new Error(
+            'ServiceCall recording finalization API is unavailable.'
+        );
+    }
+
+
+    recordingActionInProgress =
+        true;
+
+
+    recordButton.disabled =
+        true;
+
+
+    showRecordingMessage(
+        'Processing recording...'
+    );
+
+
+    try {
+
+        /*
+         * -----------------------------------------
+         * 1. STOP LOCAL MEDIARECORDER
+         * -----------------------------------------
+         */
+
+        const localResult =
             await window.ServiceCallRecorder
                 .stop();
 
 
         if (
-            !result ||
-            !result.success ||
-            !result.blob
+            !localResult ||
+            !localResult.success ||
+            !localResult.blob
         ) {
 
             throw new Error(
-                result &&
-                result.message
-                    ? result.message
-                    : 'Unable to finalize recording.'
+                localResult &&
+                localResult.message
+                    ? localResult.message
+                    : 'Unable to stop local recording.'
             );
         }
 
@@ -1937,65 +3453,227 @@ async function stopServiceCallRecording() {
 
 
         console.log(
-            'ServiceCall recording finalized.',
+            'ServiceCall local recording stopped.',
             'Duration:',
             durationSeconds,
             'seconds',
-            'Size:',
-            result.size
+            'WebM size:',
+            localResult.size
         );
 
 
         /*
-         * TEMPORARY TEST:
+         * -----------------------------------------
+         * 2. BLOB -> UINT8ARRAY
+         * -----------------------------------------
          *
-         * Download the mixed WebM file.
+         * We do not expose OAuth credentials here.
          *
-         * After we confirm both sides of
-         * the Agora call are present,
-         * this will be replaced by our
-         * MP3/MP4 + ServiceNow workflow.
+         * Only recording bytes cross the preload
+         * IPC bridge into Electron's main process.
          */
-        downloadTestRecording(
-            result.blob
+
+        const arrayBuffer =
+            await localResult.blob
+                .arrayBuffer();
+
+
+        const webmData =
+            new Uint8Array(
+                arrayBuffer
+            );
+
+
+        if (
+            webmData.byteLength <= 0
+        ) {
+
+            throw new Error(
+                'The captured recording is empty.'
+            );
+        }
+
+
+        /*
+         * -----------------------------------------
+         * 3. ELECTRON MAIN PROCESS
+         * -----------------------------------------
+         *
+         * main.js performs:
+         *
+         * WebM
+         *   -> FFmpeg
+         *   -> real MP3
+         *   -> /finish-recording
+         *   -> Attachment API
+         *   -> /complete-recording
+         */
+
+        showRecordingMessage(
+            'Saving recording...'
         );
+
+
+        /*
+ * Decide the final format from what actually
+ * happened during this recording.
+ *
+ * No screen share:
+ *     WebM audio -> MP3
+ *
+ * Screen share occurred at any point:
+ *     WebM audio/video -> MP4
+ */
+const hadScreenShare =
+    localResult.hadScreenShare === true;
+
+
+console.log(
+    'ServiceCall final recording type:',
+    hadScreenShare
+        ? 'MP4 - screen sharing occurred'
+        : 'MP3 - audio only'
+);
+
+
+let finalResult;
+
+
+if (hadScreenShare) {
+
+    /*
+     * Screen sharing occurred at least once.
+     *
+     * Even if sharing stopped before the
+     * recording stopped, the final recording
+     * remains MP4.
+     */
+    if (
+        !window.serviceCall ||
+        typeof window.serviceCall
+            .finalizeScreenRecording !==
+            'function'
+    ) {
+
+        throw new Error(
+            'ServiceCall screen recording finalization is unavailable.'
+        );
+    }
+
+
+    finalResult =
+        await window.serviceCall
+            .finalizeScreenRecording(
+                serviceNowRecordingSysId,
+                webmData
+            );
+
+} else {
+
+    /*
+     * Voice-only recording.
+     */
+    finalResult =
+        await window.serviceCall
+            .finalizeVoiceRecording(
+                serviceNowRecordingSysId,
+                webmData
+            );
+}
+
+
+        if (
+            !finalResult ||
+            !finalResult.success
+        ) {
+
+            throw new Error(
+                finalResult &&
+                finalResult.message
+                    ? finalResult.message
+                    : 'Unable to save ServiceCall recording.'
+            );
+        }
+
+
+        console.log(
+            'ServiceCall recording available.',
+            'Recording:',
+            finalResult.recording_sys_id,
+            'Attachment:',
+            finalResult.attachment_sys_id,
+            'Format:',
+            finalResult.format,
+            'Size:',
+            finalResult.file_size,
+            'Expires:',
+            finalResult.expires_at
+        );
+
+
+        /*
+         * -----------------------------------------
+         * 4. SUCCESS
+         * -----------------------------------------
+         */
+
+        serviceNowRecordingSysId =
+            null;
+
+        recordingStartedAt =
+            null;
+
+
+        recordButton.textContent =
+            'Record Call';
+
+
+        showRecordingMessage(
+            'Recording saved',
+            true
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            'ServiceCall recording finalization failed:',
+            error
+        );
+
+
+        /*
+         * Local recording has already stopped,
+         * therefore reset the button.
+         *
+         * We intentionally do NOT pretend the
+         * ServiceNow recording is Available.
+         */
+
+        recordButton.textContent =
+            'Record Call';
 
 
         recordingStartedAt =
             null;
 
 
-        recordingText.textContent =
-            'Recording saved for testing';
-
-
-        setTimeout(
-            () => {
-
-                if (
-                    !window.ServiceCallRecorder ||
-                    !window.ServiceCallRecorder.isRecording()
-                ) {
-
-                    recordingText
-                        .classList
-                        .add(
-                            'hidden'
-                        );
-                }
-
-            },
-            2500
+        showRecordingMessage(
+            error.message ||
+            'Unable to save recording.'
         );
+
+
+        throw error;
 
 
     } finally {
 
-        recordButton.disabled =
+        recordingActionInProgress =
             false;
 
-        recordButton.textContent =
-            'Record Call';
+        recordButton.disabled =
+            false;
     }
 }
 
@@ -2009,15 +3687,17 @@ recordButton.addEventListener(
 
     async () => {
 
-        recordButton.disabled =
-            true;
+        if (recordingActionInProgress) {
+            return;
+        }
 
 
         try {
 
             if (
                 window.ServiceCallRecorder &&
-                window.ServiceCallRecorder.isRecording()
+                window.ServiceCallRecorder
+                    .isRecording()
             ) {
 
                 await stopServiceCallRecording();
@@ -2031,31 +3711,9 @@ recordButton.addEventListener(
         } catch (error) {
 
             console.error(
-                'ServiceCall recording error:',
+                'ServiceCall recording action failed:',
                 error
             );
-
-
-            recordingText.textContent =
-                error.message ||
-                'Unable to record this call.';
-
-
-            recordingText
-                .classList
-                .remove(
-                    'hidden'
-                );
-
-
-            recordButton.textContent =
-                'Record Call';
-
-
-        } finally {
-
-            recordButton.disabled =
-                false;
         }
     }
 );
@@ -2078,17 +3736,59 @@ document
                 );
 
 
+            if (recordingActionInProgress) {
+
+                statusText.textContent =
+                    'Please wait for the recording to finish processing.';
+
+                return;
+            }
+
+
             endButton.disabled =
                 true;
 
 
             try {
 
+                /*
+                 * -----------------------------------------
+                 * 1. FINALIZE ACTIVE RECORDING FIRST
+                 * -----------------------------------------
+                 *
+                 * Never terminate the call/media before
+                 * the active recording has been stopped,
+                 * converted, uploaded and completed.
+                 */
+                if (
+                    window.ServiceCallRecorder &&
+                    window.ServiceCallRecorder
+                        .isRecording()
+                ) {
+
+                    statusText.textContent =
+                        'Saving recording before ending call...';
+
+
+                    console.log(
+                        'ServiceCall call ending while recording is active. Finalizing recording first.'
+                    );
+
+
+                    await stopServiceCallRecording();
+
+
+                    console.log(
+                        'ServiceCall recording finalized before call termination.'
+                    );
+                }
+
+
                 let result;
 
 
                 /* -------------------------
-                   OWNER
+                   2. OWNER
                 ------------------------- */
 
                 if (currentUserIsOwner) {
@@ -2119,6 +3819,12 @@ document
                     }
 
 
+                    /*
+                     * ServiceNow has successfully
+                     * ended the conference.
+                     *
+                     * We can now leave Agora.
+                     */
                     await stopAgoraAudio();
 
 
@@ -2126,12 +3832,13 @@ document
                         'completed'
                     );
 
+
                     return;
                 }
 
 
                 /* -------------------------
-                   PARTICIPANT
+                   3. PARTICIPANT
                 ------------------------- */
 
                 statusText.textContent =
@@ -2191,6 +3898,17 @@ document
                 );
 
 
+                /*
+                 * IMPORTANT:
+                 *
+                 * If recording finalization failed,
+                 * we intentionally do NOT continue
+                 * with End Conference / Leave Call.
+                 *
+                 * This gives the user a chance to
+                 * retry rather than knowingly
+                 * discarding the recording.
+                 */
                 statusText.textContent =
                     error.message ||
                     (
