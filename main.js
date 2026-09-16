@@ -311,90 +311,131 @@ if (
 }
 
 async function checkIncomingCallOnce() {
- 
+
     try {
- 
+
         const result =
             await serviceCallApiRequest(
                 '/incoming-call',
                 'GET'
             );
- 
- 
+
+
         if (
             result &&
             result.success &&
             result.incoming_call
         ) {
- 
+
             const incomingCallId =
                 result.call_sys_id;
- 
- 
+
+
             if (
                 incomingCallId &&
                 incomingCallId !==
                     activeIncomingCallId
             ) {
- 
+
                 activeIncomingCallId =
                     incomingCallId;
- 
- 
+
+
                 console.log(
                     'Incoming ServiceCall:',
                     result
                 );
- 
- 
+
+
+                const isConference =
+                    result.is_conference === true ||
+                    result.call_type ===
+                        'conference';
+
+
+                /*
+                 * For an existing conference,
+                 * show the connected participant
+                 * summary returned by ServiceNow.
+                 *
+                 * Example:
+                 *
+                 * Nidhish, Divyani
+                 *
+                 * or
+                 *
+                 * Nidhish, Divyani +2
+                 */
+                const displayName =
+                    isConference
+                        ? (
+                            result.conference_display ||
+                            'Conference Call'
+                        )
+                        : (
+                            result.caller_name ||
+                            'Unknown User'
+                        );
+
+
+                const displayDepartment =
+                    isConference
+                        ? 'Conference Call'
+                        : (
+                            result.caller_department ||
+                            ''
+                        );
+
+
                 showCallWindow(
                     'incoming',
                     {
                         callSysId:
                             result.call_sys_id,
- 
+
                         callNumber:
                             result.call_number,
- 
+
                         name:
-                            result.caller_name ||
-                            'Unknown User',
- 
+                            displayName,
+
                         department:
-                            result.caller_department ||
-                            ''
+                            displayDepartment,
+
+                        isConference:
+                            isConference
                     }
                 );
             }
- 
- 
+
+
             return;
         }
- 
- 
+
+
         /*
-         * No incoming ringing call.
+         * No incoming ringing invitation.
          */
         activeIncomingCallId =
             null;
- 
- 
+
+
     } catch (error) {
- 
+
         console.error(
             'Incoming call check failed:',
             error
         );
- 
- 
+
+
         if (
             error.code ===
             'AUTHENTICATION_REQUIRED'
         ) {
- 
+
             stopIncomingCallLoop();
- 
- 
+
+
             sendAuthStatus(
                 'authentication_required',
                 'Your ServiceCall authorization has expired. Please sign in to ServiceNow again.'
@@ -2068,24 +2109,29 @@ function showCallWindow(
         {
             query: {
 
-                mode:
-                    mode,
+    mode:
+        mode,
 
-                callSysId:
-                    callSysId,
+    callSysId:
+        callSysId,
 
-                callNumber:
-                    callData.callNumber ||
-                    '',
+    callNumber:
+        callData.callNumber ||
+        '',
 
-                name:
-                    callData.name ||
-                    'Unknown User',
+    name:
+        callData.name ||
+        'Unknown User',
 
-                department:
-                    callData.department ||
-                    ''
-            }
+    department:
+        callData.department ||
+        '',
+
+    isConference:
+        callData.isConference
+            ? 'true'
+            : 'false'
+}
         }
     );
 
@@ -2150,26 +2196,38 @@ function showCallWindow(
             const state =
                 result.state || '';
 
-
-            /*
+/*
              * -------------------------------------------------
-             * RINGING
+             * RINGING / INVITED PARTICIPANT
              * -------------------------------------------------
              *
-             * If I am the caller:
+             * Direct outgoing:
              * X = Cancel Call
              *
-             * If I am the receiver:
+             * Direct incoming:
              * X = Decline Call
+             *
+             * Conference invitation:
+             * Call itself may already be connected,
+             * but this participant is still ringing.
+             * X = Decline conference invitation.
              */
-            if (state === 'ringing') {
-
-                const participantStatus =
-                    result.participant_status || '';
+            const participantStatus =
+                result.participant_status || '';
 
 
+            if (
+                participantStatus === 'ringing' ||
+                participantStatus === 'invited'
+            ) {
+
+                /*
+                 * Original caller cancelling
+                 * an unanswered direct call.
+                 */
                 if (
-                    mode === 'calling'
+                    mode === 'calling' &&
+                    state === 'ringing'
                 ) {
 
                     await serviceCallApiRequest(
@@ -2184,7 +2242,8 @@ function showCallWindow(
                 } else {
 
                     /*
-                     * Incoming receiver
+                     * Direct incoming receiver
+                     * OR conference invite receiver.
                      */
                     await serviceCallApiRequest(
                         '/decline-call',
@@ -2197,7 +2256,8 @@ function showCallWindow(
                 }
 
 
-                callWindowClosing = true;
+                callWindowClosing =
+                    true;
 
                 callWindow.close();
 
@@ -2210,10 +2270,15 @@ function showCallWindow(
              * CONNECTED
              * -------------------------------------------------
              *
-             * X does NOT end the call.
+             * X does NOT end or leave a connected call.
+             *
              * It only hides the call window.
+             * The call/audio continues in the background.
              */
-            if (state === 'connected') {
+            if (
+                state === 'connected' &&
+                participantStatus === 'connected'
+            ) {
 
                 callWindow.hide();
 
@@ -2222,12 +2287,12 @@ function showCallWindow(
 
 
             /*
-             * Terminal states:
+             * -------------------------------------------------
+             * TERMINAL STATES
+             * -------------------------------------------------
              *
-             * completed
-             * cancelled
-             * declined
-             * failed
+             * The call has already finished,
+             * so the window can close normally.
              */
             if (
                 state === 'completed' ||
@@ -2236,7 +2301,8 @@ function showCallWindow(
                 state === 'failed'
             ) {
 
-                callWindowClosing = true;
+                callWindowClosing =
+                    true;
 
                 callWindow.close();
 
@@ -2245,10 +2311,14 @@ function showCallWindow(
 
 
             /*
-             * Unknown state:
-             * safest behavior is just hide.
+             * Unknown/unexpected state:
+             *
+             * Safest behavior is to hide the
+             * window rather than accidentally
+             * terminating a live call.
              */
             callWindow.hide();
+
 
         } catch (error) {
 
@@ -2260,7 +2330,8 @@ function showCallWindow(
 
             /*
              * If ServiceNow cannot be reached,
-             * do NOT accidentally terminate a live call.
+             * do NOT accidentally terminate
+             * a live call.
              */
             if (
                 callWindow &&
@@ -2273,42 +2344,43 @@ function showCallWindow(
     }
 );
 
+
     callWindow.on(
-    'closed',
-    () => {
+        'closed',
+        () => {
 
-        callWindow =
-            null;
-
-        callWindowClosing =
-            false;
-
-        activeCallWindowId =
-            null;
-
-
-        if (
-            activeIncomingCallId ===
-            callSysId
-        ) {
-
-            activeIncomingCallId =
+            callWindow =
                 null;
-        }
 
+            callWindowClosing =
+                false;
 
-        if (
-            activeOutgoingCallId ===
-            callSysId
-        ) {
-
-            activeOutgoingCallId =
+            activeCallWindowId =
                 null;
+
+
+            if (
+                activeIncomingCallId ===
+                callSysId
+            ) {
+
+                activeIncomingCallId =
+                    null;
+            }
+
+
+            if (
+                activeOutgoingCallId ===
+                callSysId
+            ) {
+
+                activeOutgoingCallId =
+                    null;
+            }
         }
-    }
-);
+    );
 }
-
+        
 async function serviceCallApiRequest(
     pathName,
     method = 'GET',
@@ -2796,6 +2868,185 @@ ipcMain.handle(
                 message:
                     error.message ||
                     'Unable to obtain media credentials.'
+            };
+        }
+    }
+);
+
+ipcMain.handle(
+    'servicecall-invite-participant',
+
+    async (
+        event,
+        callSysId,
+        userSysId
+    ) => {
+
+        if (
+            !callSysId ||
+            !userSysId
+        ) {
+
+            return {
+                success: false,
+                code:
+                    'INVITE_DATA_REQUIRED',
+                message:
+                    'Call ID and user ID are required.'
+            };
+        }
+
+
+        try {
+
+            const result =
+                await serviceCallApiRequest(
+                    '/invite-participant',
+                    'POST',
+                    {
+                        call_sys_id:
+                            callSysId,
+
+                        user_sys_id:
+                            userSysId
+                    }
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to invite ServiceCall participant:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'INVITE_PARTICIPANT_FAILED',
+                message:
+                    error.message ||
+                    'Unable to invite participant.'
+            };
+        }
+    }
+);
+
+ipcMain.handle(
+    'servicecall-search-users',
+
+    async (
+        event,
+        searchText
+    ) => {
+
+        const search =
+            String(
+                searchText || ''
+            ).trim();
+
+
+        if (
+            search.length < 2
+        ) {
+
+            return {
+                success: true,
+                users: []
+            };
+        }
+
+
+        try {
+
+            return await serviceCallApiRequest(
+                '/users?search=' +
+                encodeURIComponent(
+                    search
+                ),
+                'GET'
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to search ServiceCall users:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+
+                code:
+                    error.code ||
+                    'USER_SEARCH_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to search users.',
+
+                users: []
+            };
+        }
+    }
+);
+
+ipcMain.handle(
+    'servicecall-leave-call',
+
+    async (
+        event,
+        callSysId
+    ) => {
+
+        if (!callSysId) {
+
+            return {
+                success: false,
+                code: 'CALL_ID_REQUIRED',
+                message:
+                    'Call ID was not provided.'
+            };
+        }
+
+
+        try {
+
+            return await serviceCallApiRequest(
+                '/leave-call',
+                'POST',
+                {
+                    call_sys_id:
+                        callSysId
+                }
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to leave ServiceCall:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+
+                code:
+                    error.code ||
+                    'LEAVE_CALL_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to leave the call.'
             };
         }
     }

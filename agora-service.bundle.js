@@ -32794,6 +32794,8 @@
   var localAudioTrack = null;
   var joined = false;
   var muted = false;
+  var tokenRenewalHandler = null;
+  var tokenRenewalInProgress = false;
   function createClient() {
     if (client) {
       return client;
@@ -32849,6 +32851,56 @@
         );
       }
     );
+    client.on(
+      "token-privilege-will-expire",
+      async () => {
+        console.log(
+          "ServiceCall Agora token will expire soon."
+        );
+        if (tokenRenewalInProgress) {
+          console.log(
+            "ServiceCall token renewal is already in progress."
+          );
+          return;
+        }
+        if (typeof tokenRenewalHandler !== "function") {
+          console.error(
+            "ServiceCall token renewal handler is unavailable."
+          );
+          return;
+        }
+        tokenRenewalInProgress = true;
+        try {
+          const newToken = await tokenRenewalHandler();
+          if (!newToken) {
+            throw new Error(
+              "A renewed Agora token was not returned."
+            );
+          }
+          await client.renewToken(
+            newToken
+          );
+          console.log(
+            "ServiceCall Agora token renewed successfully."
+          );
+        } catch (error) {
+          console.error(
+            "ServiceCall Agora token renewal failed:",
+            error
+          );
+        } finally {
+          tokenRenewalInProgress = false;
+        }
+      }
+    );
+    client.on(
+      "token-privilege-did-expire",
+      () => {
+        console.error(
+          "ServiceCall Agora token expired before renewal completed."
+        );
+      }
+    );
     return client;
   }
   async function joinAudioCall(config) {
@@ -32865,6 +32917,7 @@
         "Agora media credentials are incomplete."
       );
     }
+    tokenRenewalHandler = typeof config.renewToken === "function" ? config.renewToken : null;
     const numericUid = Number(
       config.uid
     );
@@ -32959,6 +33012,8 @@
       client = null;
       joined = false;
       muted = false;
+      tokenRenewalHandler = null;
+      tokenRenewalInProgress = false;
       console.log(
         "ServiceCall left Agora audio."
       );

@@ -7,6 +7,9 @@ let localAudioTrack = null;
 let joined = false;
 let muted = false;
 
+let tokenRenewalHandler = null;
+let tokenRenewalInProgress = false;
+
 
 /* -------------------------------------------------------
    CREATE CLIENT
@@ -113,6 +116,114 @@ function createClient() {
     );
 
 
+    /*
+     * Agora warns us shortly before the
+     * current RTC token expires.
+     *
+     * We ask call-window.js for fresh
+     * media credentials and renew the
+     * Agora token without leaving the call.
+     */
+    client.on(
+        'token-privilege-will-expire',
+
+        async () => {
+
+            console.log(
+                'ServiceCall Agora token will expire soon.'
+            );
+
+
+            if (tokenRenewalInProgress) {
+
+                console.log(
+                    'ServiceCall token renewal is already in progress.'
+                );
+
+                return;
+            }
+
+
+            if (
+                typeof tokenRenewalHandler !==
+                'function'
+            ) {
+
+                console.error(
+                    'ServiceCall token renewal handler is unavailable.'
+                );
+
+                return;
+            }
+
+
+            tokenRenewalInProgress =
+                true;
+
+
+            try {
+
+                const newToken =
+                    await tokenRenewalHandler();
+
+
+                if (!newToken) {
+
+                    throw new Error(
+                        'A renewed Agora token was not returned.'
+                    );
+                }
+
+
+                /*
+                 * Never log newToken.
+                 */
+                await client.renewToken(
+                    newToken
+                );
+
+
+                console.log(
+                    'ServiceCall Agora token renewed successfully.'
+                );
+
+
+            } catch (error) {
+
+                console.error(
+                    'ServiceCall Agora token renewal failed:',
+                    error
+                );
+
+
+            } finally {
+
+                tokenRenewalInProgress =
+                    false;
+            }
+        }
+    );
+
+
+    /*
+     * This event means the token actually
+     * expired before we successfully renewed it.
+     *
+     * Do not automatically leave the call here.
+     * Log the condition so we can diagnose it.
+     */
+    client.on(
+        'token-privilege-did-expire',
+
+        () => {
+
+            console.error(
+                'ServiceCall Agora token expired before renewal completed.'
+            );
+        }
+    );
+
+
     return client;
 }
 
@@ -149,6 +260,21 @@ async function joinAudioCall(
             'Agora media credentials are incomplete.'
         );
     }
+
+
+    /*
+     * Save the callback supplied by
+     * call-window.js.
+     *
+     * When Agora warns that the current
+     * token is expiring, this callback
+     * obtains another token from ServiceNow.
+     */
+    tokenRenewalHandler =
+        typeof config.renewToken ===
+        'function'
+            ? config.renewToken
+            : null;
 
 
     const numericUid =
@@ -203,16 +329,20 @@ async function joinAudioCall(
 
 
         /*
-         * Ask Windows/browser for microphone
-         * permission and create microphone track.
+         * Create the microphone track with
+         * built-in audio processing.
+         *
+         * AEC = Acoustic Echo Cancellation
+         * ANS = Automatic Noise Suppression
+         * AGC = Automatic Gain Control
          */
         localAudioTrack =
-    await AgoraRTC
-        .createMicrophoneAudioTrack({
-            AEC: true,
-            ANS: true,
-            AGC: true
-        });
+            await AgoraRTC
+                .createMicrophoneAudioTrack({
+                    AEC: true,
+                    ANS: true,
+                    AGC: true
+                });
 
 
         /*
@@ -353,6 +483,12 @@ async function leaveAudioCall() {
             false;
 
         muted =
+            false;
+
+        tokenRenewalHandler =
+            null;
+
+        tokenRenewalInProgress =
             false;
 
 

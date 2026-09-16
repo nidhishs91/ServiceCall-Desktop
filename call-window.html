@@ -87,6 +87,11 @@
             font-size: 14px;
         }
 
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .accept {
             background: #16856d;
             color: white;
@@ -105,13 +110,196 @@
         }
 
         .hidden {
-            display: none;
+            display: none !important;
         }
 
         .recording-text {
             margin-top: 18px;
             font-size: 13px;
             color: #b13b3b;
+        }
+
+
+        /* --------------------------------
+           ADD PARTICIPANT MODAL
+        -------------------------------- */
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+
+            background: rgba(15, 32, 28, 0.45);
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            padding: 20px;
+            box-sizing: border-box;
+
+            z-index: 1000;
+        }
+
+        .modal-card {
+            width: 100%;
+            max-width: 390px;
+            max-height: 80vh;
+
+            background: white;
+
+            border-radius: 14px;
+
+            box-shadow:
+                0 18px 50px rgba(0, 0, 0, 0.22);
+
+            overflow: hidden;
+
+            text-align: left;
+        }
+
+        .modal-header {
+            padding: 18px 20px;
+
+            border-bottom:
+                1px solid #e7ecea;
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #173a33;
+        }
+
+        .modal-close {
+            background: transparent;
+            padding: 5px 9px;
+
+            color: #65736f;
+
+            font-size: 20px;
+        }
+
+        .modal-body {
+            padding: 18px 20px 20px;
+        }
+
+        .participant-help {
+            font-size: 13px;
+            color: #65736f;
+            margin-bottom: 12px;
+        }
+
+        .participant-search {
+            width: 100%;
+            box-sizing: border-box;
+
+            padding: 12px 13px;
+
+            border:
+                1px solid #ccd8d4;
+
+            border-radius: 8px;
+
+            font-size: 14px;
+
+            outline: none;
+        }
+
+        .participant-search:focus {
+            border-color: #16856d;
+        }
+
+        .participant-results {
+            margin-top: 12px;
+
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .participant-empty {
+            padding: 18px 8px;
+
+            text-align: center;
+
+            color: #77837f;
+
+            font-size: 13px;
+        }
+
+        .participant-result {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 12px;
+
+            padding: 11px 4px;
+
+            border-bottom:
+                1px solid #edf1f0;
+        }
+
+        .participant-result:last-child {
+            border-bottom: none;
+        }
+
+        .participant-details {
+            min-width: 0;
+        }
+
+        .participant-name {
+            font-size: 14px;
+            font-weight: bold;
+
+            color: #1f2d2a;
+
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .participant-subtitle {
+            margin-top: 3px;
+
+            font-size: 12px;
+            color: #77837f;
+
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .participant-add {
+            flex-shrink: 0;
+
+            background: #16856d;
+            color: white;
+
+            padding: 8px 14px;
+
+            font-size: 13px;
+        }
+
+        .participant-message {
+            margin-top: 12px;
+
+            min-height: 16px;
+
+            font-size: 13px;
+
+            color: #65736f;
+        }
+
+        .participant-message.error {
+            color: #b13b3b;
+        }
+
+        .participant-message.success {
+            color: #16856d;
         }
     </style>
 </head>
@@ -122,23 +310,29 @@
         ServiceCall
     </div>
 
+
     <div class="container">
 
         <div class="avatar" id="avatar">
         </div>
 
+
         <div class="name" id="personName">
         </div>
+
 
         <div class="department" id="department">
         </div>
 
+
         <div class="status" id="statusText">
         </div>
+
 
         <div class="timer hidden" id="timer">
             00:00
         </div>
+
 
         <div class="call-number" id="callNumber">
         </div>
@@ -204,7 +398,59 @@
     </div>
 
 
+    <!-- --------------------------------
+         ADD PARTICIPANT MODAL
+    --------------------------------- -->
+
+    <div class="modal-overlay hidden" id="addParticipantModal">
+
+        <div class="modal-card">
+
+            <div class="modal-header">
+
+                <div class="modal-title">
+                    Add participant
+                </div>
+
+                <button class="modal-close" id="closeParticipantModal" type="button">
+                    &times;
+                </button>
+
+            </div>
+
+
+            <div class="modal-body">
+
+                <div class="participant-help">
+                    Search for a ServiceNow user to add to this call.
+                </div>
+
+
+                <input class="participant-search" id="participantSearch" type="text" autocomplete="off"
+                    placeholder="Search users..." />
+
+
+                <div class="participant-results" id="participantResults">
+
+                    <div class="participant-empty">
+                        Start typing a user's name.
+                    </div>
+
+                </div>
+
+
+                <div class="participant-message" id="participantMessage">
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
     <script src="agora-service.bundle.js"></script>
+
     <script src="call-window.js">
     </script>
 
