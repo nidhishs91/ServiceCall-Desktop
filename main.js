@@ -6,6 +6,7 @@ const {
     Tray,
     Menu,
     desktopCapturer,
+    dialog,
 } = require('electron');
 
 const path = require('path');
@@ -2663,6 +2664,335 @@ ipcMain.handle(
             ),
             'GET'
         );
+    }
+);
+
+ipcMain.handle(
+    'servicecall-download-recording',
+ 
+    async (
+        event,
+        recordingSysId
+    ) => {
+ 
+        if (!recordingSysId) {
+ 
+            return {
+                success: false,
+                code: 'RECORDING_ID_REQUIRED',
+                message: 'Recording ID was not provided.'
+            };
+        }
+ 
+ 
+        try {
+ 
+            /*
+             * -----------------------------------------
+             * 1. ASK SERVICENOW IF THIS USER
+             *    MAY DOWNLOAD THIS RECORDING
+             * -----------------------------------------
+             */
+ 
+            const downloadInfo =
+                await serviceCallApiRequest(
+                    '/recording-download' +
+                    '?recording_sys_id=' +
+                    encodeURIComponent(
+                        recordingSysId
+                    ),
+                    'GET'
+                );
+ 
+ 
+            if (
+                !downloadInfo ||
+                downloadInfo.success !== true ||
+                !downloadInfo.attachment_sys_id
+            ) {
+ 
+                throw new Error(
+                    downloadInfo &&
+                    downloadInfo.message
+                        ? downloadInfo.message
+                        : 'Recording download was not authorized.'
+                );
+            }
+ 
+ 
+            /*
+             * -----------------------------------------
+             * 2. GET CURRENT INSTANCE + OAUTH TOKEN
+             * -----------------------------------------
+             */
+ 
+            const config =
+                loadConfig();
+ 
+ 
+            if (
+                !config ||
+                !config.instanceUrl
+            ) {
+ 
+                throw new Error(
+                    'ServiceCall Desktop is not connected to ServiceNow.'
+                );
+            }
+ 
+ 
+            let accessToken =
+                await ensureValidAccessToken();
+ 
+ 
+            const attachmentUrl =
+                config.instanceUrl
+                    .replace(/\/$/, '') +
+                '/api/now/attachment/' +
+                encodeURIComponent(
+                    downloadInfo.attachment_sys_id
+                ) +
+                '/file';
+ 
+ 
+            async function performDownload(
+                token
+            ) {
+ 
+                return await fetch(
+                    attachmentUrl,
+                    {
+                        method: 'GET',
+ 
+                        headers: {
+                            'Authorization':
+                                'Bearer ' +
+                                token
+                        }
+                    }
+                );
+            }
+ 
+ 
+            /*
+             * -----------------------------------------
+             * 3. DOWNLOAD ATTACHMENT
+             * -----------------------------------------
+             */
+ 
+            let response =
+                await performDownload(
+                    accessToken
+                );
+ 
+ 
+            /*
+             * Access token could expire between
+             * authorization and attachment download.
+             */
+            if (
+                response.status === 401 ||
+                response.status === 403
+            ) {
+ 
+                accessToken =
+                    await refreshAccessToken();
+ 
+ 
+                response =
+                    await performDownload(
+                        accessToken
+                    );
+            }
+ 
+ 
+            if (!response.ok) {
+ 
+                throw new Error(
+                    'Unable to download the recording attachment from ServiceNow.'
+                );
+            }
+ 
+ 
+            const arrayBuffer =
+                await response.arrayBuffer();
+ 
+ 
+            const recordingBuffer =
+                Buffer.from(
+                    arrayBuffer
+                );
+ 
+ 
+            if (
+                recordingBuffer.length <= 0
+            ) {
+ 
+                throw new Error(
+                    'The downloaded recording file is empty.'
+                );
+            }
+ 
+ 
+            /*
+             * -----------------------------------------
+             * 4. DETERMINE SAFE FILE NAME
+             * -----------------------------------------
+             */
+ 
+            const format =
+                String(
+                    downloadInfo.format ||
+                    'mp3'
+                )
+                    .trim()
+                    .toLowerCase();
+ 
+ 
+            const extension =
+                format === 'mp4'
+                    ? '.mp4'
+                    : '.mp3';
+ 
+ 
+            let fileName =
+                String(
+                    downloadInfo.file_name ||
+                    (
+                        'servicecall-recording-' +
+                        recordingSysId +
+                        extension
+                    )
+                )
+                    .replace(
+                        /[<>:"/\\|?*\x00-\x1F]/g,
+                        '_'
+                    );
+ 
+ 
+            if (
+                !fileName
+                    .toLowerCase()
+                    .endsWith(
+                        extension
+                    )
+            ) {
+ 
+                fileName +=
+                    extension;
+            }
+ 
+ 
+            /*
+             * -----------------------------------------
+             * 5. WINDOWS SAVE AS DIALOG
+             * -----------------------------------------
+             */
+ 
+            const saveResult =
+                await dialog.showSaveDialog(
+                    {
+                        title:
+                            'Save ServiceCall Recording',
+ 
+                        defaultPath:
+                            path.join(
+                                app.getPath(
+                                    'downloads'
+                                ),
+                                fileName
+                            ),
+ 
+                        filters: [
+                            {
+                                name:
+                                    format === 'mp4'
+                                        ? 'MP4 Video'
+                                        : 'MP3 Audio',
+ 
+                                extensions: [
+                                    format === 'mp4'
+                                        ? 'mp4'
+                                        : 'mp3'
+                                ]
+                            }
+                        ]
+                    }
+                );
+ 
+ 
+            /*
+             * User pressed Cancel.
+             *
+             * This is NOT an error.
+             */
+            if (
+                saveResult.canceled ||
+                !saveResult.filePath
+            ) {
+ 
+                return {
+                    success: false,
+                    code: 'DOWNLOAD_CANCELLED',
+                    message: 'Recording download was cancelled.'
+                };
+            }
+ 
+ 
+            /*
+             * -----------------------------------------
+             * 6. SAVE FILE LOCALLY
+             * -----------------------------------------
+             */
+ 
+            await fs.promises.writeFile(
+                saveResult.filePath,
+                recordingBuffer
+            );
+ 
+ 
+            console.log(
+                'ServiceCall recording downloaded successfully.',
+                recordingSysId
+            );
+ 
+ 
+            return {
+                success: true,
+                code: 'RECORDING_DOWNLOADED',
+                recording_sys_id:
+                    recordingSysId,
+                file_name:
+                    path.basename(
+                        saveResult.filePath
+                    ),
+                file_path:
+                    saveResult.filePath,
+                format:
+                    format,
+                file_size:
+                    recordingBuffer.length
+            };
+ 
+ 
+        } catch (error) {
+ 
+            console.error(
+                'ServiceCall recording download failed:',
+                error.message
+            );
+ 
+ 
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'RECORDING_DOWNLOAD_FAILED',
+                message:
+                    error.message ||
+                    'Unable to download recording.'
+            };
+        }
     }
 );
 
