@@ -4798,3 +4798,56 @@ ipcMain.handle(
         }
     }
 );
+
+ipcMain.handle(
+    'servicecall-get-recording-history',
+ 
+    async () => {
+ 
+        try {
+ 
+            const result =
+                await serviceCallApiRequest(
+                    '/recording-history',
+                    'GET'
+                );
+ 
+ 
+            return {
+                success: true,
+                count:
+                    Number(
+                        result.count || 0
+                    ),
+                recordings:
+                    Array.isArray(
+                        result.recordings
+                    )
+                        ? result.recordings
+                        : []
+            };
+ 
+ 
+        } catch (error) {
+ 
+            console.error(
+                'Unable to load ServiceCall recording history:',
+                error.message
+            );
+ 
+ 
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'RECORDING_HISTORY_FAILED',
+                message:
+                    error.message ||
+                    'Unable to load recording history.',
+                count: 0,
+                recordings: []
+            };
+        }
+    }
+);
+ 

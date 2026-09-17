@@ -235,12 +235,20 @@ finalizeVoiceRecording:
             webmData
         ),
 
-        downloadRecording:
+    getRecordingHistory:
+    () =>
+        ipcRenderer.invoke(
+            'servicecall-get-recording-history'
+        ),
+ 
+ 
+downloadRecording:
     (recordingSysId) =>
         ipcRenderer.invoke(
             'servicecall-download-recording',
             recordingSysId
         ),
+ 
 
 
 completeRecording:
