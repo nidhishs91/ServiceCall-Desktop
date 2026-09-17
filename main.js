@@ -3338,6 +3338,13 @@ async function uploadRecordingAttachment(
         data.result ||
         data;
 
+console.log(
+    'ServiceCall Attachment API response:',
+    'HTTP',
+    response.status,
+    data
+);
+
 
     if (!response.ok) {
 
@@ -3828,6 +3835,11 @@ ipcMain.handle(
                     fileName,
                     'mp3'
                 );
+
+            console.log(
+    'ServiceCall attachment upload result:',
+    uploadResult
+);
 
 
             if (
