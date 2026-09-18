@@ -1,105 +1,1371 @@
-<div class="topbar">
-    ServiceCall Desktop
-</div>
+<!DOCTYPE html>
+<html lang="en">
 
-<div class="page">
+<head>
 
-    <div class="card">
+    <meta charset="UTF-8">
 
-        <h1>
-            Connect ServiceNow
-        </h1>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-        <p>
-            Enter the ServiceNow instance you want
-            ServiceCall Desktop to connect to.
-        </p>
+    <title>
+        ServiceCall Desktop
+    </title>
 
-        <form id="instanceForm">
 
-            <input id="instanceUrl" type="text" placeholder="https://dev12345.service-now.com" style="
-                    width:100%;
-                    padding:14px;
-                    border:1px solid #ccd8d4;
-                    border-radius:8px;
-                    font-size:14px;
-                " />
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-            <button class="button" type="submit">
-                Save Instance
-            </button>
 
-            <button class="button" id="loginButton" type="button">
-                Sign in to ServiceNow
-            </button>
+        body {
+            margin: 0;
 
-            <button id="openActiveCallButton">
-                Open Active Call
-            </button>
+            font-family:
+                Inter,
+                "Segoe UI",
+                Arial,
+                sans-serif;
 
-        </form>
+            background: #f5f7f7;
+            color: #182825;
 
-        <div id="instanceMessage" style="
-                margin-top:18px;
-                color:#40514d;
-            ">
-        </div>
+            overflow: hidden;
+        }
 
-        <hr style="
-    margin:28px 0;
-    border:none;
-    border-top:1px solid #e2e8e6;
-">
- 
-<div id="recordingsSection">
- 
-    <div style="
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        gap:12px;
-        margin-bottom:16px;
-    ">
- 
-        <div>
-            <h2 style="margin:0 0 4px 0;">
-                Recordings
-            </h2>
- 
-            <p style="
-                margin:0;
-                color:#667773;
-                font-size:14px;
-            ">
-                Your ServiceCall recording history
-            </p>
-        </div>
- 
-        <button
-            class="button"
-            id="refreshRecordingsButton"
-            type="button"
-        >
-            Refresh
-        </button>
- 
+
+        button,
+        input {
+            font: inherit;
+        }
+
+
+        .app {
+            display: flex;
+
+            height: 100vh;
+            width: 100vw;
+        }
+
+
+        /* =================================================
+           SIDEBAR
+        ================================================= */
+
+        .sidebar {
+            width: 220px;
+            min-width: 220px;
+
+            background: #102f2b;
+            color: white;
+
+            display: flex;
+            flex-direction: column;
+
+            padding: 22px 14px;
+        }
+
+
+        .brand {
+            display: flex;
+            align-items: center;
+
+            gap: 11px;
+
+            padding: 0 10px 28px;
+        }
+
+
+        .brand-mark {
+            width: 34px;
+            height: 34px;
+
+            border-radius: 10px;
+
+            background: #55d6a9;
+            color: #10332c;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-weight: 800;
+            font-size: 17px;
+        }
+
+
+        .brand-name {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+
+        .navigation {
+            display: flex;
+            flex-direction: column;
+
+            gap: 5px;
+        }
+
+
+        .nav-button {
+            width: 100%;
+
+            border: 0;
+
+            background: transparent;
+            color: #cfe0dc;
+
+            text-align: left;
+
+            padding: 11px 13px;
+
+            border-radius: 9px;
+
+            cursor: pointer;
+
+            transition:
+                background 0.15s ease,
+                color 0.15s ease;
+        }
+
+
+        .nav-button:hover {
+            background:
+                rgba(255,
+                    255,
+                    255,
+                    0.07);
+
+            color: white;
+        }
+
+
+        .nav-button.active {
+            background: #1d4d44;
+
+            color: white;
+
+            font-weight: 600;
+        }
+
+
+        .sidebar-bottom {
+            margin-top: auto;
+        }
+
+
+        /* =================================================
+           MAIN AREA
+        ================================================= */
+
+        .main {
+            flex: 1;
+
+            min-width: 0;
+
+            display: flex;
+            flex-direction: column;
+        }
+
+
+        .topbar {
+            height: 68px;
+            min-height: 68px;
+
+            background: white;
+
+            border-bottom:
+                1px solid #e4e9e7;
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            padding: 0 30px;
+        }
+
+
+        .topbar-title {
+            font-size: 18px;
+            font-weight: 650;
+        }
+
+
+        .connection-pill {
+            padding: 7px 12px;
+
+            border-radius: 999px;
+
+            background: #edf3f1;
+            color: #49635d;
+
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+
+        .connection-pill.connected {
+            background: #e3f7ef;
+            color: #147357;
+        }
+
+
+        .content {
+            flex: 1;
+
+            overflow-y: auto;
+
+            padding: 30px;
+        }
+
+
+        .view {
+            display: none;
+        }
+
+
+        .view.active {
+            display: block;
+        }
+
+
+        /* =================================================
+           GENERIC
+        ================================================= */
+
+        .page-heading {
+            display: flex;
+
+            justify-content: space-between;
+            align-items: flex-start;
+
+            gap: 20px;
+
+            margin-bottom: 26px;
+        }
+
+
+        .page-heading h1 {
+            margin: 0 0 7px;
+
+            font-size: 28px;
+        }
+
+
+        .page-heading p {
+            margin: 0;
+
+            color: #687a76;
+
+            font-size: 14px;
+        }
+
+
+        .primary-button {
+            border: 0;
+
+            background: #126e5a;
+            color: white;
+
+            padding: 11px 17px;
+
+            border-radius: 8px;
+
+            font-weight: 600;
+
+            cursor: pointer;
+
+            transition:
+                background 0.15s ease,
+                transform 0.15s ease;
+        }
+
+
+        .primary-button:hover {
+            background: #0e5e4d;
+        }
+
+
+        .secondary-button {
+            border:
+                1px solid #cfdad7;
+
+            background: white;
+            color: #25463f;
+
+            padding: 10px 16px;
+
+            border-radius: 8px;
+
+            font-weight: 600;
+
+            cursor: pointer;
+
+            transition:
+                background 0.15s ease,
+                border-color 0.15s ease;
+        }
+
+
+        .secondary-button:hover {
+            background: #f6f9f8;
+            border-color: #b9cac5;
+        }
+
+
+        .card {
+            background: white;
+
+            border:
+                1px solid #e1e7e5;
+
+            border-radius: 13px;
+
+            padding: 22px;
+
+            box-shadow:
+                0 2px 8px rgba(23,
+                    51,
+                    45,
+                    0.035);
+        }
+
+
+        /* =================================================
+           HOME
+        ================================================= */
+
+        .welcome-card {
+            background:
+                linear-gradient(120deg,
+                    #143f37,
+                    #1a6958);
+
+            color: white;
+
+            border-radius: 16px;
+
+            padding: 30px;
+        }
+
+
+        .welcome-card h1 {
+            margin: 0 0 10px;
+        }
+
+
+        .welcome-card p {
+            margin: 0;
+
+            color: #d4ebe5;
+
+            max-width: 600px;
+
+            line-height: 1.6;
+        }
+
+
+        .home-actions {
+            margin-top: 22px;
+
+            display: flex;
+
+            gap: 10px;
+        }
+
+
+        /* =================================================
+           MEETINGS
+        ================================================= */
+
+        .meeting-section-title {
+            margin: 27px 0 13px;
+
+            font-size: 15px;
+            font-weight: 700;
+
+            color: #344c47;
+        }
+
+
+        /* -------------------------------------------------
+           MEETING TOOLBAR
+        ------------------------------------------------- */
+
+        .meetings-toolbar {
+            display: flex;
+
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 16px;
+
+            margin-bottom: 18px;
+        }
+
+
+        /*
+         * Search container.
+         *
+         * Keeping the icon inside the same rounded
+         * surface makes the search feel more like
+         * a desktop application control.
+         */
+
+        .meeting-search-wrapper {
+            position: relative;
+
+            width: 100%;
+            max-width: 440px;
+        }
+
+
+        .meeting-search-icon {
+            position: absolute;
+
+            left: 15px;
+            top: 50%;
+
+            transform:
+                translateY(-50%);
+
+            width: 18px;
+            height: 18px;
+
+            color: #758782;
+
+            pointer-events: none;
+
+            transition:
+                color 0.18s ease;
+        }
+
+
+        .meeting-search {
+            width: 100%;
+
+            height: 44px;
+
+            padding:
+                0 42px 0 44px;
+
+            border:
+                1px solid #d6e0dd;
+
+            border-radius: 11px;
+
+            outline: none;
+
+            background: white;
+
+            color: #1c332e;
+
+            font-size: 14px;
+
+            box-shadow:
+                0 1px 3px rgba(16,
+                    47,
+                    43,
+                    0.025);
+
+            transition:
+                border-color 0.18s ease,
+                box-shadow 0.18s ease,
+                background 0.18s ease;
+        }
+
+
+        .meeting-search::placeholder {
+            color: #91a09c;
+        }
+
+
+        .meeting-search:hover {
+            border-color: #bccdc8;
+        }
+
+
+        .meeting-search:focus {
+            background: #ffffff;
+
+            border-color: #3d917c;
+
+            box-shadow:
+                0 0 0 3px rgba(61,
+                    145,
+                    124,
+                    0.11);
+        }
+
+
+        .meeting-search-wrapper:focus-within .meeting-search-icon {
+            color: #25745f;
+        }
+
+
+        /*
+         * Native search inputs can show their own
+         * clear control. We remove that because
+         * renderer.js can later provide one
+         * consistently across platforms.
+         */
+
+        .meeting-search::-webkit-search-cancel-button {
+            display: none;
+        }
+
+
+        .meeting-search-clear {
+            position: absolute;
+
+            right: 10px;
+            top: 50%;
+
+            transform:
+                translateY(-50%);
+
+            width: 27px;
+            height: 27px;
+
+            border: 0;
+
+            border-radius: 7px;
+
+            background: transparent;
+
+            color: #71817d;
+
+            display: none;
+
+            align-items: center;
+            justify-content: center;
+
+            font-size: 18px;
+            line-height: 1;
+
+            cursor: pointer;
+
+            transition:
+                background 0.15s ease,
+                color 0.15s ease;
+        }
+
+
+        .meeting-search-clear:hover {
+            background: #edf3f1;
+
+            color: #244a41;
+        }
+
+
+        /* -------------------------------------------------
+           MEETING LIST
+        ------------------------------------------------- */
+
+        .meetings-list {
+            display: grid;
+
+            gap: 12px;
+        }
+
+
+        .meeting-card {
+            background: white;
+
+            border:
+                1px solid #e0e7e5;
+
+            border-radius: 12px;
+
+            padding: 18px 20px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 20px;
+
+            transition:
+                border-color 0.15s ease,
+                box-shadow 0.15s ease,
+                transform 0.15s ease;
+        }
+
+
+        .meeting-card:hover {
+            border-color: #cedbd7;
+
+            box-shadow:
+                0 3px 12px rgba(23,
+                    51,
+                    45,
+                    0.045);
+        }
+
+
+        .meeting-card-left {
+            min-width: 0;
+        }
+
+
+        .meeting-title {
+            font-size: 16px;
+            font-weight: 650;
+
+            margin-bottom: 6px;
+        }
+
+
+        .meeting-meta {
+            color: #71807d;
+
+            font-size: 13px;
+
+            line-height: 1.6;
+        }
+
+
+        .meeting-actions {
+            display: flex;
+
+            align-items: center;
+
+            gap: 8px;
+
+            flex-shrink: 0;
+        }
+
+
+        .meeting-status {
+            display: inline-flex;
+
+            align-items: center;
+
+            padding: 5px 9px;
+
+            border-radius: 999px;
+
+            background: #edf1f0;
+            color: #61716d;
+
+            font-size: 11px;
+            font-weight: 700;
+
+            text-transform: capitalize;
+        }
+
+
+        .meeting-status.in-progress {
+            background: #e2f7ee;
+            color: #137254;
+        }
+
+
+        .meeting-status.scheduled {
+            background: #e8f1fb;
+            color: #326a9e;
+        }
+
+
+        .empty-state {
+            background: white;
+
+            border:
+                1px dashed #ccd8d4;
+
+            border-radius: 12px;
+
+            padding: 35px;
+
+            text-align: center;
+
+            color: #75837f;
+        }
+
+
+        .loading {
+            padding: 25px;
+
+            text-align: center;
+
+            color: #71807d;
+        }
+
+
+        /* -------------------------------------------------
+           MEETING PAGINATION
+        ------------------------------------------------- */
+
+        .meeting-pagination {
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            flex-wrap: wrap;
+
+            gap: 7px;
+
+            min-height: 38px;
+
+            margin-top: 20px;
+
+            padding-bottom: 10px;
+        }
+
+
+        .meeting-page-button {
+            min-width: 36px;
+            height: 36px;
+
+            padding: 0 10px;
+
+            border:
+                1px solid #d2ddda;
+
+            border-radius: 9px;
+
+            background: white;
+            color: #38534d;
+
+            font-size: 13px;
+            font-weight: 650;
+
+            cursor: pointer;
+
+            transition:
+                background 0.15s ease,
+                border-color 0.15s ease,
+                color 0.15s ease,
+                transform 0.15s ease;
+        }
+
+
+        .meeting-page-button:hover:not(:disabled) {
+            background: #eef5f2;
+
+            border-color: #b8cbc5;
+
+            color: #185d4d;
+        }
+
+
+        .meeting-page-button.active {
+            background: #126e5a;
+
+            border-color: #126e5a;
+
+            color: white;
+        }
+
+
+        .meeting-page-button:disabled {
+            opacity: 0.42;
+
+            cursor: default;
+        }
+
+
+        .meeting-page-info {
+            color: #71807d;
+
+            font-size: 12px;
+
+            margin: 0 5px;
+        }
+
+
+        /* =================================================
+           SETTINGS
+        ================================================= */
+
+        .settings-card {
+            max-width: 650px;
+        }
+
+
+        .field-label {
+            display: block;
+
+            margin-bottom: 8px;
+
+            font-size: 13px;
+            font-weight: 650;
+        }
+
+
+        .text-input {
+            width: 100%;
+
+            padding: 12px 13px;
+
+            border:
+                1px solid #ccd8d4;
+
+            border-radius: 8px;
+
+            outline: none;
+        }
+
+
+        .text-input:focus {
+            border-color: #3c8b78;
+        }
+
+
+        .settings-actions {
+            display: flex;
+
+            flex-wrap: wrap;
+
+            gap: 9px;
+
+            margin-top: 15px;
+        }
+
+
+        #instanceMessage {
+            margin-top: 16px;
+
+            color: #526762;
+
+            font-size: 13px;
+        }
+
+
+        /* =================================================
+           PLACEHOLDER PAGES
+        ================================================= */
+
+        .placeholder {
+            padding: 40px;
+
+            text-align: center;
+
+            color: #71807d;
+        }
+
+
+        /* =================================================
+           RESPONSIVE
+        ================================================= */
+
+        @media (max-width: 760px) {
+
+            .sidebar {
+                width: 175px;
+                min-width: 175px;
+            }
+
+
+            .content {
+                padding: 20px;
+            }
+
+
+            .meeting-card {
+                align-items: flex-start;
+
+                flex-direction: column;
+            }
+
+
+            .meeting-actions {
+                width: 100%;
+
+                flex-wrap: wrap;
+            }
+
+
+            .meetings-toolbar {
+                align-items: stretch;
+
+                flex-direction: column;
+            }
+
+
+            .meeting-search-wrapper {
+                max-width: none;
+            }
+        }
+    </style>
+
+</head>
+
+
+<body>
+
+    <div class="app">
+
+
+        <!-- =============================================
+             SIDEBAR
+        ============================================== -->
+
+        <aside class="sidebar">
+
+
+            <div class="brand">
+
+                <div class="brand-mark">
+                    S
+                </div>
+
+                <div class="brand-name">
+                    ServiceCall
+                </div>
+
+            </div>
+
+
+            <nav class="navigation">
+
+
+                <button class="nav-button active" data-view="homeView">
+                    Home
+                </button>
+
+
+                <button class="nav-button" data-view="peopleView">
+                    People
+                </button>
+
+
+                <button class="nav-button" data-view="meetingsView">
+                    Meetings
+                </button>
+
+
+                <button class="nav-button" data-view="chatView">
+                    Chat
+                </button>
+
+
+                <button class="nav-button" data-view="historyView">
+                    History
+                </button>
+
+
+                <button class="nav-button" data-view="recordingsView">
+                    Recordings
+                </button>
+
+
+            </nav>
+
+
+            <div class="sidebar-bottom">
+
+
+                <button class="nav-button" data-view="settingsView">
+                    Settings
+                </button>
+
+
+            </div>
+
+
+        </aside>
+
+
+        <!-- =============================================
+             MAIN
+        ============================================== -->
+
+        <main class="main">
+
+
+            <header class="topbar">
+
+
+                <div id="currentPageTitle" class="topbar-title">
+                    Home
+                </div>
+
+
+                <div id="connectionPill" class="connection-pill">
+                    Checking connection...
+                </div>
+
+
+            </header>
+
+
+            <section class="content">
+
+
+                <!-- =====================================
+                     HOME
+                ====================================== -->
+
+                <div id="homeView" class="view active">
+
+
+                    <div class="welcome-card">
+
+
+                        <h1>
+                            Welcome to ServiceCall
+                        </h1>
+
+
+                        <p>
+                            Calls, meetings and communication
+                            connected to your ServiceNow work.
+                        </p>
+
+
+                        <div class="home-actions">
+
+
+                            <button id="openActiveCallButton" class="secondary-button">
+                                Open Active Call
+                            </button>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                </div>
+
+
+                <!-- =====================================
+                     PEOPLE
+                ====================================== -->
+
+                <div id="peopleView" class="view">
+
+
+                    <div class="page-heading">
+
+
+                        <div>
+
+
+                            <h1>
+                                People
+                            </h1>
+
+
+                            <p>
+                                Find and call ServiceCall users.
+                            </p>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                    <div class="card placeholder">
+                        People and calling will appear here.
+                    </div>
+
+
+                </div>
+
+
+                <!-- =====================================
+                     MEETINGS
+                ====================================== -->
+
+                <div id="meetingsView" class="view">
+
+
+                    <div class="page-heading">
+
+
+                        <div>
+
+
+                            <h1>
+                                Meetings
+                            </h1>
+
+
+                            <p>
+                                Schedule, join and manage
+                                ServiceCall meetings.
+                            </p>
+
+
+                        </div>
+
+
+                        <button id="scheduleMeetingButton" class="primary-button" type="button">
+                            + Schedule meeting
+                        </button>
+
+
+                    </div>
+
+
+                    <!-- Meeting Search -->
+
+                    <div class="meetings-toolbar">
+
+
+                        <div class="meeting-search-wrapper">
+
+
+                            <svg class="meeting-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+
+                                <circle cx="11" cy="11" r="7"></circle>
+
+                                <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
+
+                            </svg>
+
+
+                            <input id="meetingSearchInput" class="meeting-search" type="search"
+                                placeholder="Search meetings by title, number or organizer..." autocomplete="off"
+                                spellcheck="false">
+
+
+                            <button id="meetingSearchClear" class="meeting-search-clear" type="button"
+                                aria-label="Clear meeting search" title="Clear search">
+                                ×
+                            </button>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                    <!-- Meeting List -->
+
+                    <div id="meetingsContainer" class="meetings-list">
+
+
+                        <div class="loading">
+                            Open Meetings to load your meetings.
+                        </div>
+
+
+                    </div>
+
+
+                    <!-- Pagination -->
+
+                    <div id="meetingPagination" class="meeting-pagination"></div>
+
+
+                </div>
+
+
+                <!-- =====================================
+                     CHAT
+                ====================================== -->
+
+                <div id="chatView" class="view">
+
+
+                    <div class="page-heading">
+
+
+                        <div>
+
+
+                            <h1>
+                                Chat
+                            </h1>
+
+
+                            <p>
+                                Your ServiceCall conversations.
+                            </p>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                    <div class="card placeholder">
+                        Chat is coming next.
+                    </div>
+
+
+                </div>
+
+
+                <!-- =====================================
+                     HISTORY
+                ====================================== -->
+
+                <div id="historyView" class="view">
+
+
+                    <div class="page-heading">
+
+
+                        <div>
+
+
+                            <h1>
+                                History
+                            </h1>
+
+
+                            <p>
+                                Your previous ServiceCall activity.
+                            </p>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                    <div class="card placeholder">
+                        Call history will appear here.
+                    </div>
+
+
+                </div>
+
+
+                <!-- =====================================
+                     RECORDINGS
+                ====================================== -->
+
+                <div id="recordingsView" class="view">
+
+
+                    <div class="page-heading">
+
+
+                        <div>
+
+
+                            <h1>
+                                Recordings
+                            </h1>
+
+
+                            <p>
+                                Your ServiceCall recording history.
+                            </p>
+
+
+                        </div>
+
+
+                        <button class="secondary-button" id="refreshRecordingsButton" type="button">
+                            Refresh
+                        </button>
+
+
+                    </div>
+
+
+                    <div id="recordingsMessage" style="
+                            margin-bottom:14px;
+                            color:#40514d;
+                        "></div>
+
+
+                    <div id="recordingsList"></div>
+
+
+                </div>
+
+
+                <!-- =====================================
+                     SETTINGS
+                ====================================== -->
+
+                <div id="settingsView" class="view">
+
+
+                    <div class="page-heading">
+
+
+                        <div>
+
+
+                            <h1>
+                                Settings
+                            </h1>
+
+
+                            <p>
+                                Manage your ServiceNow connection.
+                            </p>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                    <div class="card settings-card">
+
+
+                        <form id="instanceForm">
+
+
+                            <label class="field-label" for="instanceUrl">
+                                ServiceNow instance
+                            </label>
+
+
+                            <input id="instanceUrl" class="text-input" type="text"
+                                placeholder="https://dev12345.service-now.com">
+
+
+                            <div class="settings-actions">
+
+
+                                <button class="secondary-button" type="submit">
+                                    Save Instance
+                                </button>
+
+
+                                <button class="primary-button" id="loginButton" type="button">
+                                    Sign in to ServiceNow
+                                </button>
+
+
+                            </div>
+
+
+                        </form>
+
+
+                        <div id="instanceMessage"></div>
+
+
+                    </div>
+
+
+                </div>
+
+
+            </section>
+
+
+        </main>
+
+
     </div>
- 
-    <div
-        id="recordingsMessage"
-        style="
-            margin-bottom:14px;
-            color:#40514d;
-        ">
-    </div>
- 
-    <div id="recordingsList"></div>
- 
-</div>
- 
 
-    </div>
 
-</div>
+    <script src="renderer.js"></script>
 
-<script src="renderer.js"></script>
+
+</body>
+
+</html>

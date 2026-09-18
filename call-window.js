@@ -26,6 +26,35 @@ const callNumber =
 const isConference =
     params.get('isConference') === 'true';
 
+/* -------------------------
+   MEETING CONTEXT
+------------------------- */
+
+const isMeeting =
+    params.get('isMeeting') === 'true';
+
+const meetingSysId =
+    params.get('meetingSysId') ||
+    '';
+
+const meetingNumber =
+    params.get('meetingNumber') ||
+    '';
+
+const meetingTitle =
+    params.get('meetingTitle') ||
+    '';
+
+console.log(
+    'SERVICECALL MEETING CONTEXT:',
+    {
+        isMeeting,
+        meetingSysId,
+        meetingNumber,
+        meetingTitle
+    }
+);
+
 let currentMode =
     mode;
 
@@ -128,6 +157,69 @@ const initials =
 
 avatar.textContent =
     initials || '?';
+
+/* -------------------------
+   MEETING DISPLAY
+------------------------- */
+
+if (isMeeting) {
+
+    /*
+     * Use the meeting title as the
+     * primary name in the existing
+     * ServiceCall window.
+     */
+    personNameElement.textContent =
+        meetingTitle ||
+        personName ||
+        'ServiceCall Meeting';
+
+
+    /*
+     * Show that this is a meeting
+     * instead of a person's department.
+     */
+    departmentElement.textContent =
+        'Meeting';
+
+
+    /*
+     * Show meeting number when available.
+     */
+    if (meetingNumber) {
+
+        callNumberElement.textContent =
+            meetingNumber;
+    }
+
+
+    /*
+     * Meeting-specific action labels.
+     */
+    const addUserButton =
+        document.getElementById(
+            'addUserButton'
+        );
+
+    const recordButton =
+        document.getElementById(
+            'recordButton'
+        );
+
+
+    if (addUserButton) {
+
+        addUserButton.textContent =
+            'Add People';
+    }
+
+
+    if (recordButton) {
+
+        recordButton.textContent =
+            'Record Meeting';
+    }
+}
 
 /* -------------------------
    RINGTONE
@@ -823,12 +915,16 @@ const endButton =
 if (currentUserIsOwner) {
 
     endButton.textContent =
-        'End Conference';
+        isMeeting
+            ? 'End Meeting'
+            : 'End Conference';
 
 } else {
 
     endButton.textContent =
-        'Leave Call';
+        isMeeting
+            ? 'Leave Meeting'
+            : 'Leave Call';
 }
 
 
@@ -3797,12 +3893,27 @@ document
                         'Ending conference...';
 
 
-                    result =
-                        await window
-                            .serviceCall
-                            .endCall(
-                                callSysId
-                            );
+                    if (
+    isMeeting &&
+    meetingSysId
+) {
+
+    result =
+        await window
+            .serviceCall
+            .endMeeting(
+                meetingSysId
+            );
+
+} else {
+
+    result =
+        await window
+            .serviceCall
+            .endCall(
+                callSysId
+            );
+}
 
 
                     if (
@@ -3827,6 +3938,27 @@ document
                      */
                     await stopAgoraAudio();
 
+                    /*
+ * Tell the main ServiceCall window that
+ * this meeting has changed.
+ *
+ * Normal calls/conferences do not send
+ * this notification.
+ */
+if (
+    isMeeting &&
+    meetingSysId &&
+    window.serviceCall &&
+    typeof window.serviceCall
+        .notifyMeetingChanged ===
+        'function'
+) {
+
+    window.serviceCall
+        .notifyMeetingChanged(
+            meetingSysId
+        );
+}
 
                     setMode(
                         'completed'
@@ -3838,54 +3970,104 @@ document
 
 
                 /* -------------------------
-                   3. PARTICIPANT
-                ------------------------- */
+   3. PARTICIPANT
+------------------------- */
 
-                statusText.textContent =
-                    'Leaving call...';
-
-
-                result =
-                    await window
-                        .serviceCall
-                        .leaveCall(
-                            callSysId
-                        );
+statusText.textContent =
+    isMeeting
+        ? 'Leaving meeting...'
+        : 'Leaving call...';
 
 
-                if (
-                    !result ||
-                    !result.success
-                ) {
+/*
+ * Meetings use the meeting lifecycle API.
+ *
+ * Normal conferences continue using the
+ * existing leave-call API.
+ */
+if (
+    isMeeting &&
+    meetingSysId
+) {
 
-                    throw new Error(
-                        result &&
-                        result.message
-                            ? result.message
-                            : 'Unable to leave call.'
-                    );
-                }
+    result =
+        await window
+            .serviceCall
+            .leaveMeeting(
+                meetingSysId
+            );
 
+} else {
 
-                /*
-                 * Leave Agora only on THIS desktop.
-                 *
-                 * Other conference participants
-                 * remain in the same Agora channel.
-                 */
-                await stopAgoraAudio();
-
-
-                stopAllTimers();
-
-                stopRingtone();
-
-
-                statusText.textContent =
-                    'You left the call';
+    result =
+        await window
+            .serviceCall
+            .leaveCall(
+                callSysId
+            );
+}
 
 
-                closeCallWindowAfterDelay();
+if (
+    !result ||
+    !result.success
+) {
+
+    throw new Error(
+        result &&
+        result.message
+            ? result.message
+            : (
+                isMeeting
+                    ? 'Unable to leave meeting.'
+                    : 'Unable to leave call.'
+            )
+    );
+}
+
+
+/*
+ * Leave Agora only on THIS desktop.
+ *
+ * Other participants remain connected.
+ */
+await stopAgoraAudio();
+
+
+/*
+ * Meeting data changed.
+ *
+ * Tell the main desktop window so the
+ * Meetings card refreshes automatically.
+ */
+if (
+    isMeeting &&
+    meetingSysId &&
+    window.serviceCall &&
+    typeof window.serviceCall
+        .notifyMeetingChanged ===
+        'function'
+) {
+
+    window.serviceCall
+        .notifyMeetingChanged(
+            meetingSysId
+        );
+}
+
+
+stopAllTimers();
+
+stopRingtone();
+
+
+statusText.textContent =
+    isMeeting
+        ? 'You left the meeting'
+        : 'You left the call';
+
+
+closeCallWindowAfterDelay();
 
 
             } catch (error) {

@@ -262,7 +262,86 @@ completeRecording:
             recordingSysId,
             attachmentSysId,
             format
-        )
+        ),
+
+    getMyMeetings:
+    (
+        page = 1,
+        search = ''
+    ) =>
+        ipcRenderer.invoke(
+            'servicecall-get-my-meetings',
+            {
+                page: page,
+                search: search
+            }
+        ),
+        
+    createMeeting:
+    (meetingData) =>
+        ipcRenderer.invoke(
+            'servicecall-create-meeting',
+            meetingData
+        ),
+
+    startMeeting:
+    (meetingSysId) =>
+        ipcRenderer.invoke(
+            'servicecall-start-meeting',
+            meetingSysId
+        ),
+
+    joinMeeting:
+    (meetingSysId) =>
+        ipcRenderer.invoke(
+            'servicecall-join-meeting',
+            meetingSysId
+        ),
+
+    leaveMeeting:
+    (meetingSysId) =>
+        ipcRenderer.invoke(
+            'servicecall-leave-meeting',
+            meetingSysId
+        ),
+
+    endMeeting:
+    (meetingSysId) =>
+        ipcRenderer.invoke(
+            'servicecall-end-meeting',
+            meetingSysId
+        ),
+
+    cancelMeeting:
+    (meetingSysId) =>
+        ipcRenderer.invoke(
+            'servicecall-cancel-meeting',
+            meetingSysId
+        ),
+
+    notifyMeetingChanged:
+    (meetingSysId) =>
+        ipcRenderer.send(
+            'servicecall-meeting-changed',
+            meetingSysId
+        ),
+
+onMeetingChanged:
+    (callback) => {
+
+        ipcRenderer.on(
+            'servicecall-meeting-changed',
+            (
+                event,
+                data
+            ) => {
+
+                callback(
+                    data
+                );
+            }
+        );
+    }
 
     }
 );

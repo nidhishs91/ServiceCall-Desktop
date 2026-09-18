@@ -2114,35 +2114,58 @@ function showCallWindow(
 
 
     callWindow.loadFile(
-        'call-window.html',
-        {
-            query: {
+    'call-window.html',
+    {
+        query: {
 
-    mode:
-        mode,
+            mode:
+                mode,
 
-    callSysId:
-        callSysId,
+            callSysId:
+                callSysId,
 
-    callNumber:
-        callData.callNumber ||
-        '',
+            callNumber:
+                callData.callNumber ||
+                '',
 
-    name:
-        callData.name ||
-        'Unknown User',
+            name:
+                callData.name ||
+                'Unknown User',
 
-    department:
-        callData.department ||
-        '',
+            department:
+                callData.department ||
+                '',
 
-    isConference:
-        callData.isConference
-            ? 'true'
-            : 'false'
-}
+            isConference:
+                callData.isConference
+                    ? 'true'
+                    : 'false',
+
+            /*
+             * MEETING CONTEXT
+             *
+             * Normal calls will simply receive
+             * isMeeting=false and empty values.
+             */
+            isMeeting:
+                callData.isMeeting
+                    ? 'true'
+                    : 'false',
+
+            meetingSysId:
+                callData.meetingSysId ||
+                '',
+
+            meetingNumber:
+                callData.meetingNumber ||
+                '',
+
+            meetingTitle:
+                callData.meetingTitle ||
+                ''
         }
-    );
+    }
+);
 
 
     callWindow.once(
@@ -4849,5 +4872,819 @@ ipcMain.handle(
             };
         }
     }
+)
+
+/* -------------------------------------------------------
+   SERVICECALL MEETINGS
+------------------------------------------------------- */
+
+/*
+ * Get all meetings relevant to the currently
+ * authenticated ServiceCall user.
+ *
+ * ServiceNow decides which meetings the user
+ * is allowed to see.
+ */
+ipcMain.handle(
+    'servicecall-get-my-meetings',
+
+    async (
+        event,
+        options = {}
+    ) => {
+
+        try {
+
+            let page =
+                parseInt(
+                    options.page,
+                    10
+                ) || 1;
+
+
+            if (page < 1) {
+                page = 1;
+            }
+
+
+            const search =
+                String(
+                    options.search || ''
+                ).trim();
+
+
+            const query =
+                new URLSearchParams({
+                    page:
+                        String(page),
+
+                    page_size:
+                        '7',
+
+                    search:
+                        search
+                });
+
+
+            const result =
+                await serviceCallApiRequest(
+                    '/my-meetings?' +
+                        query.toString(),
+                    'GET'
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to get ServiceCall meetings:',
+                error.message
+            );
+
+
+            return {
+
+                success: false,
+
+                code:
+                    error.code ||
+                    'GET_MEETINGS_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to retrieve meetings.',
+
+                count: 0,
+
+                total_count: 0,
+
+                current_page: 1,
+
+                page_size: 7,
+
+                total_pages: 0,
+
+                has_previous: false,
+
+                has_next: false,
+
+                search: '',
+
+                meetings: []
+            };
+        }
+    }
 );
- 
+            
+/* -------------------------------------------------------
+   CREATE SERVICECALL MEETING
+------------------------------------------------------- */
+
+/*
+ * Create a new ServiceCall meeting.
+ *
+ * The renderer sends the meeting details here.
+ * The main process forwards them securely to
+ * ServiceNow using the authenticated OAuth session.
+ */
+ipcMain.handle(
+    'servicecall-create-meeting',
+
+    async (
+        event,
+        meetingData
+    ) => {
+
+        try {
+
+            if (
+                !meetingData ||
+                !meetingData.title ||
+                !meetingData.scheduled_start ||
+                !meetingData.scheduled_end
+            ) {
+
+                return {
+
+                    success: false,
+
+                    code:
+                        'MEETING_DATA_REQUIRED',
+
+                    message:
+                        'Title, start time and end time are required.'
+                };
+            }
+
+
+            const payload = {
+
+    title:
+        String(
+            meetingData.title
+        ).trim(),
+
+    description:
+        String(
+            meetingData.description || ''
+        ).trim(),
+
+    scheduled_start:
+        meetingData.scheduled_start,
+
+    scheduled_end:
+        meetingData.scheduled_end,
+
+    participants:
+        Array.isArray(
+            meetingData.participants
+        )
+            ? meetingData.participants
+            : []
+};
+
+
+            const result =
+                await serviceCallApiRequest(
+                    '/create-meeting',
+                    'POST',
+                    payload
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to create ServiceCall meeting:',
+                error.message
+            );
+
+
+            return {
+
+                success: false,
+
+                code:
+                    error.code ||
+                    'CREATE_MEETING_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to create meeting.'
+            };
+        }
+    }
+);
+
+ipcMain.handle(
+    'servicecall-start-meeting',
+
+    async (
+        event,
+        meetingSysId
+    ) => {
+
+        try {
+
+            if (!meetingSysId) {
+
+                return {
+                    success: false,
+                    code: 'MEETING_REQUIRED',
+                    message: 'Meeting sys_id is required.'
+                };
+            }
+
+
+            const payload = {
+
+                meeting_sys_id:
+                    String(
+                        meetingSysId
+                    ).trim()
+            };
+
+
+            const result =
+                await serviceCallApiRequest(
+                    '/start-meeting',
+                    'POST',
+                    payload
+                );
+
+
+            /*
+             * -------------------------------------------------
+             * OPEN EXISTING SERVICECALL WINDOW FOR THE MEETING
+             * -------------------------------------------------
+             *
+             * A meeting creates a normal ServiceCall call record.
+             *
+             * We reuse the existing call window instead of
+             * creating a separate meeting window.
+             */
+            if (
+                result &&
+                result.success === true &&
+                result.call_sys_id
+            ) {
+
+                /*
+                 * Mark this call as already handled so the
+                 * generic outgoing-call polling loop does not
+                 * treat the meeting as a normal direct call.
+                 */
+                activeOutgoingCallId =
+                    result.call_sys_id;
+
+
+                showCallWindow(
+                    'connected',
+
+                    {
+                        callSysId:
+                            result.call_sys_id,
+
+                        callNumber:
+                            result.call_number ||
+                            '',
+
+                        /*
+                         * For a meeting, the main display name
+                         * is the meeting title.
+                         */
+                        name:
+                            result.title ||
+                            'ServiceCall Meeting',
+
+                        department:
+                            'Meeting',
+
+                        /*
+                         * Meetings use the existing conference
+                         * call functionality.
+                         */
+                        isConference:
+                            true,
+
+                        /*
+                         * Keep meeting context available for
+                         * the next step.
+                         */
+                        isMeeting:
+                            true,
+
+                        meetingSysId:
+                            result.meeting_sys_id ||
+                            meetingSysId,
+
+                        meetingNumber:
+                            result.meeting_number ||
+                            '',
+
+                        meetingTitle:
+                            result.title ||
+                            'ServiceCall Meeting'
+                    }
+                );
+            }
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to start ServiceCall meeting:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+
+                code:
+                    error.code ||
+                    'START_MEETING_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to start meeting.'
+            };
+        }
+    }
+);
+
+/* =======================================================
+   MEETING CHANGE NOTIFICATION
+======================================================= */
+
+ipcMain.on(
+    'servicecall-meeting-changed',
+    (
+        event,
+        meetingSysId
+    ) => {
+
+        /*
+         * Forward the meeting change from the
+         * call window to the main desktop window.
+         */
+        if (
+            mainWindow &&
+            !mainWindow.isDestroyed()
+        ) {
+
+            mainWindow.webContents.send(
+                'servicecall-meeting-changed',
+                {
+                    meetingSysId:
+                        meetingSysId || ''
+                }
+            );
+        }
+    }
+);
+
+/* =======================================================
+   JOIN MEETING
+======================================================= */
+
+ipcMain.handle(
+    'servicecall-join-meeting',
+
+    async (
+        event,
+        meetingSysId
+    ) => {
+
+        try {
+
+            if (!meetingSysId) {
+
+                return {
+                    success: false,
+                    code: 'MEETING_REQUIRED',
+                    message:
+                        'Meeting sys_id is required.'
+                };
+            }
+
+
+            const payload = {
+                meeting_sys_id:
+                    String(
+                        meetingSysId
+                    ).trim()
+            };
+
+
+            const result =
+                await serviceCallApiRequest(
+                    '/join-meeting',
+                    'POST',
+                    payload
+                );
+
+
+            if (
+                result &&
+                result.success === true &&
+                result.call_sys_id
+            ) {
+
+                /*
+                 * This user is now connected
+                 * to the existing meeting call.
+                 */
+                activeOutgoingCallId =
+                    result.call_sys_id;
+
+
+                /*
+                 * Reuse our existing call window.
+                 *
+                 * IMPORTANT:
+                 * Pass full meeting context so
+                 * call-window.js knows this is
+                 * a ServiceCall Meeting.
+                 */
+                showCallWindow(
+                    'connected',
+                    {
+                        callSysId:
+                            result.call_sys_id,
+
+                        callNumber:
+                            result.call_number ||
+                            '',
+
+                        name:
+                            result.title ||
+                            'ServiceCall Meeting',
+
+                        department:
+                            'Meeting',
+
+                        isConference:
+                            true,
+
+                        isMeeting:
+                            true,
+
+                        meetingSysId:
+                            result.meeting_sys_id ||
+                            meetingSysId,
+
+                        meetingNumber:
+                            result.meeting_number ||
+                            '',
+
+                        meetingTitle:
+                            result.title ||
+                            'ServiceCall Meeting'
+                    }
+                );
+            }
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to join ServiceCall meeting:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'JOIN_MEETING_FAILED',
+                message:
+                    error.message ||
+                    'Unable to join meeting.'
+            };
+        }
+    }
+);
+
+/* =======================================================
+   LEAVE MEETING
+======================================================= */
+
+ipcMain.handle(
+    'servicecall-leave-meeting',
+
+    async (
+        event,
+        meetingSysId
+    ) => {
+
+        try {
+
+            if (!meetingSysId) {
+
+                return {
+                    success: false,
+                    code: 'MEETING_REQUIRED',
+                    message:
+                        'Meeting sys_id is required.'
+                };
+            }
+
+
+            const payload = {
+                meeting_sys_id:
+                    String(
+                        meetingSysId
+                    ).trim()
+            };
+
+
+            const result =
+                await serviceCallApiRequest(
+                    '/leave-meeting',
+                    'POST',
+                    payload
+                );
+
+
+            if (
+                result &&
+                result.success === true
+            ) {
+
+                /*
+                 * The user left this meeting,
+                 * so clear this call from the
+                 * active desktop state if needed.
+                 */
+                if (
+                    activeOutgoingCallId ===
+                    result.call_sys_id
+                ) {
+
+                    activeOutgoingCallId =
+                        null;
+                }
+
+
+                /*
+                 * Refresh the Meetings page.
+                 */
+                if (
+                    mainWindow &&
+                    !mainWindow.isDestroyed()
+                ) {
+
+                    mainWindow.webContents.send(
+                        'servicecall-meeting-changed',
+                        {
+                            meetingSysId:
+                                result.meeting_sys_id ||
+                                meetingSysId
+                        }
+                    );
+                }
+            }
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to leave ServiceCall meeting:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'LEAVE_MEETING_FAILED',
+                message:
+                    error.message ||
+                    'Unable to leave meeting.'
+            };
+        }
+    }
+);
+
+/* =======================================================
+   END MEETING
+======================================================= */
+
+ipcMain.handle(
+    'servicecall-end-meeting',
+
+    async (
+        event,
+        meetingSysId
+    ) => {
+
+        try {
+
+            if (!meetingSysId) {
+
+                return {
+                    success: false,
+                    code: 'MEETING_REQUIRED',
+                    message:
+                        'Meeting sys_id is required.'
+                };
+            }
+
+
+            const payload = {
+                meeting_sys_id:
+                    String(
+                        meetingSysId
+                    ).trim()
+            };
+
+
+            const result =
+                await serviceCallApiRequest(
+                    '/end-meeting',
+                    'POST',
+                    payload
+                );
+
+
+            if (
+                result &&
+                result.success === true
+            ) {
+
+                /*
+                 * Meeting call has ended.
+                 */
+                if (
+                    activeOutgoingCallId ===
+                    result.call_sys_id
+                ) {
+
+                    activeOutgoingCallId =
+                        null;
+                }
+
+
+                if (
+                    activeIncomingCallId ===
+                    result.call_sys_id
+                ) {
+
+                    activeIncomingCallId =
+                        null;
+                }
+
+
+                /*
+                 * Tell the main Meetings page
+                 * that meeting data changed.
+                 */
+                if (
+                    mainWindow &&
+                    !mainWindow.isDestroyed()
+                ) {
+
+                    mainWindow.webContents.send(
+                        'servicecall-meeting-changed',
+                        {
+                            meetingSysId:
+                                result.meeting_sys_id ||
+                                meetingSysId
+                        }
+                    );
+                }
+            }
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to end ServiceCall meeting:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'END_MEETING_FAILED',
+                message:
+                    error.message ||
+                    'Unable to end meeting.'
+            };
+        }
+    }
+);
+
+/* =======================================================
+   CANCEL MEETING
+======================================================= */
+
+ipcMain.handle(
+    'servicecall-cancel-meeting',
+
+    async (
+        event,
+        meetingSysId
+    ) => {
+
+        try {
+
+            if (!meetingSysId) {
+
+                return {
+                    success: false,
+                    code: 'MEETING_REQUIRED',
+                    message:
+                        'Meeting sys_id is required.'
+                };
+            }
+
+
+            const payload = {
+                meeting_sys_id:
+                    String(
+                        meetingSysId
+                    ).trim()
+            };
+
+
+            const result =
+                await serviceCallApiRequest(
+                    '/cancel-meeting',
+                    'POST',
+                    payload
+                );
+
+
+            if (
+                result &&
+                result.success === true
+            ) {
+
+                /*
+                 * Tell the main Meetings page
+                 * that this meeting changed.
+                 */
+                if (
+                    mainWindow &&
+                    !mainWindow.isDestroyed()
+                ) {
+
+                    mainWindow.webContents.send(
+                        'servicecall-meeting-changed',
+                        {
+                            meetingSysId:
+                                result.meeting_sys_id ||
+                                meetingSysId
+                        }
+                    );
+                }
+            }
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to cancel ServiceCall meeting:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'CANCEL_MEETING_FAILED',
+                message:
+                    error.message ||
+                    'Unable to cancel meeting.'
+            };
+        }
+    }
+);
