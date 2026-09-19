@@ -51,6 +51,272 @@ document.addEventListener(
                 'scheduleMeetingButton'
             );
 
+        const meetingSearchInput =
+    document.getElementById(
+        'meetingSearchInput'
+    );
+
+const meetingSearchClear =
+    document.getElementById(
+        'meetingSearchClear'
+    );
+
+const meetingPagination =
+    document.getElementById(
+        'meetingPagination'
+    );
+
+
+const meetingStatusFilter =
+    document.getElementById(
+        'meetingStatusFilter'
+    );
+
+
+let currentMeetingPage = 1;
+
+let currentMeetingSearch = '';
+
+let currentMeetingStatus = '';
+
+let meetingSearchTimer = null;
+
+let schedulePeopleSearchTimer = null;
+
+let selectedMeetingPeople = [];
+
+let currentMeetingTimezone = '';
+
+let meetingsAutoRefreshTimer = null;
+
+let currentMeetingDetails = '';
+
+/*
+ * Meeting form mode:
+ *
+ * create = scheduling a new meeting
+ * edit   = modifying an existing meeting
+ */
+let meetingFormMode = 'create';
+
+
+/*
+ * Stores the meeting currently being edited.
+ */
+let editingMeetingSysId = '';
+
+const meetingDetailsModal =
+    document.getElementById(
+        'meetingDetailsModal'
+    );
+
+const meetingDetailsCloseButton =
+    document.getElementById(
+        'meetingDetailsCloseButton'
+    );
+
+const meetingDetailsFooterCloseButton =
+    document.getElementById(
+        'meetingDetailsFooterCloseButton'
+    );
+
+const meetingDetailsActionButton =
+    document.getElementById(
+        'meetingDetailsActionButton'
+    );
+
+const meetingDetailsNumber =
+    document.getElementById(
+        'meetingDetailsNumber'
+    );
+
+const meetingDetailsHeading =
+    document.getElementById(
+        'meetingDetailsHeading'
+    );
+
+const meetingDetailsStatus =
+    document.getElementById(
+        'meetingDetailsStatus'
+    );
+
+const meetingDetailsDescription =
+    document.getElementById(
+        'meetingDetailsDescription'
+    );
+
+const meetingDetailsOrganizer =
+    document.getElementById(
+        'meetingDetailsOrganizer'
+    );
+
+const meetingDetailsStart =
+    document.getElementById(
+        'meetingDetailsStart'
+    );
+
+const meetingDetailsEnd =
+    document.getElementById(
+        'meetingDetailsEnd'
+    );
+
+const meetingDetailsStartedBy =
+    document.getElementById(
+        'meetingDetailsStartedBy'
+    );
+
+const meetingDetailsStartedAt =
+    document.getElementById(
+        'meetingDetailsStartedAt'
+    );
+
+const meetingDetailsEndedAt =
+    document.getElementById(
+        'meetingDetailsEndedAt'
+    );
+
+const meetingDetailsStartedByField =
+    document.getElementById(
+        'meetingDetailsStartedByField'
+    );
+
+const meetingDetailsStartedAtField =
+    document.getElementById(
+        'meetingDetailsStartedAtField'
+    );
+
+const meetingDetailsEndedAtField =
+    document.getElementById(
+        'meetingDetailsEndedAtField'
+    );
+
+const meetingDetailsParticipantCount =
+    document.getElementById(
+        'meetingDetailsParticipantCount'
+    );
+
+const meetingDetailsParticipants =
+    document.getElementById(
+        'meetingDetailsParticipants'
+    );
+
+    const scheduleMeetingModal =
+    document.getElementById(
+        'scheduleMeetingModal'
+    );
+
+const scheduleMeetingCloseButton =
+    document.getElementById(
+        'scheduleMeetingCloseButton'
+    );
+
+const scheduleMeetingCancelButton =
+    document.getElementById(
+        'scheduleMeetingCancelButton'
+    );
+
+const scheduleMeetingTitle =
+    document.getElementById(
+        'scheduleMeetingTitle'
+    );
+
+const scheduleMeetingDescription =
+    document.getElementById(
+        'scheduleMeetingDescription'
+    );
+
+const scheduleMeetingStart =
+    document.getElementById(
+        'scheduleMeetingStart'
+    );
+
+const scheduleMeetingEnd =
+    document.getElementById(
+        'scheduleMeetingEnd'
+    );
+
+    const scheduleMeetingTimezone =
+    document.getElementById(
+        'scheduleMeetingTimezone'
+    );
+
+const scheduleMeetingHeading =
+    document.getElementById(
+        'scheduleMeetingHeading'
+    );
+
+
+const scheduleMeetingSubtitle =
+    document.getElementById(
+        'scheduleMeetingSubtitle'
+    );
+
+const scheduleMeetingPeopleSearch =
+    document.getElementById(
+        'scheduleMeetingPeopleSearch'
+    );
+
+const scheduleMeetingPeopleResults =
+    document.getElementById(
+        'scheduleMeetingPeopleResults'
+    );
+
+const scheduleMeetingSelectedPeople =
+    document.getElementById(
+        'scheduleMeetingSelectedPeople'
+    );
+
+const scheduleMeetingMessage =
+    document.getElementById(
+        'scheduleMeetingMessage'
+    );
+
+const scheduleMeetingSubmitButton =
+    document.getElementById(
+        'scheduleMeetingSubmitButton'
+    );
+
+    if (
+    scheduleMeetingCloseButton
+) {
+
+    scheduleMeetingCloseButton.addEventListener(
+        'click',
+        closeScheduleMeetingModal
+    );
+}
+
+
+if (
+    scheduleMeetingCancelButton
+) {
+
+    scheduleMeetingCancelButton.addEventListener(
+        'click',
+        closeScheduleMeetingModal
+    );
+}
+
+
+if (
+    scheduleMeetingModal
+) {
+
+    scheduleMeetingModal.addEventListener(
+        'click',
+        event => {
+
+            if (
+                event.target.hasAttribute(
+                    'data-schedule-meeting-close'
+                )
+            ) {
+
+                closeScheduleMeetingModal();
+            }
+        }
+    );
+}
 
         /* -------------------------------------------------
            CONNECTION STATUS
@@ -473,12 +739,18 @@ document.addEventListener(
                          * opens the Meetings page.
                          */
                         if (
-                            targetView ===
-                            'meetingsView'
-                        ) {
+    targetView ===
+    'meetingsView'
+) {
 
-                            await loadMeetings();
-                        }
+    await loadMeetings();
+
+    startMeetingsAutoRefresh();
+
+} else {
+
+    stopMeetingsAutoRefresh();
+}
                     }
                 );
             }
@@ -574,7 +846,1288 @@ document.addEventListener(
             return '';
         }
 
+        function formatMeetingDetailsValue(
+    value
+) {
 
+    const text =
+        String(
+            value || ''
+        ).trim();
+
+    return text || '—';
+}
+
+
+function formatMeetingDetailsStatus(
+    value
+) {
+
+    const text =
+        String(
+            value || ''
+        )
+            .trim()
+            .toLowerCase();
+
+    if (!text) {
+        return '—';
+    }
+
+    return text
+        .split(' ')
+        .map(
+            word =>
+                word
+                    ? word.charAt(0).toUpperCase() +
+                      word.slice(1)
+                    : ''
+        )
+        .join(' ');
+}
+
+
+function closeMeetingDetailsModal() {
+
+    if (!meetingDetailsModal) {
+        return;
+    }
+
+    meetingDetailsModal.classList.remove(
+        'open'
+    );
+
+    meetingDetailsModal.setAttribute(
+        'aria-hidden',
+        'true'
+    );
+}
+
+function getDateTimeLocalValueInTimezone(
+    date,
+    timeZone
+) {
+
+    if (!date || !timeZone) {
+        return '';
+    }
+
+    const parts =
+        new Intl.DateTimeFormat(
+            'en-CA',
+            {
+                timeZone: timeZone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hourCycle: 'h23'
+            }
+        ).formatToParts(date);
+
+
+    const values = {};
+
+    parts.forEach(
+        part => {
+
+            if (part.type !== 'literal') {
+                values[part.type] =
+                    part.value;
+            }
+        }
+    );
+
+
+    return (
+        values.year +
+        '-' +
+        values.month +
+        '-' +
+        values.day +
+        'T' +
+        values.hour +
+        ':' +
+        values.minute
+    );
+}
+
+function openScheduleMeetingModal() {
+
+    if (!scheduleMeetingModal) {
+        return;
+    }
+
+    /*
+ * Normal Schedule Meeting button always
+ * opens the form in CREATE mode.
+ */
+meetingFormMode =
+    'create';
+
+editingMeetingSysId =
+    '';
+
+    if (scheduleMeetingHeading) {
+
+    scheduleMeetingHeading.textContent =
+        'Schedule Meeting';
+}
+
+
+if (scheduleMeetingSubtitle) {
+
+    scheduleMeetingSubtitle.textContent =
+        'Create a new ServiceCall meeting.';
+}
+
+
+if (scheduleMeetingSubmitButton) {
+
+    scheduleMeetingSubmitButton.textContent =
+        'Schedule Meeting';
+}
+
+    if (scheduleMeetingTimezone) {
+
+    scheduleMeetingTimezone.textContent =
+        currentMeetingTimezone ||
+        'Loading...';
+}
+
+
+    /*
+     * Start every new scheduling attempt
+     * with a clean form.
+     */
+
+    if (scheduleMeetingTitle) {
+        scheduleMeetingTitle.value = '';
+    }
+
+    if (scheduleMeetingDescription) {
+        scheduleMeetingDescription.value = '';
+    }
+
+    /*
+ * Default meeting times are based on
+ * the authenticated ServiceNow user's
+ * timezone, NOT the laptop timezone.
+ */
+if (
+    currentMeetingTimezone &&
+    scheduleMeetingStart &&
+    scheduleMeetingEnd
+) {
+
+    const now =
+        new Date();
+
+    /*
+     * Default start = 5 minutes from now.
+     */
+    const defaultStart =
+        new Date(
+            now.getTime() +
+            (5 * 60 * 1000)
+        );
+
+    /*
+     * Default end = 35 minutes from now,
+     * giving a 30-minute meeting.
+     */
+    const defaultEnd =
+        new Date(
+            now.getTime() +
+            (35 * 60 * 1000)
+        );
+
+
+    scheduleMeetingStart.value =
+        getDateTimeLocalValueInTimezone(
+            defaultStart,
+            currentMeetingTimezone
+        );
+
+
+    scheduleMeetingEnd.value =
+        getDateTimeLocalValueInTimezone(
+            defaultEnd,
+            currentMeetingTimezone
+        );
+
+} else {
+
+    if (scheduleMeetingStart) {
+        scheduleMeetingStart.value = '';
+    }
+
+    if (scheduleMeetingEnd) {
+        scheduleMeetingEnd.value = '';
+    }
+}
+
+    selectedMeetingPeople = [];
+
+    if (scheduleMeetingPeopleSearch) {
+        scheduleMeetingPeopleSearch.value = '';
+    }
+
+    if (scheduleMeetingPeopleResults) {
+        scheduleMeetingPeopleResults.innerHTML = '';
+        scheduleMeetingPeopleResults.style.display = 'none';
+    }
+
+    if (scheduleMeetingSelectedPeople) {
+
+        scheduleMeetingSelectedPeople.innerHTML = `
+            <div
+                id="scheduleMeetingNoPeople"
+                class="schedule-meeting-no-people"
+            >
+                No people selected.
+            </div>
+        `;
+    }
+
+    if (scheduleMeetingMessage) {
+        scheduleMeetingMessage.textContent = '';
+    }
+
+
+    scheduleMeetingModal.classList.add(
+        'open'
+    );
+
+    scheduleMeetingModal.setAttribute(
+        'aria-hidden',
+        'false'
+    );
+
+
+    /*
+     * Put the cursor directly in Title.
+     */
+
+    setTimeout(
+        () => {
+
+            if (scheduleMeetingTitle) {
+                scheduleMeetingTitle.focus();
+            }
+
+        },
+        0
+    );
+}
+
+
+function closeScheduleMeetingModal() {
+
+    if (!scheduleMeetingModal) {
+        return;
+    }
+
+
+    scheduleMeetingModal.classList.remove(
+        'open'
+    );
+
+    scheduleMeetingModal.setAttribute(
+        'aria-hidden',
+        'true'
+    );
+
+
+    if (scheduleMeetingPeopleResults) {
+        scheduleMeetingPeopleResults.style.display =
+            'none';
+    }
+}
+
+
+function meetingDisplayValueToDateTimeLocal(
+    value
+) {
+
+    const text =
+        String(
+            value || ''
+        ).trim();
+
+
+    if (!text) {
+        return '';
+    }
+
+    return text
+        .replace(
+            ' ',
+            'T'
+        )
+        .substring(
+            0,
+            16
+        );
+}
+
+async function openEditMeetingModal(
+    meetingSysId
+) {
+
+    if (
+        !meetingSysId ||
+        !scheduleMeetingModal
+    ) {
+        return;
+    }
+
+
+    /*
+     * EDIT mode.
+     */
+    meetingFormMode =
+        'edit';
+
+    editingMeetingSysId =
+        meetingSysId;
+
+
+    /*
+     * Change the existing modal UI.
+     */
+    if (scheduleMeetingHeading) {
+
+        scheduleMeetingHeading.textContent =
+            'Edit Meeting';
+    }
+
+
+    if (scheduleMeetingSubtitle) {
+
+        scheduleMeetingSubtitle.textContent =
+            'Update this ServiceCall meeting.';
+    }
+
+
+    if (scheduleMeetingSubmitButton) {
+
+        scheduleMeetingSubmitButton.textContent =
+            'Loading...';
+
+        scheduleMeetingSubmitButton.disabled =
+            true;
+    }
+
+
+    if (scheduleMeetingMessage) {
+
+        scheduleMeetingMessage.textContent =
+            '';
+    }
+
+
+    /*
+     * Clear old participant search results.
+     */
+    if (scheduleMeetingPeopleSearch) {
+
+        scheduleMeetingPeopleSearch.value =
+            '';
+    }
+
+
+    if (scheduleMeetingPeopleResults) {
+
+        scheduleMeetingPeopleResults.innerHTML =
+            '';
+
+        scheduleMeetingPeopleResults.style.display =
+            'none';
+    }
+
+
+    /*
+     * Open modal immediately while details load.
+     */
+    scheduleMeetingModal.classList.add(
+        'open'
+    );
+
+    scheduleMeetingModal.setAttribute(
+        'aria-hidden',
+        'false'
+    );
+
+
+    try {
+
+        const result =
+            await window
+                .serviceCall
+                .getMeetingDetails(
+                    meetingSysId
+                );
+
+
+        if (
+            !result ||
+            result.success !== true
+        ) {
+
+            throw new Error(
+                result &&
+                result.message
+                    ? result.message
+                    : 'Unable to load meeting.'
+            );
+        }
+
+
+        console.log(
+            'Editing meeting:',
+            result
+        );
+
+
+        /*
+         * Title + Description
+         */
+        if (scheduleMeetingTitle) {
+
+            scheduleMeetingTitle.value =
+                result.title || '';
+        }
+
+
+        if (scheduleMeetingDescription) {
+
+            scheduleMeetingDescription.value =
+                result.description || '';
+        }
+
+
+        /*
+         * Meeting Details API currently returns:
+         *
+         * YYYY-MM-DD HH:mm:ss
+         *
+         * datetime-local requires:
+         *
+         * YYYY-MM-DDTHH:mm
+         */
+        if (scheduleMeetingStart) {
+
+            scheduleMeetingStart.value =
+                meetingDisplayValueToDateTimeLocal(
+                    result.scheduled_start
+                );
+        }
+
+
+        if (scheduleMeetingEnd) {
+
+            scheduleMeetingEnd.value =
+                meetingDisplayValueToDateTimeLocal(
+                    result.scheduled_end
+                );
+        }
+
+
+        /*
+         * Display authenticated user's
+         * ServiceNow timezone.
+         */
+        if (scheduleMeetingTimezone) {
+
+            scheduleMeetingTimezone.textContent =
+                currentMeetingTimezone ||
+                'Unavailable';
+        }
+
+
+        /*
+         * Populate existing attendees.
+         *
+         * Do not add the organizer as a
+         * selectable attendee.
+         */
+        selectedMeetingPeople =
+            Array.isArray(
+                result.participants
+            )
+                ? result.participants
+                    .filter(
+                        participant =>
+                            participant.role !==
+                            'organizer'
+                    )
+                    .map(
+                        participant => ({
+                            sys_id:
+                                participant.user_sys_id,
+
+                            name:
+                                participant.user_name
+                        })
+                    )
+                : [];
+
+
+        /*
+         * Re-render selected participant chips.
+         */
+        renderSelectedMeetingPeople();
+
+
+        if (scheduleMeetingSubmitButton) {
+
+            scheduleMeetingSubmitButton.disabled =
+                false;
+
+            scheduleMeetingSubmitButton.textContent =
+                'Save Changes';
+        }
+
+
+        if (scheduleMeetingTitle) {
+
+            scheduleMeetingTitle.focus();
+        }
+
+
+    } catch (error) {
+
+        console.error(
+            'Unable to open Edit Meeting:',
+            error
+        );
+
+
+        if (scheduleMeetingMessage) {
+
+            scheduleMeetingMessage.textContent =
+                error.message ||
+                'Unable to load meeting.';
+        }
+
+
+        if (scheduleMeetingSubmitButton) {
+
+            scheduleMeetingSubmitButton.disabled =
+                true;
+
+            scheduleMeetingSubmitButton.textContent =
+                'Save Changes';
+        }
+    }
+}
+
+
+function openMeetingDetailsModal(
+    details
+) {
+
+    if (!meetingDetailsModal) {
+        return;
+    }
+
+    /*
+     * Remember the meeting currently
+     * displayed in the Details modal.
+     */
+    currentMeetingDetails =
+        details;
+
+    console.log('ServiceCall Meeting Details:', details);
+
+
+    /*
+     * Reset the contextual action button.
+     *
+     * We will determine its exact action
+     * from the meeting state/permissions next.
+     */
+    if (meetingDetailsActionButton) {
+
+        meetingDetailsActionButton.style.display =
+            'none';
+
+        meetingDetailsActionButton.disabled =
+            false;
+
+        meetingDetailsActionButton.textContent =
+            'Join Meeting';
+    }
+
+    /* -------------------------
+   PRIMARY MEETING ACTION
+------------------------- */
+
+if (meetingDetailsActionButton) {
+
+    if (
+        details.can_start === true
+    ) {
+
+        meetingDetailsActionButton.textContent =
+            'Start Meeting';
+
+        meetingDetailsActionButton.style.display =
+            '';
+
+    }
+    else if (
+        details.can_join === true
+    ) {
+
+        meetingDetailsActionButton.textContent =
+            'Join Meeting';
+
+        meetingDetailsActionButton.style.display =
+            '';
+
+    }
+}
+
+    /* -------------------------
+       BASIC INFORMATION
+    ------------------------- */
+
+    meetingDetailsNumber.textContent =
+        formatMeetingDetailsValue(
+            details.meeting_number
+        );
+
+
+    meetingDetailsHeading.textContent =
+        formatMeetingDetailsValue(
+            details.title
+        );
+
+
+    meetingDetailsStatus.textContent =
+        formatMeetingDetailsStatus(
+            details.state
+        );
+
+
+    meetingDetailsDescription.textContent =
+        String(
+            details.description || ''
+        ).trim() ||
+        'No description.';
+
+
+    meetingDetailsOrganizer.textContent =
+        formatMeetingDetailsValue(
+            details.organizer_name
+        );
+
+    meetingDetailsStart.textContent =
+        formatMeetingDetailsValue(
+            details.scheduled_start
+        );
+
+
+    meetingDetailsEnd.textContent =
+        formatMeetingDetailsValue(
+            details.scheduled_end
+        );
+
+
+    /* -------------------------
+       STARTED INFORMATION
+    ------------------------- */
+
+    const hasStartedBy =
+        Boolean(
+            String(
+                details.started_by_name ||
+                ''
+            ).trim()
+        );
+
+
+    const hasStartedAt =
+        Boolean(
+            String(
+                details.started_at ||
+                ''
+            ).trim()
+        );
+
+
+    const hasEndedAt =
+        Boolean(
+            String(
+                details.ended_at ||
+                ''
+            ).trim()
+        );
+
+
+    meetingDetailsStartedByField.style.display =
+        hasStartedBy
+            ? ''
+            : 'none';
+
+
+    meetingDetailsStartedAtField.style.display =
+        hasStartedAt
+            ? ''
+            : 'none';
+
+
+    meetingDetailsEndedAtField.style.display =
+        hasEndedAt
+            ? ''
+            : 'none';
+
+
+    meetingDetailsStartedBy.textContent =
+        formatMeetingDetailsValue(
+            details.started_by_name
+        );
+
+
+    meetingDetailsStartedAt.textContent =
+        formatMeetingDetailsValue(
+            details.started_at
+        );
+
+
+    meetingDetailsEndedAt.textContent =
+        formatMeetingDetailsValue(
+            details.ended_at
+        );
+
+
+    /* -------------------------
+       PARTICIPANTS
+    ------------------------- */
+
+    const participants =
+        Array.isArray(
+            details.participants
+        )
+            ? details.participants
+            : [];
+
+
+    meetingDetailsParticipantCount.textContent =
+        String(
+            participants.length
+        );
+
+
+    meetingDetailsParticipants.innerHTML =
+        '';
+
+
+    if (
+        participants.length === 0
+    ) {
+
+        const empty =
+            document.createElement(
+                'div'
+            );
+
+        empty.className =
+            'meeting-details-empty';
+
+        empty.textContent =
+            'No participants.';
+
+        meetingDetailsParticipants.appendChild(
+            empty
+        );
+
+    } else {
+
+        participants.forEach(
+            participant => {
+
+                const row =
+                    document.createElement(
+                        'div'
+                    );
+
+                row.className =
+                    'meeting-details-participant';
+
+
+                /* -----------------
+                   PERSON
+                ----------------- */
+
+                const main =
+                    document.createElement(
+                        'div'
+                    );
+
+                main.className =
+                    'meeting-details-participant-main';
+
+
+                const name =
+                    document.createElement(
+                        'div'
+                    );
+
+                name.className =
+                    'meeting-details-participant-name';
+
+                name.textContent =
+                    formatMeetingDetailsValue(
+                        participant.user_name
+                    );
+
+
+                const role =
+                    document.createElement(
+                        'div'
+                    );
+
+                role.className =
+                    'meeting-details-participant-role';
+
+                role.textContent =
+                    formatMeetingDetailsStatus(
+                        participant.role
+                    );
+
+
+                main.appendChild(
+                    name
+                );
+
+                main.appendChild(
+                    role
+                );
+
+
+                /* -----------------
+                   STATUSES
+                ----------------- */
+
+                const statuses =
+                    document.createElement(
+                        'div'
+                    );
+
+                statuses.className =
+                    'meeting-details-participant-statuses';
+
+
+                if (
+                    participant.invitation_status
+                ) {
+
+                    const invitationBadge =
+                        document.createElement(
+                            'span'
+                        );
+
+                    invitationBadge.className =
+                        'meeting-details-badge';
+
+                    invitationBadge.textContent =
+                        formatMeetingDetailsStatus(
+                            participant.invitation_status
+                        );
+
+                    statuses.appendChild(
+                        invitationBadge
+                    );
+                }
+
+
+                if (
+                    participant.join_status
+                ) {
+
+                    const joinBadge =
+                        document.createElement(
+                            'span'
+                        );
+
+                    joinBadge.className =
+                        'meeting-details-badge';
+
+                    joinBadge.textContent =
+                        formatMeetingDetailsStatus(
+                            participant.join_status
+                        );
+
+                    statuses.appendChild(
+                        joinBadge
+                    );
+                }
+
+
+                row.appendChild(
+                    main
+                );
+
+                row.appendChild(
+                    statuses
+                );
+
+
+                meetingDetailsParticipants.appendChild(
+                    row
+                );
+            }
+        );
+    }
+
+
+    /* -------------------------
+       OPEN
+    ------------------------- */
+
+    meetingDetailsModal.classList.add(
+        'open'
+    );
+
+    meetingDetailsModal.setAttribute(
+        'aria-hidden',
+        'false'
+    );
+}
+
+/* =========================================
+   MEETING DETAILS PRIMARY ACTION
+========================================= */
+
+if (meetingDetailsActionButton) {
+
+    meetingDetailsActionButton.addEventListener(
+        'click',
+        async () => {
+
+            if (
+                !currentMeetingDetails ||
+                !currentMeetingDetails.meeting_sys_id
+            ) {
+                return;
+            }
+
+
+            const meetingSysId =
+                currentMeetingDetails.meeting_sys_id;
+
+
+            meetingDetailsActionButton.disabled =
+                true;
+
+
+            try {
+
+                /* -------------------------
+                   START MEETING
+                ------------------------- */
+
+                if (
+                    currentMeetingDetails.can_start ===
+                    true
+                ) {
+
+                    meetingDetailsActionButton.textContent =
+                        'Starting...';
+
+
+                    const result =
+                        await window.serviceCall
+                            .startMeeting(
+                                meetingSysId
+                            );
+
+
+                    if (
+                        !result ||
+                        result.success !== true
+                    ) {
+
+                        throw new Error(
+                            result &&
+                            result.message
+                                ? result.message
+                                : 'Unable to start meeting.'
+                        );
+                    }
+
+
+                    /*
+                     * main.js already opens the
+                     * connected meeting call window.
+                     */
+
+                    meetingDetailsModal.classList.remove(
+                        'open'
+                    );
+
+                    meetingDetailsModal.setAttribute(
+                        'aria-hidden',
+                        'true'
+                    );
+
+
+                    currentMeetingDetails =
+                        null;
+
+
+                    await loadMeetings(true);
+
+                    return;
+                }
+
+
+                /* -------------------------
+                   JOIN MEETING
+                ------------------------- */
+
+                if (
+                    currentMeetingDetails.can_join ===
+                    true
+                ) {
+
+                    meetingDetailsActionButton.textContent =
+                        'Joining...';
+
+
+                    const result =
+                        await window.serviceCall
+                            .joinMeeting(
+                                meetingSysId
+                            );
+
+
+                    if (
+                        !result ||
+                        result.success !== true
+                    ) {
+
+                        throw new Error(
+                            result &&
+                            result.message
+                                ? result.message
+                                : 'Unable to join meeting.'
+                        );
+                    }
+
+
+                    meetingDetailsModal.classList.remove(
+                        'open'
+                    );
+
+                    meetingDetailsModal.setAttribute(
+                        'aria-hidden',
+                        'true'
+                    );
+
+
+                    currentMeetingDetails =
+                        null;
+
+
+                    await loadMeetings(true);
+
+                    return;
+                }
+
+            } catch (error) {
+
+                console.error(
+                    'Meeting details action failed:',
+                    error
+                );
+
+
+                /*
+                 * Re-fetch the meeting because its
+                 * state may have changed on the server.
+                 */
+                try {
+
+                    const refreshed =
+                        await window.serviceCall
+                            .getMeetingDetails(
+                                meetingSysId
+                            );
+
+
+                    if (
+                        refreshed &&
+                        refreshed.success === true
+                    ) {
+
+                        openMeetingDetailsModal(
+                            refreshed
+                        );
+
+                        return;
+                    }
+
+                } catch (refreshError) {
+
+                    console.error(
+                        'Unable to refresh meeting details:',
+                        refreshError
+                    );
+                }
+
+
+                meetingDetailsActionButton.textContent =
+                    'Try Again';
+
+            } finally {
+
+                meetingDetailsActionButton.disabled =
+                    false;
+            }
+        }
+    );
+}
+
+/* =================================================
+   COPY MEETING LINK
+================================================= */
+
+async function copyMeetingLink(
+    meetingSysId
+) {
+
+    if (!meetingSysId) {
+        return false;
+    }
+
+
+    const meetingLink =
+        'servicecall://meeting/' +
+        encodeURIComponent(
+            meetingSysId
+        );
+
+
+    try {
+
+        await navigator.clipboard.writeText(
+            meetingLink
+        );
+
+
+        console.log(
+            'Meeting link copied:',
+            meetingLink
+        );
+
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            'Unable to copy meeting link:',
+            error
+        );
+
+
+        return false;
+    }
+}
+
+/* =================================================
+   OPEN MEETING FROM DEEP LINK
+================================================= */
+
+async function openMeetingFromDeepLink(
+    meetingSysId
+) {
+
+    const cleanMeetingSysId =
+        String(
+            meetingSysId || ''
+        ).trim();
+
+
+    /*
+     * ServiceNow sys_id must be
+     * exactly 32 hexadecimal characters.
+     */
+    if (
+        !/^[0-9a-f]{32}$/i.test(
+            cleanMeetingSysId
+        )
+    ) {
+
+        console.error(
+            'Invalid ServiceCall meeting link.'
+        );
+
+        return;
+    }
+
+
+    try {
+
+        /*
+         * ServiceNow remains the security
+         * authority.
+         *
+         * Knowing a meeting sys_id does NOT
+         * automatically grant access.
+         */
+        const result =
+            await window
+                .serviceCall
+                .getMeetingDetails(
+                    cleanMeetingSysId
+                );
+
+
+        if (
+            !result ||
+            result.success !== true
+        ) {
+
+            throw new Error(
+                result &&
+                result.message
+                    ? result.message
+                    : 'Unable to retrieve meeting details.'
+            );
+        }
+
+
+        /*
+         * Reuse the exact same Details UI
+         * used by the View Details button.
+         */
+        openMeetingDetailsModal(
+            result
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            'Unable to open meeting link:',
+            error
+        );
+
+
+        if (message) {
+
+            message.textContent =
+                error.message ||
+                'Unable to open this meeting.';
+        }
+    }
+}
         /* -------------------------------------------------
            RENDER MEETING
         ------------------------------------------------- */
@@ -687,6 +2240,210 @@ document.addEventListener(
                     '.meeting-actions'
                 );
 
+            /* =========================================
+   VIEW MEETING DETAILS
+========================================= */
+
+const detailsButton =
+    document.createElement(
+        'button'
+    );
+
+
+detailsButton.type =
+    'button';
+
+detailsButton.className =
+    'secondary-button';
+
+detailsButton.textContent =
+    'View Details';
+
+
+detailsButton.addEventListener(
+    'click',
+
+    async () => {
+
+        detailsButton.disabled =
+            true;
+
+        detailsButton.textContent =
+            'Loading...';
+
+
+        try {
+
+            const result =
+                await window
+                    .serviceCall
+                    .getMeetingDetails(
+                        meeting.meeting_sys_id
+                    );
+
+
+            if (
+                !result ||
+                result.success !== true
+            ) {
+
+                throw new Error(
+                    result &&
+                    result.message
+                        ? result.message
+                        : 'Unable to retrieve meeting details.'
+                );
+            }
+
+
+            /*
+             * Temporary runtime test.
+             *
+             * Once confirmed, we'll replace
+             * this with the actual Details UI.
+             */
+            openMeetingDetailsModal(result);
+
+
+        } catch (error) {
+
+            console.error(
+                'Meeting details failed:',
+                error
+            );
+
+
+            if (message) {
+
+                message.textContent =
+                    error.message ||
+                    'Unable to retrieve meeting details.';
+            }
+
+
+        } finally {
+
+            detailsButton.disabled =
+                false;
+
+            detailsButton.textContent =
+                'View Details';
+        }
+    }
+);
+
+
+actions.appendChild(
+    detailsButton
+);
+
+/* -----------------------------------------
+   COPY MEETING LINK
+----------------------------------------- */
+
+const copyLinkButton =
+    document.createElement(
+        'button'
+    );
+
+
+copyLinkButton.className =
+    'secondary-button';
+
+
+copyLinkButton.textContent =
+    'Copy Link';
+
+
+copyLinkButton.addEventListener(
+    'click',
+    async () => {
+
+        const copied =
+            await copyMeetingLink(
+                meeting.meeting_sys_id
+            );
+
+
+        if (!copied) {
+
+            copyLinkButton.textContent =
+                'Copy failed';
+
+
+            setTimeout(
+                () => {
+
+                    copyLinkButton.textContent =
+                        'Copy Link';
+
+                },
+                1500
+            );
+
+
+            return;
+        }
+
+
+        copyLinkButton.textContent =
+            'Copied!';
+
+
+        setTimeout(
+            () => {
+
+                copyLinkButton.textContent =
+                    'Copy Link';
+
+            },
+            1500
+        );
+    }
+);
+
+
+actions.appendChild(
+    copyLinkButton
+);
+
+/* =========================================
+   EDIT MEETING
+========================================= */
+
+if (
+    meeting.can_edit === true
+) {
+
+    const button =
+        document.createElement(
+            'button'
+        );
+
+    button.className =
+        'secondary-button';
+
+    button.textContent =
+        'Edit';
+
+
+    button.addEventListener(
+    'click',
+
+    async () => {
+
+        await openEditMeetingModal(
+            meeting.meeting_sys_id
+        );
+    }
+);
+
+
+    actions.appendChild(
+        button
+    );
+}
+
 
             if (
     meeting.can_start === true
@@ -753,7 +2510,7 @@ document.addEventListener(
                  * changes from Scheduled to
                  * In Progress.
                  */
-                await loadMeetings();
+                await loadMeetings(true);
 
 
             } catch (error) {
@@ -850,7 +2607,7 @@ document.addEventListener(
                  * can_join / can_leave may
                  * now have changed.
                  */
-                await loadMeetings();
+                await loadMeetings(true);
 
 
             } catch (error) {
@@ -943,7 +2700,7 @@ document.addEventListener(
                 );
 
 
-                await loadMeetings();
+                await loadMeetings(true);
 
 
             } catch (error) {
@@ -1045,7 +2802,7 @@ document.addEventListener(
                  * display as Ended and its live
                  * action buttons disappear.
                  */
-                await loadMeetings();
+                await loadMeetings(true);
 
 
             } catch (error) {
@@ -1143,7 +2900,7 @@ if (
                  * State should now be Cancelled
                  * and Start / Cancel disappear.
                  */
-                await loadMeetings();
+                await loadMeetings(true);
 
 
             } catch (error) {
@@ -1181,23 +2938,564 @@ if (
             return card;
         }
 
+        if (
+    meetingDetailsCloseButton
+) {
+
+    meetingDetailsCloseButton.addEventListener(
+        'click',
+        closeMeetingDetailsModal
+    );
+}
+
+
+if (
+    meetingDetailsFooterCloseButton
+) {
+
+    meetingDetailsFooterCloseButton.addEventListener(
+        'click',
+        closeMeetingDetailsModal
+    );
+}
+
+
+if (
+    meetingDetailsModal
+) {
+
+    meetingDetailsModal.addEventListener(
+        'click',
+        event => {
+
+            if (
+                event.target.hasAttribute(
+                    'data-meeting-details-close'
+                )
+            ) {
+
+                closeMeetingDetailsModal();
+            }
+        }
+    );
+}
+
+document.addEventListener(
+    'keydown',
+    event => {
+
+        if (
+            event.key !== 'Escape'
+        ) {
+            return;
+        }
+
+
+        if (
+            scheduleMeetingModal &&
+            scheduleMeetingModal.classList.contains(
+                'open'
+            )
+        ) {
+
+            closeScheduleMeetingModal();
+
+            return;
+        }
+
+
+        if (
+            meetingDetailsModal &&
+            meetingDetailsModal.classList.contains(
+                'open'
+            )
+        ) {
+
+            closeMeetingDetailsModal();
+        }
+    }
+);
+        /* -------------------------------------------------
+   RENDER MEETING PAGINATION
+------------------------------------------------- */
+
+function renderMeetingPagination(
+    result
+) {
+
+    if (!meetingPagination) {
+        return;
+    }
+
+
+    meetingPagination.innerHTML =
+        '';
+
+
+    const totalPages =
+        parseInt(
+            result.total_pages,
+            10
+        ) || 0;
+
+
+    const currentPage =
+        parseInt(
+            result.current_page,
+            10
+        ) || 1;
+
+
+    /*
+     * No pagination is necessary when
+     * there is only one page.
+     */
+    if (totalPages <= 1) {
+        return;
+    }
+
+
+    /* -----------------------------
+       PREVIOUS
+    ----------------------------- */
+
+    const previousButton =
+        document.createElement(
+            'button'
+        );
+
+
+    previousButton.type =
+        'button';
+
+    previousButton.className =
+        'meeting-page-button';
+
+    previousButton.textContent =
+        '‹ Previous';
+
+    previousButton.disabled =
+        currentPage <= 1;
+
+
+    previousButton.addEventListener(
+        'click',
+        async () => {
+
+            if (currentPage <= 1) {
+                return;
+            }
+
+
+            currentMeetingPage =
+                currentPage - 1;
+
+
+            await loadMeetings();
+        }
+    );
+
+
+    meetingPagination.appendChild(
+        previousButton
+    );
+
+
+   /* -----------------------------
+   PAGE NUMBERS
+----------------------------- */
+
+function addPageButton(
+    pageNumber
+) {
+
+    const pageButton =
+        document.createElement(
+            'button'
+        );
+
+
+    pageButton.type =
+        'button';
+
+    pageButton.className =
+        'meeting-page-button';
+
+    pageButton.textContent =
+        String(
+            pageNumber
+        );
+
+
+    if (
+        pageNumber ===
+        currentPage
+    ) {
+
+        pageButton.classList.add(
+            'active'
+        );
+
+        pageButton.disabled =
+            true;
+    }
+
+
+    pageButton.addEventListener(
+        'click',
+        async () => {
+
+            if (
+                pageNumber ===
+                currentPage
+            ) {
+                return;
+            }
+
+
+            currentMeetingPage =
+                pageNumber;
+
+
+            await loadMeetings();
+        }
+    );
+
+
+    meetingPagination.appendChild(
+        pageButton
+    );
+}
+
+
+function addEllipsis() {
+
+    const ellipsis =
+        document.createElement(
+            'span'
+        );
+
+
+    ellipsis.className =
+        'meeting-page-info';
+
+    ellipsis.textContent =
+        '…';
+
+
+    meetingPagination.appendChild(
+        ellipsis
+    );
+}
+
+
+/*
+ * Small number of pages:
+ *
+ * 1 2 3 4 5
+ */
+if (
+    totalPages <= 5
+) {
+
+    for (
+        let pageNumber = 1;
+        pageNumber <= totalPages;
+        pageNumber++
+    ) {
+
+        addPageButton(
+            pageNumber
+        );
+    }
+
+}
+
+
+/*
+ * Near the beginning:
+ *
+ * 1 2 3 … 15
+ */
+else if (
+    currentPage <= 3
+) {
+
+    addPageButton(1);
+    addPageButton(2);
+    addPageButton(3);
+
+    addEllipsis();
+
+    addPageButton(
+        totalPages
+    );
+
+}
+
+
+/*
+ * Near the end:
+ *
+ * 1 … 13 14 15
+ */
+else if (
+    currentPage >=
+    totalPages - 2
+) {
+
+    addPageButton(1);
+
+    addEllipsis();
+
+    addPageButton(
+        totalPages - 2
+    );
+
+    addPageButton(
+        totalPages - 1
+    );
+
+    addPageButton(
+        totalPages
+    );
+
+}
+
+
+/*
+ * Somewhere in the middle:
+ *
+ * 1 … 7 8 9 … 15
+ */
+else {
+
+    addPageButton(1);
+
+    addEllipsis();
+
+    addPageButton(
+        currentPage - 1
+    );
+
+    addPageButton(
+        currentPage
+    );
+
+    addPageButton(
+        currentPage + 1
+    );
+
+    addEllipsis();
+
+    addPageButton(
+        totalPages
+    );
+}
+
+    /* -----------------------------
+       NEXT
+    ----------------------------- */
+
+    const nextButton =
+        document.createElement(
+            'button'
+        );
+
+
+    nextButton.type =
+        'button';
+
+    nextButton.className =
+        'meeting-page-button';
+
+    nextButton.textContent =
+        'Next ›';
+
+    nextButton.disabled =
+        currentPage >=
+        totalPages;
+
+
+    nextButton.addEventListener(
+        'click',
+        async () => {
+
+            if (
+                currentPage >=
+                totalPages
+            ) {
+                return;
+            }
+
+
+            currentMeetingPage =
+                currentPage + 1;
+
+
+            await loadMeetings();
+        }
+    );
+
+
+    meetingPagination.appendChild(
+        nextButton
+    );
+
+
+    /* -----------------------------
+       PAGE INFORMATION
+    ----------------------------- */
+
+    const pageInfo =
+        document.createElement(
+            'span'
+        );
+
+
+    pageInfo.className =
+        'meeting-page-info';
+
+
+    pageInfo.textContent =
+        'Page ' +
+        currentPage +
+        ' of ' +
+        totalPages;
+
+
+    meetingPagination.appendChild(
+        pageInfo
+    );
+}
+
+/* -------------------------------------------------
+   MEETINGS AUTO REFRESH
+------------------------------------------------- */
+
+function startMeetingsAutoRefresh() {
+
+    /*
+     * Prevent multiple timers from
+     * being created.
+     */
+    if (meetingsAutoRefreshTimer) {
+        return;
+    }
+
+
+    meetingsAutoRefreshTimer =
+        setInterval(
+            async () => {
+
+                /*
+                 * Refresh only when the
+                 * Meetings page is actually open.
+                 */
+                const meetingsView =
+                    document.getElementById(
+                        'meetingsView'
+                    );
+
+
+                if (
+                    !meetingsView ||
+                    !meetingsView.classList.contains(
+                        'active'
+                    )
+                ) {
+                    return;
+                }
+
+
+                /*
+                 * Don't disturb the user while
+                 * the Schedule Meeting modal
+                 * is open.
+                 */
+                if (
+                    scheduleMeetingModal &&
+                    scheduleMeetingModal.classList.contains(
+                        'open'
+                    )
+                ) {
+                    return;
+                }
+
+
+                try {
+
+                    console.log(
+                        'Auto-refreshing meetings...'
+                    );
+
+                    await loadMeetings(true);
+
+                } catch (error) {
+
+                    console.error(
+                        'Meeting auto-refresh failed:',
+                        error
+                    );
+                }
+
+            },
+            15000
+        );
+}
+
+
+function stopMeetingsAutoRefresh() {
+
+    if (!meetingsAutoRefreshTimer) {
+        return;
+    }
+
+
+    clearInterval(
+        meetingsAutoRefreshTimer
+    );
+
+
+    meetingsAutoRefreshTimer = null;
+}
+
 
         /* -------------------------------------------------
            LOAD MEETINGS
         ------------------------------------------------- */
 
-        async function loadMeetings() {
+        async function loadMeetings(
+    silent = false
+) {
 
-            if (!meetingsContainer) {
-                return;
-            }
+    if (!meetingsContainer) {
+        return;
+    }
 
 
-            meetingsContainer.innerHTML = `
-                <div class="loading">
-                    Loading your meetings...
-                </div>
-            `;
+    /*
+     * Normal/manual load:
+     * show loading state.
+     *
+     * Background refresh:
+     * keep the existing UI visible.
+     */
+    if (!silent) {
+
+        if (meetingPagination) {
+
+            meetingPagination.innerHTML =
+                '';
+        }
+
+
+        meetingsContainer.innerHTML = `
+            <div class="loading">
+                Loading your meetings...
+            </div>
+        `;
+    }
 
 
             try {
@@ -1205,47 +3503,99 @@ if (
                 const result =
                     await window
                         .serviceCall
-                        .getMyMeetings();
-
+                        .getMyMeetings(currentMeetingPage, currentMeetingSearch, currentMeetingStatus);
 
                 if (
-                    !result ||
-                    result.success !== true
-                ) {
+    !result ||
+    result.success !== true
+) {
 
-                    throw new Error(
-                        result &&
-                        result.message
-                            ? result.message
-                            : 'Unable to retrieve meetings.'
-                    );
-                }
+    throw new Error(
+        result &&
+        result.message
+            ? result.message
+            : 'Unable to retrieve meetings.'
+    );
+}
 
 
-                const meetings =
-                    Array.isArray(
-                        result.meetings
-                    )
-                        ? result.meetings
-                        : [];
+/*
+ * Save the authenticated user's
+ * ServiceNow timezone.
+ */
+currentMeetingTimezone =
+    String(
+        result.user_timezone ||
+        ''
+    ).trim();
+
+    console.log(
+    'ServiceNow user timezone:',
+    currentMeetingTimezone
+);
+
+
+if (scheduleMeetingTimezone) {
+
+    scheduleMeetingTimezone.textContent =
+        currentMeetingTimezone ||
+        'Unavailable';
+}
+
+
+const meetings =
+    Array.isArray(
+        result.meetings
+    )
+        ? result.meetings
+        : [];
+
+                currentMeetingPage =
+    parseInt(
+        result.current_page,
+        10
+    ) || 1;
+
+
+renderMeetingPagination(
+    result
+);
 
 
                 meetingsContainer.innerHTML =
                     '';
 
 
-                if (
-                    meetings.length === 0
-                ) {
+               if (
+    meetings.length === 0
+) {
 
-                    meetingsContainer.innerHTML = `
-                        <div class="empty-state">
-                            You don't have any ServiceCall meetings yet.
-                        </div>
-                    `;
+    /*
+     * Search and/or status filter is active.
+     */
+    if (
+        currentMeetingSearch ||
+        currentMeetingStatus
+    ) {
 
-                    return;
-                }
+        meetingsContainer.innerHTML = `
+            <div class="empty-state">
+                No meetings found.
+            </div>
+        `;
+
+    } else {
+
+        meetingsContainer.innerHTML = `
+            <div class="empty-state">
+                You don't have any ServiceCall meetings yet.
+            </div>
+        `;
+    }
+
+
+    return;
+}
 
 
                 meetings.forEach(
@@ -1262,20 +3612,179 @@ if (
 
             } catch (error) {
 
-                console.error(
-                    'Unable to load meetings:',
-                    error
-                );
+    console.error(
+        'Unable to load meetings:',
+        error
+    );
 
 
-                meetingsContainer.innerHTML = `
-                    <div class="empty-state">
-                        Unable to load your meetings.
-                    </div>
-                `;
-            }
+    /*
+     * During a silent background refresh,
+     * keep the existing meeting cards visible.
+     */
+    if (!silent) {
+
+        meetingsContainer.innerHTML = `
+            <div class="empty-state">
+                Unable to load your meetings.
+            </div>
+        `;
+    }
+}
         }
 
+
+/* -------------------------------------------------
+   MEETING SEARCH
+------------------------------------------------- */
+
+if (meetingSearchInput) {
+
+    meetingSearchInput.addEventListener(
+        'input',
+        () => {
+
+            const searchValue =
+                meetingSearchInput
+                    .value
+                    .trim();
+
+
+            /*
+             * Show the clear button whenever
+             * something has been entered.
+             */
+            if (meetingSearchClear) {
+
+                meetingSearchClear.style.display =
+                    searchValue
+                        ? 'flex'
+                        : 'none';
+            }
+
+
+            /*
+             * Cancel the previous pending search.
+             *
+             * This prevents an API request for
+             * every individual keystroke.
+             */
+            if (meetingSearchTimer) {
+
+                clearTimeout(
+                    meetingSearchTimer
+                );
+            }
+
+
+            meetingSearchTimer =
+                setTimeout(
+                    async () => {
+
+                        currentMeetingSearch =
+                            searchValue;
+
+
+                        /*
+                         * Every new search begins
+                         * from page 1.
+                         */
+                        currentMeetingPage =
+                            1;
+
+
+                        await loadMeetings();
+
+                    },
+                    300
+                );
+        }
+    );
+}
+
+if (meetingSearchClear) {
+
+    meetingSearchClear.addEventListener(
+        'click',
+        async () => {
+
+            if (meetingSearchTimer) {
+
+                clearTimeout(
+                    meetingSearchTimer
+                );
+
+                meetingSearchTimer =
+                    null;
+            }
+
+
+            if (meetingSearchInput) {
+
+                meetingSearchInput.value =
+                    '';
+
+                meetingSearchInput.focus();
+            }
+
+
+            meetingSearchClear.style.display =
+                'none';
+
+
+            currentMeetingSearch =
+                '';
+
+            currentMeetingPage =
+                1;
+
+
+            await loadMeetings();
+        }
+    );
+}
+
+/* -------------------------------------------------
+   MEETING STATUS FILTER
+------------------------------------------------- */
+
+if (meetingStatusFilter) {
+
+    meetingStatusFilter.addEventListener(
+        'change',
+        async () => {
+
+            /*
+             * Values come directly from the
+             * dropdown:
+             *
+             * ''            = All
+             * scheduled     = Scheduled
+             * in progress   = In Progress
+             * ended         = Ended
+             * cancelled     = Cancelled
+             */
+            currentMeetingStatus =
+                String(
+                    meetingStatusFilter.value ||
+                    ''
+                )
+                    .toLowerCase()
+                    .trim();
+
+
+            /*
+             * A new filter always begins
+             * from page 1.
+             */
+            currentMeetingPage =
+                1;
+
+
+            await loadMeetings();
+        }
+    );
+}
         
 /* =======================================================
    MEETING CHANGE REFRESH
@@ -1297,7 +3806,7 @@ if (
                     data
                 );
 
-                await loadMeetings();
+                await loadMeetings(true);
             }
         );
 }
@@ -1309,23 +3818,722 @@ if (
 
         if (scheduleMeetingButton) {
 
-            scheduleMeetingButton.addEventListener(
+    scheduleMeetingButton.addEventListener(
+        'click',
+        () => {
+
+            openScheduleMeetingModal();
+        }
+    );
+}
+
+
+   /* =================================================
+   SERVICECALL DEEP LINK
+================================================= */
+
+if (
+    window.serviceCall &&
+    window.serviceCall.onDeepLink
+) {
+
+    window.serviceCall.onDeepLink(
+        async (data) => {
+
+            try {
+
+                const deepLink =
+                    String(
+                        data &&
+                        data.url
+                            ? data.url
+                            : ''
+                    ).trim();
+
+
+                if (!deepLink) {
+                    return;
+                }
+
+
+                console.log(
+                    'ServiceCall deep link received in renderer:',
+                    deepLink
+                );
+
+
+               /*
+ * Expected format:
+ *
+ * servicecall://meeting/<meeting_sys_id>
+ */
+const meetingLinkMatch =
+    String(
+        deepLink || ''
+    )
+        .trim()
+        .match(
+            /^servicecall:\/\/meeting\/([0-9a-f]{32})$/i
+        );
+
+
+if (!meetingLinkMatch) {
+
+    console.error(
+        'Unsupported ServiceCall deep link:',
+        deepLink
+    );
+
+    return;
+}
+
+
+const meetingSysId =
+    meetingLinkMatch[1];
+
+
+console.log(
+    'ServiceCall meeting sys_id from link:',
+    meetingSysId
+);
+
+
+
+                if (
+                    !/^[0-9a-f]{32}$/i.test(
+                        meetingSysId
+                    )
+                ) {
+
+                    console.error(
+                        'Invalid meeting sys_id in ServiceCall link.'
+                    );
+
+                    return;
+                }
+
+
+                /*
+                 * Open the meeting using our
+                 * existing secure details flow.
+                 */
+                await openMeetingFromDeepLink(
+                    meetingSysId
+                );
+
+
+            } catch (error) {
+
+                console.error(
+                    'Unable to process ServiceCall meeting link:',
+                    error
+                );
+            }
+        }
+    );
+}
+
+
+/*
+ * Tell the main process that the renderer
+ * has installed its deep-link listener.
+ */
+if (
+    window.serviceCall &&
+    window.serviceCall.rendererReady
+) {
+
+    window.serviceCall.rendererReady();
+}
+
+function renderSelectedMeetingPeople() {
+
+    if (!scheduleMeetingSelectedPeople) {
+        return;
+    }
+
+
+    /*
+     * Clear the current display.
+     */
+    scheduleMeetingSelectedPeople.innerHTML =
+        '';
+
+
+    /*
+     * No selected people.
+     */
+    if (
+        selectedMeetingPeople.length === 0
+    ) {
+
+        scheduleMeetingSelectedPeople.innerHTML = `
+            <div
+                id="scheduleMeetingNoPeople"
+                class="schedule-meeting-no-people"
+            >
+                No people selected.
+            </div>
+        `;
+
+        return;
+    }
+
+
+    /*
+     * Render every selected person.
+     */
+    selectedMeetingPeople.forEach(
+        person => {
+
+            const selectedPerson =
+                document.createElement(
+                    'div'
+                );
+
+
+            selectedPerson.className =
+                'schedule-meeting-selected-person';
+
+
+            const name =
+                document.createElement(
+                    'span'
+                );
+
+
+            name.textContent =
+                person.name ||
+                'Unknown User';
+
+
+            const removeButton =
+                document.createElement(
+                    'button'
+                );
+
+
+            removeButton.type =
+                'button';
+
+            removeButton.textContent =
+                '×';
+
+            removeButton.title =
+                'Remove';
+
+
+            removeButton.addEventListener(
                 'click',
                 () => {
 
                     /*
-                     * We intentionally haven't wired
-                     * /create-meeting yet.
+                     * Remove the person from
+                     * our selected array.
                      */
-                    console.log(
-                        'Schedule Meeting clicked.'
-                    );
+                    selectedMeetingPeople =
+                        selectedMeetingPeople.filter(
+                            selected =>
+                                selected.sys_id !==
+                                person.sys_id
+                        );
+
+
+                    /*
+                     * Re-render everything.
+                     */
+                    renderSelectedMeetingPeople();
+                }
+            );
+
+
+            selectedPerson.appendChild(
+                name
+            );
+
+
+            selectedPerson.appendChild(
+                removeButton
+            );
+
+
+            scheduleMeetingSelectedPeople.appendChild(
+                selectedPerson
+            );
+        }
+    );
+}
+
+/* -------------------------------------------------
+   SCHEDULE MEETING - PEOPLE SEARCH
+------------------------------------------------- */
+
+if (
+    scheduleMeetingPeopleSearch
+) {
+
+    scheduleMeetingPeopleSearch.addEventListener(
+        'input',
+        () => {
+
+            const searchText =
+                scheduleMeetingPeopleSearch
+                    .value
+                    .trim();
+
+
+            if (
+                schedulePeopleSearchTimer
+            ) {
+
+                clearTimeout(
+                    schedulePeopleSearchTimer
+                );
+            }
+
+
+            /*
+             * Our existing /users API requires
+             * at least 2 characters.
+             */
+            if (
+                searchText.length < 2
+            ) {
+
+                scheduleMeetingPeopleResults.innerHTML =
+                    '';
+
+                scheduleMeetingPeopleResults.style.display =
+                    'none';
+
+                return;
+            }
+
+
+            schedulePeopleSearchTimer =
+                setTimeout(
+                    async () => {
+
+                        try {
+
+                            const result =
+                                await window
+                                    .serviceCall
+                                    .searchUsers(
+                                        searchText
+                                    );
+
+
+                            console.log(
+                                'Schedule meeting user search:',
+                                result
+                            );
+
+                            if (
+    !result ||
+    result.success !== true
+) {
+    return;
+}
+
+const users =
+    Array.isArray(result.users)
+        ? result.users.filter(
+            user =>
+                !selectedMeetingPeople.some(
+                    person =>
+                        person.sys_id ===
+                        user.sys_id
+                )
+        )
+        : [];
+
+
+scheduleMeetingPeopleResults.innerHTML =
+    '';
+
+
+users.forEach(
+    user => {
+
+        const item =
+            document.createElement(
+                'div'
+            );
+
+
+        item.className =
+            'schedule-meeting-person-result';
+
+
+        item.textContent =
+            user.name ||
+            'Unknown User';
+
+item.addEventListener(
+    'click',
+    () => {
+
+        /*
+         * Don't add the same person twice.
+         */
+        const alreadySelected =
+            selectedMeetingPeople.some(
+                person =>
+                    person.sys_id ===
+                    user.sys_id
+            );
+
+
+        if (!alreadySelected) {
+
+            selectedMeetingPeople.push(
+                {
+                    sys_id: user.sys_id,
+                    name:
+                        user.name ||
+                        'Unknown User'
                 }
             );
         }
 
+
+       renderSelectedMeetingPeople();
+        /*
+         * Clear search and hide results.
+         */
+        scheduleMeetingPeopleSearch.value =
+            '';
+
+        scheduleMeetingPeopleResults.innerHTML =
+            '';
+
+        scheduleMeetingPeopleResults.style.display =
+            'none';
     }
 );
+
+
+        scheduleMeetingPeopleResults.appendChild(
+            item
+        );
+    }
+);
+
+
+scheduleMeetingPeopleResults.style.display =
+    users.length > 0
+        ? 'block'
+        : 'none';
+
+                        } catch (error) {
+
+                            console.error(
+                                'Schedule meeting user search failed:',
+                                error
+                            );
+                        }
+
+                    },
+                    300
+                );
+        }
+    );
+}
+
+/* -------------------------------------------------
+   SCHEDULE MEETING - VALIDATION
+------------------------------------------------- */
+
+if (scheduleMeetingSubmitButton) {
+
+    scheduleMeetingSubmitButton.addEventListener(
+        'click',
+        async () => {
+
+            const title =
+                scheduleMeetingTitle.value.trim();
+
+            const description =
+                scheduleMeetingDescription.value.trim();
+
+            const start =
+                scheduleMeetingStart.value;
+
+            const end =
+                scheduleMeetingEnd.value;
+
+
+            /*
+             * Clear previous message.
+             */
+            scheduleMeetingMessage.textContent =
+                '';
+
+
+            if (!title) {
+
+                scheduleMeetingMessage.textContent =
+                    'Please enter a meeting title.';
+
+                scheduleMeetingTitle.focus();
+
+                return;
+            }
+
+
+            if (!start) {
+
+                scheduleMeetingMessage.textContent =
+                    'Please select a start date and time.';
+
+                scheduleMeetingStart.focus();
+
+                return;
+            }
+
+
+            if (!end) {
+
+                scheduleMeetingMessage.textContent =
+                    'Please select an end date and time.';
+
+                scheduleMeetingEnd.focus();
+
+                return;
+            }
+
+
+            /*
+ * datetime-local produces:
+ * YYYY-MM-DDTHH:mm
+ *
+ * Start and end represent wall-clock values
+ * in the SAME ServiceNow user timezone,
+ * so compare them directly.
+ *
+ * Do NOT use new Date() here because that
+ * would interpret them using the computer's
+ * local timezone.
+ */
+if (end <= start) {
+
+    scheduleMeetingMessage.textContent =
+        'End time must be after the start time.';
+
+    scheduleMeetingEnd.focus();
+
+    return;
+}
+
+if (!currentMeetingTimezone) {
+
+    scheduleMeetingMessage.textContent =
+        'Unable to determine your ServiceNow time zone. Please refresh Meetings and try again.';
+
+    return;
+}
+
+
+            if (
+                selectedMeetingPeople.length === 0
+            ) {
+
+                scheduleMeetingMessage.textContent =
+                    'Please select at least one person.';
+
+                scheduleMeetingPeopleSearch.focus();
+
+                return;
+            }
+
+
+            /*
+             * Build participant sys_id array.
+             */
+            const participants =
+                selectedMeetingPeople.map(
+                    person => person.sys_id
+                );
+
+
+            /*
+             * Build meeting payload.
+             */
+            const meetingData = {
+
+    title:
+        title,
+
+    description:
+        description,
+
+    scheduled_start:
+        start,
+
+    scheduled_end:
+        end,
+
+    timezone:
+        currentMeetingTimezone,
+
+    participants:
+        participants
+};
+
+
+            console.log(
+    meetingFormMode === 'edit'
+        ? 'Updating ServiceCall meeting:'
+        : 'Creating ServiceCall meeting:',
+    meetingData
+);
+
+
+            /*
+             * Prevent duplicate clicks while
+             * the meeting is being created.
+             */
+            scheduleMeetingSubmitButton.disabled =
+                true;
+
+
+            scheduleMeetingMessage.textContent =
+                'Scheduling meeting...';
+
+
+            try {
+
+                console.log(
+    'Meeting timezone test:',
+    {
+        start: start,
+        end: end,
+        timezone:
+            currentMeetingTimezone,
+        browserTimezone:
+            Intl.DateTimeFormat()
+                .resolvedOptions()
+                .timeZone
+    }
+);
+
+                let result;
+
+
+/*
+ * CREATE MODE
+ */
+if (
+    meetingFormMode === 'create'
+) {
+
+    result =
+        await window.serviceCall
+            .createMeeting(
+                meetingData
+            );
+
+}
+
+
+/*
+ * EDIT MODE
+ */
+else if (
+    meetingFormMode === 'edit'
+) {
+
+    if (!editingMeetingSysId) {
+
+        throw new Error(
+            'Meeting sys_id is missing.'
+        );
+    }
+
+
+    result =
+    await window.serviceCall
+        .updateMeeting(
+            editingMeetingSysId,
+            meetingData
+        );
+}
+
+
+                console.log(
+                    'Create meeting result:',
+                    result
+                );
+
+
+                if (
+                    !result ||
+                    result.success !== true
+                ) {
+
+                    scheduleMeetingMessage.textContent =
+                        result &&
+                        result.message
+                            ? result.message
+                            : 'Unable to schedule meeting.';
+
+                    return;
+                }
+
+
+                /*
+                 * Meeting created successfully.
+                 */
+                scheduleMeetingMessage.textContent =
+    meetingFormMode === 'edit'
+        ? 'Meeting updated successfully.'
+        : 'Meeting scheduled successfully.';
+
+
+                /*
+                 * Refresh Meetings list.
+                 */
+                await loadMeetings();
+
+
+                /*
+                 * Close modal shortly after
+                 * successful creation.
+                 */
+                setTimeout(
+                    () => {
+
+                        closeScheduleMeetingModal();
+
+                    },
+                    700
+                );
+
+
+            } catch (error) {
+
+                console.error(
+                    'Schedule meeting failed:',
+                    error
+                );
+
+
+                scheduleMeetingMessage.textContent =
+                    error &&
+                    error.message
+                        ? error.message
+                        : 'Unable to schedule meeting.';
+
+
+            } finally {
+
+                scheduleMeetingSubmitButton.disabled =
+                    false;
+            }
+        }
+    );
+}
 
 const refreshRecordingsButton =
     document.getElementById(
@@ -1343,6 +4551,60 @@ const recordingsList =
     document.getElementById(
         'recordingsList'
     );
+
+window.addEventListener(
+    'scroll',
+    () => {
+
+        if (
+            scheduleMeetingPeopleResults
+        ) {
+
+            scheduleMeetingPeopleResults.style.display =
+                'none';
+        }
+    },
+    true
+);
+
+document.addEventListener(
+    'click',
+    event => {
+
+        if (
+            !scheduleMeetingPeopleSearch ||
+            !scheduleMeetingPeopleResults
+        ) {
+            return;
+        }
+
+
+        const clickedSearch =
+            scheduleMeetingPeopleSearch.contains(
+                event.target
+            );
+
+
+        const clickedResults =
+            scheduleMeetingPeopleResults.contains(
+                event.target
+            );
+
+
+        /*
+         * Click anywhere outside the
+         * People search/results → close dropdown.
+         */
+        if (
+            !clickedSearch &&
+            !clickedResults
+        ) {
+
+            scheduleMeetingPeopleResults.style.display =
+                'none';
+        }
+    }
+);
  
  
 async function loadRecordingHistory() {
@@ -1745,4 +5007,4 @@ if (
         loadRecordingHistory
     );
 }
- 
+});

@@ -33,6 +33,7 @@ let outgoingCallTimer = null;
 let activeOutgoingCallId = null;
 let activeCallWindowId = null;
 let callWindowClosing = false;
+const intentionallyLeftCallIds = new Set();
 
 const CALLBACK_HOST = '127.0.0.1';
 const CALLBACK_PORT = 42813;
@@ -341,10 +342,13 @@ async function checkIncomingCallOnce() {
 
 
             if (
-                incomingCallId &&
-                incomingCallId !==
-                    activeIncomingCallId
-            ) {
+    incomingCallId &&
+    !intentionallyLeftCallIds.has(
+        incomingCallId
+    ) &&
+    incomingCallId !==
+        activeIncomingCallId
+) {
 
                 activeIncomingCallId =
                     incomingCallId;
@@ -1459,6 +1463,99 @@ function registerServiceCallProtocol() {
     }
 }
 
+/* =====================================================
+   SERVICECALL DEEP LINK HANDLING
+===================================================== */
+
+let pendingDeepLink = null;
+
+
+/*
+ * Extract a ServiceCall deep link from
+ * Electron command-line arguments.
+ */
+function getServiceCallDeepLink(
+    args
+) {
+
+    if (!Array.isArray(args)) {
+        return null;
+    }
+
+
+    const deepLink =
+        args.find(
+            arg =>
+                typeof arg === 'string' &&
+                arg.startsWith(
+                    'servicecall://'
+                )
+        );
+
+
+    return deepLink || null;
+}
+
+
+/*
+ * Handle the received deep link.
+ *
+ * For now we only store and log it.
+ * Renderer navigation comes next.
+ */
+function handleServiceCallDeepLink(
+    deepLink
+) {
+
+    if (
+        !deepLink ||
+        !deepLink.startsWith(
+            SERVICECALL_PROTOCOL +
+            '://'
+        )
+    ) {
+        return;
+    }
+
+
+    pendingDeepLink =
+        deepLink;
+
+
+    console.log(
+        'ServiceCall deep link received:',
+        deepLink
+    );
+
+
+    /*
+     * If the renderer is already loaded,
+     * send the link immediately.
+     */
+    if (
+        mainWindow &&
+        !mainWindow.isDestroyed() &&
+        !mainWindow.webContents.isLoading()
+    ) {
+
+        mainWindow.webContents.send(
+            'servicecall-deep-link',
+            {
+                url:
+                    deepLink
+            }
+        );
+
+
+        /*
+         * The renderer now owns this link,
+         * so it is no longer pending.
+         */
+        pendingDeepLink =
+            null;
+    }
+}
+
 function showMainWindow() {
 
     if (
@@ -1899,13 +1996,9 @@ ipcMain.handle(
     }
 );
 
-
-/* -------------------------------------------------------
-   APP START
-------------------------------------------------------- */
-
 const gotSingleInstanceLock =
     app.requestSingleInstanceLock();
+
 
 if (!gotSingleInstanceLock) {
 
@@ -1920,24 +2013,19 @@ if (!gotSingleInstanceLock) {
             commandLine
         ) => {
 
-            const protocolUrl =
-                commandLine.find(
-                    function(arg) {
-
-                        return arg.startsWith(
-                            SERVICECALL_PROTOCOL +
-                            '://'
-                        );
-                    }
+            const deepLink =
+                getServiceCallDeepLink(
+                    commandLine
                 );
 
-            if (protocolUrl) {
 
-                console.log(
-                    'ServiceCall protocol opened:',
-                    protocolUrl
+            if (deepLink) {
+
+                handleServiceCallDeepLink(
+                    deepLink
                 );
             }
+
 
             showMainWindow();
         }
@@ -1949,7 +2037,27 @@ app.whenReady().then(
 
         registerServiceCallProtocol();
 
+
+        /*
+         * Was ServiceCall launched by a
+         * servicecall:// URL?
+         */
+        const startupDeepLink =
+            getServiceCallDeepLink(
+                process.argv
+            );
+
+
+        if (startupDeepLink) {
+
+            handleServiceCallDeepLink(
+                startupDeepLink
+            );
+        }
+
+
         createWindow();
+
 
         await restoreSavedConnection();
 
@@ -2012,10 +2120,11 @@ app.on(
 
         event.preventDefault();
 
-        console.log(
-            'ServiceCall protocol opened:',
+
+        handleServiceCallDeepLink(
             url
         );
+
 
         showMainWindow();
     }
@@ -3037,14 +3146,17 @@ async function checkOutgoingCallOnce() {
         ) {
  
             const outgoingCallId =
-                result.call_sys_id;
- 
- 
-            if (
-                outgoingCallId &&
-                outgoingCallId !==
-                    activeOutgoingCallId
-            ) {
+    result.call_sys_id;
+
+
+if (
+    outgoingCallId &&
+    !intentionallyLeftCallIds.has(
+        outgoingCallId
+    ) &&
+    outgoingCallId !==
+        activeOutgoingCallId
+) {
  
                 activeOutgoingCallId =
                     outgoingCallId;
@@ -4912,18 +5024,28 @@ ipcMain.handle(
                     options.search || ''
                 ).trim();
 
+            const status =
+    String(
+        options.status || ''
+    )
+        .toLowerCase()
+        .trim();
+
 
             const query =
-                new URLSearchParams({
-                    page:
-                        String(page),
+    new URLSearchParams({
+        page:
+            String(page),
 
-                    page_size:
-                        '7',
+        page_size:
+            '7',
 
-                    search:
-                        search
-                });
+        search:
+            search,
+
+        status:
+            status
+    });
 
 
             const result =
@@ -4972,6 +5094,8 @@ ipcMain.handle(
                 has_next: false,
 
                 search: '',
+
+                status: '',
 
                 meetings: []
             };
@@ -5038,6 +5162,11 @@ ipcMain.handle(
     scheduled_end:
         meetingData.scheduled_end,
 
+     timezone:
+        String(
+            meetingData.timezone || ''
+        ).trim(),
+
     participants:
         Array.isArray(
             meetingData.participants
@@ -5077,6 +5206,145 @@ ipcMain.handle(
                 message:
                     error.message ||
                     'Unable to create meeting.'
+            };
+        }
+    }
+);
+
+/* =====================================================
+   UPDATE MEETING
+===================================================== */
+
+ipcMain.handle(
+    'servicecall-update-meeting',
+
+    async (
+        event,
+        meetingSysId,
+        meetingData
+    ) => {
+
+        try {
+
+            /*
+             * Meeting sys_id is required.
+             */
+            if (!meetingSysId) {
+
+                return {
+                    success: false,
+                    code:
+                        'MEETING_SYS_ID_REQUIRED',
+                    message:
+                        'Meeting sys_id is required.'
+                };
+            }
+
+
+            /*
+             * Basic meeting data validation.
+             */
+            if (
+                !meetingData ||
+                !meetingData.title ||
+                !meetingData.scheduled_start ||
+                !meetingData.scheduled_end
+            ) {
+
+                return {
+                    success: false,
+                    code:
+                        'MEETING_DATA_REQUIRED',
+                    message:
+                        'Title, start time and end time are required.'
+                };
+            }
+
+
+            /*
+             * Build the payload sent to
+             * ServiceNow.
+             */
+            const payload = {
+
+                meeting_sys_id:
+                    String(
+                        meetingSysId
+                    ).trim(),
+
+                title:
+                    String(
+                        meetingData.title
+                    ).trim(),
+
+                description:
+                    String(
+                        meetingData.description ||
+                        ''
+                    ).trim(),
+
+                scheduled_start:
+                    meetingData
+                        .scheduled_start,
+
+                scheduled_end:
+                    meetingData
+                        .scheduled_end,
+
+                timezone:
+                    String(
+                        meetingData.timezone ||
+                        ''
+                    ).trim(),
+
+                participants:
+                    Array.isArray(
+                        meetingData.participants
+                    )
+                        ? meetingData.participants
+                        : []
+            };
+
+
+            console.log(
+                'Updating ServiceCall meeting:',
+                payload
+            );
+
+
+            /*
+             * Send the update to ServiceNow.
+             *
+             * We will create this REST resource
+             * in the next step.
+             */
+            const result =
+                await serviceCallApiRequest(
+                    '/update-meeting',
+                    'POST',
+                    payload
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to update ServiceCall meeting:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'UPDATE_MEETING_FAILED',
+                message:
+                    error.message ||
+                    'Unable to update meeting.'
             };
         }
     }
@@ -5253,6 +5521,53 @@ ipcMain.on(
     }
 );
 
+/* =====================================================
+   RENDERER READY FOR DEEP LINKS
+===================================================== */
+
+ipcMain.on(
+    'servicecall-renderer-ready',
+    (event) => {
+
+        /*
+         * Only accept this signal from
+         * the main ServiceCall window.
+         */
+        if (
+            !mainWindow ||
+            mainWindow.isDestroyed() ||
+            event.sender !==
+                mainWindow.webContents
+        ) {
+            return;
+        }
+
+
+        if (!pendingDeepLink) {
+            return;
+        }
+
+
+        console.log(
+            'Renderer ready. Sending pending ServiceCall deep link:',
+            pendingDeepLink
+        );
+
+
+        mainWindow.webContents.send(
+            'servicecall-deep-link',
+            {
+                url:
+                    pendingDeepLink
+            }
+        );
+
+
+        pendingDeepLink =
+            null;
+    }
+);
+
 /* =======================================================
    JOIN MEETING
 ======================================================= */
@@ -5299,6 +5614,14 @@ ipcMain.handle(
                 result.success === true &&
                 result.call_sys_id
             ) {
+
+                /*
+ * Explicit Join means the user wants
+ * this meeting call again.
+ */
+intentionallyLeftCallIds.delete(
+    result.call_sys_id
+);
 
                 /*
                  * This user is now connected
@@ -5424,6 +5747,20 @@ ipcMain.handle(
                 result &&
                 result.success === true
             ) {
+
+                /*
+ * Remember that THIS user deliberately
+ * left this call.
+ *
+ * The meeting itself may remain In Progress,
+ * so polling must not reopen its window.
+ */
+if (result.call_sys_id) {
+
+    intentionallyLeftCallIds.add(
+        result.call_sys_id
+    );
+}
 
                 /*
                  * The user left this meeting,
@@ -5684,6 +6021,68 @@ ipcMain.handle(
                 message:
                     error.message ||
                     'Unable to cancel meeting.'
+            };
+        }
+    }
+);
+
+ipcMain.handle(
+    'servicecall-get-meeting-details',
+
+    async (
+        event,
+        meetingSysId
+    ) => {
+
+        try {
+
+            if (!meetingSysId) {
+
+                return {
+                    success: false,
+                    code: 'MEETING_REQUIRED',
+                    message:
+                        'Meeting sys_id is required.'
+                };
+            }
+
+
+            const query =
+                new URLSearchParams({
+                    meeting_sys_id:
+                        String(
+                            meetingSysId
+                        ).trim()
+                });
+
+
+            const result =
+                await serviceCallApiRequest(
+                    '/meeting-details?' +
+                        query.toString(),
+                    'GET'
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to get ServiceCall meeting details:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'MEETING_DETAILS_FAILED',
+                message:
+                    error.message ||
+                    'Unable to retrieve meeting details.'
             };
         }
     }

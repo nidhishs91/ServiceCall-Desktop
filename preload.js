@@ -267,20 +267,93 @@ completeRecording:
     getMyMeetings:
     (
         page = 1,
-        search = ''
+        search = '',
+        status = ''
     ) =>
         ipcRenderer.invoke(
             'servicecall-get-my-meetings',
             {
                 page: page,
-                search: search
+                search: search,
+                status: status
             }
+        ),
+
+    getMeetingDetails:
+    (meetingSysId) =>
+        ipcRenderer.invoke(
+            'servicecall-get-meeting-details',
+            meetingSysId
         ),
         
     createMeeting:
     (meetingData) =>
         ipcRenderer.invoke(
             'servicecall-create-meeting',
+            meetingData
+        ),
+
+    onDeepLink:
+    (callback) => {
+
+        ipcRenderer.on(
+            'servicecall-deep-link',
+            (
+                event,
+                data
+            ) => {
+
+                callback(data);
+            }
+        );
+    },
+
+    onDeepLink:
+    (callback) => {
+
+        const handler =
+            (
+                event,
+                data
+            ) => {
+
+                callback(
+                    data
+                );
+            };
+
+
+        ipcRenderer.on(
+            'servicecall-deep-link',
+            handler
+        );
+
+
+        return () => {
+
+            ipcRenderer.removeListener(
+                'servicecall-deep-link',
+                handler
+            );
+        };
+    },
+
+    rendererReady:
+    () => {
+
+        ipcRenderer.send(
+            'servicecall-renderer-ready'
+        );
+    },
+
+    updateMeeting:
+    (
+        meetingSysId,
+        meetingData
+    ) =>
+        ipcRenderer.invoke(
+            'servicecall-update-meeting',
+            meetingSysId,
             meetingData
         ),
 

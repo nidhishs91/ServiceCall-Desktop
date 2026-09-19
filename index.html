@@ -558,6 +558,80 @@
             color: #244a41;
         }
 
+        /* -------------------------------------------------
+   MEETING STATUS FILTER
+------------------------------------------------- */
+
+        .meeting-status-filter-wrapper {
+            display: flex;
+
+            align-items: center;
+
+            gap: 9px;
+
+            flex-shrink: 0;
+        }
+
+
+        .meeting-status-filter-label {
+            color: #60736e;
+
+            font-size: 13px;
+            font-weight: 650;
+        }
+
+
+        .meeting-status-filter {
+            height: 44px;
+
+            min-width: 150px;
+
+            padding:
+                0 38px 0 13px;
+
+            border:
+                1px solid #d6e0dd;
+
+            border-radius: 11px;
+
+            outline: none;
+
+            background: white;
+
+            color: #29463f;
+
+            font-size: 14px;
+            font-weight: 600;
+
+            cursor: pointer;
+
+            box-shadow:
+                0 1px 3px rgba(16,
+                    47,
+                    43,
+                    0.025);
+
+            transition:
+                border-color 0.18s ease,
+                box-shadow 0.18s ease,
+                background 0.18s ease;
+        }
+
+
+        .meeting-status-filter:hover {
+            border-color: #bccdc8;
+        }
+
+
+        .meeting-status-filter:focus {
+            border-color: #3d917c;
+
+            box-shadow:
+                0 0 0 3px rgba(61,
+                    145,
+                    124,
+                    0.11);
+        }
 
         /* -------------------------------------------------
            MEETING LIST
@@ -778,6 +852,699 @@
 
 
         /* =================================================
+   MEETING DETAILS MODAL
+================================================= */
+
+        .meeting-details-modal {
+            position: fixed;
+
+            inset: 0;
+
+            z-index: 1000;
+
+            display: none;
+
+            align-items: center;
+            justify-content: center;
+
+            padding: 28px;
+        }
+
+
+        .meeting-details-modal.open {
+            display: flex;
+        }
+
+
+        .meeting-details-backdrop {
+            position: absolute;
+
+            inset: 0;
+
+            background:
+                rgba(10,
+                    28,
+                    24,
+                    0.42);
+
+            backdrop-filter:
+                blur(2px);
+        }
+
+
+        .meeting-details-dialog {
+            position: relative;
+
+            width: min(680px,
+                    100%);
+
+            max-height:
+                calc(100vh - 56px);
+
+            background: white;
+
+            border:
+                1px solid #dce5e2;
+
+            border-radius: 16px;
+
+            box-shadow:
+                0 24px 70px rgba(10,
+                    37,
+                    31,
+                    0.20);
+
+            display: flex;
+            flex-direction: column;
+
+            overflow: hidden;
+        }
+
+
+        .meeting-details-header {
+            display: flex;
+
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 20px;
+
+            padding: 20px 22px;
+
+            border-bottom:
+                1px solid #e7ecea;
+        }
+
+
+        .meeting-details-heading {
+            font-size: 17px;
+            font-weight: 700;
+
+            color: #193a32;
+        }
+
+
+        .meeting-details-number {
+            margin-top: 3px;
+
+            color: #7b8c87;
+
+            font-size: 12px;
+        }
+
+
+        .meeting-details-close {
+            width: 34px;
+            height: 34px;
+
+            border: 0;
+
+            border-radius: 9px;
+
+            background: transparent;
+
+            color: #667b75;
+
+            font-size: 22px;
+            line-height: 1;
+
+            cursor: pointer;
+        }
+
+
+        .meeting-details-close:hover {
+            background: #edf3f1;
+
+            color: #234a40;
+        }
+
+
+        .meeting-details-content {
+            overflow-y: auto;
+
+            padding: 22px;
+        }
+
+
+        .meeting-details-title-row {
+            display: flex;
+
+            align-items: flex-start;
+            justify-content: space-between;
+
+            gap: 18px;
+
+            margin-bottom: 22px;
+        }
+
+
+        .meeting-details-title {
+            margin: 0;
+
+            color: #193a32;
+
+            font-size: 22px;
+            line-height: 1.3;
+        }
+
+
+        .meeting-details-section {
+            padding: 19px 0;
+
+            border-top:
+                1px solid #edf1f0;
+        }
+
+
+        .meeting-details-section-title {
+            margin-bottom: 14px;
+
+            color: #294a42;
+
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+
+        .meeting-details-label {
+            margin-bottom: 5px;
+
+            color: #7a8985;
+
+            font-size: 11px;
+            font-weight: 700;
+
+            text-transform: uppercase;
+
+            letter-spacing: 0.035em;
+        }
+
+
+        .meeting-details-value,
+        .meeting-details-description {
+            color: #2d4540;
+
+            font-size: 14px;
+
+            line-height: 1.55;
+
+            word-break: break-word;
+        }
+
+
+        .meeting-details-description {
+            white-space: pre-wrap;
+        }
+
+
+        .meeting-details-grid {
+            display: grid;
+
+            grid-template-columns:
+                repeat(2,
+                    minmax(0,
+                        1fr));
+
+            gap: 18px 28px;
+        }
+
+
+        .meeting-details-field {
+            min-width: 0;
+        }
+
+
+        .meeting-details-participants-header {
+            display: flex;
+
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 12px;
+        }
+
+
+        .meeting-details-count {
+            min-width: 27px;
+            height: 27px;
+
+            padding: 0 8px;
+
+            border-radius: 999px;
+
+            background: #edf4f2;
+
+            color: #376158;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+
+        .meeting-details-participants {
+            display: grid;
+
+            gap: 9px;
+        }
+
+
+        .meeting-details-participant {
+            display: flex;
+
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 16px;
+
+            padding: 12px 13px;
+
+            border:
+                1px solid #e3e9e7;
+
+            border-radius: 10px;
+
+            background: #fafcfb;
+        }
+
+
+        .meeting-details-participant-main {
+            min-width: 0;
+        }
+
+
+        .meeting-details-participant-name {
+            color: #263f39;
+
+            font-size: 13px;
+            font-weight: 650;
+
+            overflow: hidden;
+
+            text-overflow: ellipsis;
+
+            white-space: nowrap;
+        }
+
+
+        .meeting-details-participant-role {
+            margin-top: 3px;
+
+            color: #7b8b87;
+
+            font-size: 11px;
+
+            text-transform: capitalize;
+        }
+
+
+        .meeting-details-participant-statuses {
+            display: flex;
+
+            align-items: center;
+            justify-content: flex-end;
+
+            flex-wrap: wrap;
+
+            gap: 6px;
+        }
+
+
+        .meeting-details-badge {
+            padding: 4px 8px;
+
+            border-radius: 999px;
+
+            background: #edf2f1;
+
+            color: #5e716c;
+
+            font-size: 10px;
+            font-weight: 700;
+
+            text-transform: capitalize;
+        }
+
+
+        .meeting-details-empty {
+            padding: 18px;
+
+            border:
+                1px dashed #d2dcda;
+
+            border-radius: 10px;
+
+            color: #7b8b87;
+
+            text-align: center;
+
+            font-size: 13px;
+        }
+
+
+        .meeting-details-footer {
+            display: flex;
+
+            justify-content: flex-end;
+
+            padding: 15px 22px;
+
+            border-top:
+                1px solid #e7ecea;
+
+            background: #fbfcfc;
+        }
+
+        /* =================================================
+   SCHEDULE MEETING MODAL
+================================================= */
+
+        .schedule-meeting-timezone {
+            display: flex;
+            align-items: center;
+
+            gap: 5px;
+
+            margin-top: -7px;
+            margin-bottom: 19px;
+
+            color: #71827d;
+
+            font-size: 12px;
+        }
+
+
+        .schedule-meeting-timezone-label {
+            font-weight: 650;
+
+            color: #526b65;
+        }
+
+        .schedule-meeting-modal {
+            position: fixed;
+
+            inset: 0;
+
+            z-index: 1010;
+
+            display: none;
+
+            align-items: center;
+            justify-content: center;
+
+            padding: 28px;
+        }
+
+
+        .schedule-meeting-modal.open {
+            display: flex;
+        }
+
+
+        .schedule-meeting-backdrop {
+            position: absolute;
+
+            inset: 0;
+
+            background:
+                rgba(10,
+                    28,
+                    24,
+                    0.42);
+
+            backdrop-filter:
+                blur(2px);
+        }
+
+
+        .schedule-meeting-dialog {
+            position: relative;
+
+            width: min(700px,
+                    100%);
+
+            max-height:
+                calc(100vh - 56px);
+
+            background: white;
+
+            border:
+                1px solid #dce5e2;
+
+            border-radius: 16px;
+
+            box-shadow:
+                0 24px 70px rgba(10,
+                    37,
+                    31,
+                    0.20);
+
+            display: flex;
+            flex-direction: column;
+
+            overflow: hidden;
+        }
+
+
+        .schedule-meeting-header {
+            display: flex;
+
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 20px;
+
+            padding: 20px 22px;
+
+            border-bottom:
+                1px solid #e7ecea;
+        }
+
+
+        .schedule-meeting-heading {
+            color: #193a32;
+
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+
+        .schedule-meeting-subtitle {
+            margin-top: 4px;
+
+            color: #7b8c87;
+
+            font-size: 12px;
+        }
+
+
+        .schedule-meeting-close {
+            width: 34px;
+            height: 34px;
+
+            border: 0;
+
+            border-radius: 9px;
+
+            background: transparent;
+
+            color: #667b75;
+
+            font-size: 22px;
+            line-height: 1;
+
+            cursor: pointer;
+        }
+
+
+        .schedule-meeting-close:hover {
+            background: #edf3f1;
+
+            color: #234a40;
+        }
+
+
+        .schedule-meeting-content {
+            padding: 22px;
+
+            overflow-y: auto;
+        }
+
+
+        .schedule-meeting-field {
+            margin-bottom: 19px;
+        }
+
+
+        .schedule-meeting-label {
+            display: block;
+
+            margin-bottom: 7px;
+
+            color: #38544d;
+
+            font-size: 13px;
+            font-weight: 650;
+        }
+
+
+        .schedule-meeting-required {
+            color: #b34747;
+        }
+
+
+        .schedule-meeting-input,
+        .schedule-meeting-textarea {
+            width: 100%;
+
+            box-sizing: border-box;
+
+            border:
+                1px solid #d6e0dd;
+
+            border-radius: 10px;
+
+            outline: none;
+
+            background: white;
+
+            color: #29463f;
+
+            font-family: inherit;
+
+            font-size: 14px;
+
+            transition:
+                border-color 0.18s ease,
+                box-shadow 0.18s ease;
+        }
+
+
+        .schedule-meeting-input {
+            height: 44px;
+
+            padding: 0 13px;
+        }
+
+
+        .schedule-meeting-textarea {
+            min-height: 96px;
+
+            padding: 11px 13px;
+
+            resize: vertical;
+
+            line-height: 1.5;
+        }
+
+
+        .schedule-meeting-input:focus,
+        .schedule-meeting-textarea:focus {
+            border-color: #3d917c;
+
+            box-shadow:
+                0 0 0 3px rgba(61,
+                    145,
+                    124,
+                    0.11);
+        }
+
+
+        .schedule-meeting-time-grid {
+            display: grid;
+
+            grid-template-columns:
+                repeat(2,
+                    minmax(0,
+                        1fr));
+
+            gap: 16px;
+        }
+
+
+        .schedule-meeting-people-search-wrapper {
+            position: relative;
+        }
+
+
+        .schedule-meeting-people-results {
+            display: none;
+
+            position: absolute;
+
+            z-index: 20;
+
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+
+            max-height: 220px;
+
+            overflow-y: auto;
+
+            background: white;
+
+            border:
+                1px solid #dce5e2;
+
+            border-radius: 10px;
+
+            box-shadow:
+                0 12px 30px rgba(20,
+                    55,
+                    47,
+                    0.12);
+        }
+
+
+        .schedule-meeting-selected-people {
+            display: flex;
+
+            flex-wrap: wrap;
+
+            gap: 8px;
+
+            margin-top: 11px;
+        }
+
+
+        .schedule-meeting-no-people {
+            color: #83918d;
+
+            font-size: 12px;
+        }
+
+
+        .schedule-meeting-message {
+            min-height: 18px;
+
+            color: #a33f3f;
+
+            font-size: 12px;
+        }
+
+
+        .schedule-meeting-footer {
+            display: flex;
+
+            align-items: center;
+            justify-content: flex-end;
+
+            gap: 10px;
+
+            padding: 15px 22px;
+
+            border-top:
+                1px solid #e7ecea;
+
+            background: #fbfcfc;
+        }
+
+
+        /* =================================================
            SETTINGS
         ================================================= */
 
@@ -888,6 +1655,57 @@
 
             .meeting-search-wrapper {
                 max-width: none;
+            }
+
+            .meeting-status-filter-wrapper {
+                justify-content: flex-end;
+            }
+
+
+            .meeting-status-filter {
+                flex: 1;
+            }
+
+            .meeting-details-modal {
+                padding: 16px;
+            }
+
+
+            .meeting-details-dialog {
+                max-height:
+                    calc(100vh - 32px);
+            }
+
+
+            .meeting-details-grid {
+                grid-template-columns: 1fr;
+            }
+
+
+            .meeting-details-participant {
+                align-items: flex-start;
+
+                flex-direction: column;
+            }
+
+
+            .meeting-details-participant-statuses {
+                justify-content: flex-start;
+            }
+
+            .schedule-meeting-modal {
+                padding: 16px;
+            }
+
+
+            .schedule-meeting-dialog {
+                max-height:
+                    calc(100vh - 32px);
+            }
+
+
+            .schedule-meeting-time-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -1105,8 +1923,7 @@
 
                     </div>
 
-
-                    <!-- Meeting Search -->
+                    <!-- Meeting Search + Status Filter -->
 
                     <div class="meetings-toolbar">
 
@@ -1138,9 +1955,44 @@
                         </div>
 
 
+                        <div class="meeting-status-filter-wrapper">
+
+
+                            <label class="meeting-status-filter-label" for="meetingStatusFilter">
+                                Status
+                            </label>
+
+
+                            <select id="meetingStatusFilter" class="meeting-status-filter"
+                                aria-label="Filter meetings by status">
+
+                                <option value="">
+                                    All
+                                </option>
+
+                                <option value="scheduled">
+                                    Scheduled
+                                </option>
+
+                                <option value="in progress">
+                                    In Progress
+                                </option>
+
+                                <option value="ended">
+                                    Ended
+                                </option>
+
+                                <option value="cancelled">
+                                    Cancelled
+                                </option>
+
+                            </select>
+
+
+                        </div>
+
+
                     </div>
-
-
                     <!-- Meeting List -->
 
                     <div id="meetingsContainer" class="meetings-list">
@@ -1362,6 +2214,478 @@
 
     </div>
 
+    <!-- =============================================
+     MEETING DETAILS MODAL
+============================================== -->
+
+    <div id="meetingDetailsModal" class="meeting-details-modal" aria-hidden="true">
+
+        <div class="meeting-details-backdrop" data-meeting-details-close></div>
+
+
+        <div class="meeting-details-dialog" role="dialog" aria-modal="true" aria-labelledby="meetingDetailsHeading">
+
+
+            <!-- =====================================
+             HEADER
+        ====================================== -->
+
+            <div class="meeting-details-header">
+
+                <div>
+
+                    <div class="meeting-details-heading">
+                        Meeting Details
+                    </div>
+
+                    <div id="meetingDetailsNumber" class="meeting-details-number">
+                        —
+                    </div>
+
+                </div>
+
+
+                <button id="meetingDetailsCloseButton" class="meeting-details-close" type="button"
+                    aria-label="Close meeting details" title="Close">
+                    ×
+                </button>
+
+            </div>
+
+
+            <!-- =====================================
+             SCROLLABLE CONTENT
+        ====================================== -->
+
+            <div id="meetingDetailsContent" class="meeting-details-content">
+
+
+                <!-- Title + Status -->
+
+                <div class="meeting-details-title-row">
+
+                    <h2 id="meetingDetailsHeading" class="meeting-details-title">
+                        Meeting
+                    </h2>
+
+
+                    <span id="meetingDetailsStatus" class="meeting-status">
+                        —
+                    </span>
+
+                </div>
+
+
+                <!-- Description -->
+
+                <div class="meeting-details-section">
+
+                    <div class="meeting-details-label">
+                        Description
+                    </div>
+
+                    <div id="meetingDetailsDescription" class="meeting-details-description">
+                        No description.
+                    </div>
+
+                </div>
+
+
+                <!-- =================================
+                 MEETING INFORMATION
+            ================================== -->
+
+                <div class="meeting-details-section">
+
+                    <div class="meeting-details-section-title">
+                        Meeting information
+                    </div>
+
+
+                    <div class="meeting-details-grid">
+
+
+                        <!-- Organizer -->
+
+                        <div class="meeting-details-field">
+
+                            <div class="meeting-details-label">
+                                Organizer
+                            </div>
+
+                            <div id="meetingDetailsOrganizer" class="meeting-details-value">
+                                —
+                            </div>
+
+                        </div>
+
+
+                        <!-- Scheduled Start -->
+
+                        <div class="meeting-details-field">
+
+                            <div class="meeting-details-label">
+                                Scheduled start
+                            </div>
+
+                            <div id="meetingDetailsStart" class="meeting-details-value">
+                                —
+                            </div>
+
+                        </div>
+
+
+                        <!-- Scheduled End -->
+
+                        <div class="meeting-details-field">
+
+                            <div class="meeting-details-label">
+                                Scheduled end
+                            </div>
+
+                            <div id="meetingDetailsEnd" class="meeting-details-value">
+                                —
+                            </div>
+
+                        </div>
+
+
+                        <!-- Started By -->
+
+                        <div id="meetingDetailsStartedByField" class="meeting-details-field">
+
+                            <div class="meeting-details-label">
+                                Started by
+                            </div>
+
+                            <div id="meetingDetailsStartedBy" class="meeting-details-value">
+                                —
+                            </div>
+
+                        </div>
+
+
+                        <!-- Started At -->
+
+                        <div id="meetingDetailsStartedAtField" class="meeting-details-field">
+
+                            <div class="meeting-details-label">
+                                Started at
+                            </div>
+
+                            <div id="meetingDetailsStartedAt" class="meeting-details-value">
+                                —
+                            </div>
+
+                        </div>
+
+
+                        <!-- Ended At -->
+
+                        <div id="meetingDetailsEndedAtField" class="meeting-details-field">
+
+                            <div class="meeting-details-label">
+                                Ended at
+                            </div>
+
+                            <div id="meetingDetailsEndedAt" class="meeting-details-value">
+                                —
+                            </div>
+
+                        </div>
+
+
+                    </div>
+
+                </div>
+
+
+                <!-- =================================
+                 PARTICIPANTS
+            ================================== -->
+
+                <div class="meeting-details-section">
+
+                    <div class="meeting-details-participants-header">
+
+                        <div class="meeting-details-section-title">
+                            Participants
+                        </div>
+
+                        <div id="meetingDetailsParticipantCount" class="meeting-details-count">
+                            0
+                        </div>
+
+                    </div>
+
+
+                    <div id="meetingDetailsParticipants" class="meeting-details-participants">
+
+                        <div class="meeting-details-empty">
+                            No participants.
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+            </div>
+
+
+            <!-- =====================================
+             MEETING DETAILS FOOTER
+        ====================================== -->
+
+            <div class="meeting-details-footer">
+
+
+                <!--
+                Context-sensitive action.
+
+                Scheduled:
+                    Start Meeting
+
+                In Progress:
+                    Join Meeting
+
+                Ended / Cancelled:
+                    Hidden for now
+            -->
+
+                <button id="meetingDetailsActionButton" class="primary-button" type="button" style="display: none;">
+                    Join Meeting
+                </button>
+
+
+                <button id="meetingDetailsFooterCloseButton" class="secondary-button" type="button">
+                    Close
+                </button>
+
+
+            </div>
+
+
+        </div>
+
+    </div>
+
+
+
+    <!-- =============================================
+     SCHEDULE / EDIT MEETING MODAL
+============================================== -->
+
+    <div id="scheduleMeetingModal" class="schedule-meeting-modal" aria-hidden="true">
+
+        <div class="schedule-meeting-backdrop" data-schedule-meeting-close></div>
+
+
+        <div class="schedule-meeting-dialog" role="dialog" aria-modal="true" aria-labelledby="scheduleMeetingHeading">
+
+
+            <!-- =====================================
+             HEADER
+        ====================================== -->
+
+            <div class="schedule-meeting-header">
+
+                <div>
+
+                    <div id="scheduleMeetingHeading" class="schedule-meeting-heading">
+                        Schedule Meeting
+                    </div>
+
+
+                    <div id="scheduleMeetingSubtitle" class="schedule-meeting-subtitle">
+                        Create a new ServiceCall meeting.
+                    </div>
+
+                </div>
+
+
+                <button id="scheduleMeetingCloseButton" class="schedule-meeting-close" type="button"
+                    aria-label="Close schedule meeting" title="Close">
+                    ×
+                </button>
+
+            </div>
+
+
+            <!-- =====================================
+             FORM CONTENT
+        ====================================== -->
+
+            <div class="schedule-meeting-content">
+
+
+                <!-- Meeting Title -->
+
+                <div class="schedule-meeting-field">
+
+                    <label class="schedule-meeting-label" for="scheduleMeetingTitle">
+                        Meeting title
+
+                        <span class="schedule-meeting-required">
+                            *
+                        </span>
+                    </label>
+
+
+                    <input id="scheduleMeetingTitle" class="schedule-meeting-input" type="text" maxlength="160"
+                        placeholder="Enter meeting title" autocomplete="off">
+
+                </div>
+
+
+                <!-- Description -->
+
+                <div class="schedule-meeting-field">
+
+                    <label class="schedule-meeting-label" for="scheduleMeetingDescription">
+                        Description
+                    </label>
+
+
+                    <textarea id="scheduleMeetingDescription" class="schedule-meeting-textarea" rows="4"
+                        placeholder="What is this meeting about?"></textarea>
+
+                </div>
+
+
+                <!-- =================================
+                 DATE / TIME
+            ================================== -->
+
+                <div class="schedule-meeting-time-grid">
+
+
+                    <!-- Start -->
+
+                    <div class="schedule-meeting-field">
+
+                        <label class="schedule-meeting-label" for="scheduleMeetingStart">
+                            Start date &amp; time
+
+                            <span class="schedule-meeting-required">
+                                *
+                            </span>
+                        </label>
+
+
+                        <input id="scheduleMeetingStart" class="schedule-meeting-input" type="datetime-local">
+
+                    </div>
+
+
+                    <!-- End -->
+
+                    <div class="schedule-meeting-field">
+
+                        <label class="schedule-meeting-label" for="scheduleMeetingEnd">
+                            End date &amp; time
+
+                            <span class="schedule-meeting-required">
+                                *
+                            </span>
+                        </label>
+
+
+                        <input id="scheduleMeetingEnd" class="schedule-meeting-input" type="datetime-local">
+
+                    </div>
+
+
+                </div>
+
+
+                <!-- =================================
+                 TIME ZONE
+            ================================== -->
+
+                <div class="schedule-meeting-timezone">
+
+                    <span class="schedule-meeting-timezone-label">
+                        Time zone:
+                    </span>
+
+                    <span id="scheduleMeetingTimezone">
+                        Loading...
+                    </span>
+
+                </div>
+
+
+                <!-- =================================
+                 PEOPLE
+            ================================== -->
+
+                <div class="schedule-meeting-field">
+
+                    <label class="schedule-meeting-label" for="scheduleMeetingPeopleSearch">
+                        People
+
+                        <span class="schedule-meeting-required">
+                            *
+                        </span>
+                    </label>
+
+
+                    <div class="schedule-meeting-people-search-wrapper">
+
+                        <input id="scheduleMeetingPeopleSearch" class="schedule-meeting-input" type="search"
+                            placeholder="Search people..." autocomplete="off" spellcheck="false">
+
+
+                        <div id="scheduleMeetingPeopleResults" class="schedule-meeting-people-results"></div>
+
+                    </div>
+
+
+                    <div id="scheduleMeetingSelectedPeople" class="schedule-meeting-selected-people">
+
+                        <div id="scheduleMeetingNoPeople" class="schedule-meeting-no-people">
+                            No people selected.
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- =================================
+                 MESSAGE
+            ================================== -->
+
+                <div id="scheduleMeetingMessage" class="schedule-meeting-message"></div>
+
+
+            </div>
+
+
+            <!-- =====================================
+             SCHEDULE / EDIT FOOTER
+        ====================================== -->
+
+            <div class="schedule-meeting-footer">
+
+
+                <button id="scheduleMeetingCancelButton" class="secondary-button" type="button">
+                    Close
+                </button>
+
+
+                <button id="scheduleMeetingSubmitButton" class="primary-button" type="button">
+                    Schedule Meeting
+                </button>
+
+
+            </div>
+
+
+        </div>
+
+    </div>
 
     <script src="renderer.js"></script>
 

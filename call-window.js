@@ -64,6 +64,16 @@ let callStatusTimer =
 let callStartedAt =
     null;
 
+/*
+ * Authoritative start time returned
+ * by ServiceNow.
+ *
+ * For meetings this prevents the timer
+ * from restarting after Leave -> Join.
+ */
+let serverCallStartedAt =
+    null;
+
 let durationTimer =
     null;
 
@@ -802,49 +812,125 @@ function startDurationTimer() {
     }
 
 
-    callStartedAt =
-        Date.now();
+    /*
+     * For meetings, prefer the authoritative
+     * start time returned by ServiceNow.
+     *
+     * For normal calls, preserve the existing
+     * local timer behavior.
+     */
+    if (
+        isMeeting &&
+        serverCallStartedAt
+    ) {
+
+        callStartedAt =
+            serverCallStartedAt;
+
+    } else {
+
+        callStartedAt =
+            Date.now();
+    }
+
+
+    function updateDurationDisplay() {
+
+        if (!callStartedAt) {
+            return;
+        }
+
+
+        const seconds =
+            Math.max(
+                0,
+                Math.floor(
+                    (
+                        Date.now() -
+                        callStartedAt
+                    ) / 1000
+                )
+            );
+
+
+        const hours =
+            Math.floor(
+                seconds / 3600
+            );
+
+
+        const minutes =
+            Math.floor(
+                (
+                    seconds % 3600
+                ) / 60
+            );
+
+
+        const remainingSeconds =
+            seconds % 60;
+
+
+        /*
+         * Under one hour:
+         *     07:24
+         *
+         * One hour or more:
+         *     01:07:24
+         */
+        if (hours > 0) {
+
+            timerElement.textContent =
+                String(hours)
+                    .padStart(
+                        2,
+                        '0'
+                    ) +
+                ':' +
+                String(minutes)
+                    .padStart(
+                        2,
+                        '0'
+                    ) +
+                ':' +
+                String(
+                    remainingSeconds
+                )
+                    .padStart(
+                        2,
+                        '0'
+                    );
+
+        } else {
+
+            timerElement.textContent =
+                String(minutes)
+                    .padStart(
+                        2,
+                        '0'
+                    ) +
+                ':' +
+                String(
+                    remainingSeconds
+                )
+                    .padStart(
+                        2,
+                        '0'
+                    );
+        }
+    }
+
+
+    /*
+     * Display immediately instead of waiting
+     * one second for the first interval.
+     */
+    updateDurationDisplay();
 
 
     durationTimer =
         setInterval(
-            () => {
-
-                const seconds =
-                    Math.floor(
-                        (
-                            Date.now() -
-                            callStartedAt
-                        ) / 1000
-                    );
-
-
-                const minutes =
-                    Math.floor(
-                        seconds / 60
-                    );
-
-
-                const remainingSeconds =
-                    seconds % 60;
-
-
-                timerElement.textContent =
-                    String(minutes)
-                        .padStart(
-                            2,
-                            '0'
-                        ) +
-                    ':' +
-                    String(
-                        remainingSeconds
-                    )
-                        .padStart(
-                            2,
-                            '0'
-                        );
-
-            },
+            updateDurationDisplay,
             1000
         );
 }
@@ -880,6 +966,67 @@ async function checkCallStatus() {
 
         const state =
             result.state;
+
+            console.log(
+    'SERVICECALL TIMER DEBUG:',
+    {
+        isMeeting:
+            isMeeting,
+
+        answered_at:
+            result.answered_at,
+
+        localNow:
+            new Date()
+                .toISOString()
+    }
+);
+
+        /*
+ * ServiceNow is authoritative for when
+ * the meeting/call actually started.
+ *
+ * GlideDateTime.getValue() is returned as:
+ * YYYY-MM-DD HH:mm:ss
+ *
+ * ServiceNow stores this value in UTC,
+ * therefore explicitly parse it as UTC.
+ */
+if (
+    isMeeting &&
+    result.answered_at
+) {
+
+    const parsedStartedAt =
+        Date.parse(
+            result.answered_at
+                .replace(
+                    ' ',
+                    'T'
+                ) +
+            'Z'
+        );
+
+
+    if (
+        !Number.isNaN(
+            parsedStartedAt
+        )
+    ) {
+
+        serverCallStartedAt =
+            parsedStartedAt;
+
+
+        /*
+         * If the local timer already started
+         * before the first status response
+         * arrived, synchronize it now.
+         */
+        callStartedAt =
+            serverCallStartedAt;
+    }
+}
 
         /*
  * Keep the recording indicator synchronized
