@@ -6563,3 +6563,128 @@ ipcMain.on(
         }
     }
 );
+
+ipcMain.handle(
+    'servicecall-start-call',
+
+    async (
+        event,
+        targetUserSysId
+    ) => {
+
+        try {
+
+            const targetUser =
+                String(
+                    targetUserSysId || ''
+                ).trim();
+
+
+            if (!targetUser) {
+
+                return {
+                    success: false,
+                    code:
+                        'TARGET_USER_REQUIRED',
+                    message:
+                        'Target user is required.'
+                };
+            }
+
+
+            const result =
+                await serviceCallApiRequest(
+                    '/start-call',
+                    'POST',
+                    {
+                        target_user_sys_id:
+                            targetUser
+                    }
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to start ServiceCall:',
+                error.message
+            );
+
+
+            return {
+
+                success: false,
+
+                code:
+                    error.code ||
+                    'START_CALL_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to start the ServiceCall.'
+            };
+        }
+    }
+);
+
+ipcMain.handle(
+    'servicecall-update-presence',
+
+    async (
+        event,
+        presenceData = {}
+    ) => {
+
+        try {
+
+            const status =
+                String(
+                    presenceData.status || ''
+                ).trim();
+
+            const oofReason =
+                String(
+                    presenceData.oofReason || ''
+                ).trim();
+
+            if (!status) {
+
+                return {
+                    success: false,
+                    code: 'PRESENCE_REQUIRED',
+                    message:
+                        'Presence status is required.'
+                };
+            }
+
+            return await serviceCallApiRequest(
+                '/presence',
+                'POST',
+                {
+                    status: status,
+                    oof_reason: oofReason
+                }
+            );
+
+        } catch (error) {
+
+            console.error(
+                'Unable to update ServiceCall presence:',
+                error.message
+            );
+
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'UPDATE_PRESENCE_FAILED',
+                message:
+                    error.message ||
+                    'Unable to update presence.'
+            };
+        }
+    }
+);

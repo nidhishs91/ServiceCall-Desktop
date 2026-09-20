@@ -31,6 +31,77 @@ document.addEventListener(
                 'openActiveCallButton'
             );
 
+        /* -------------------------------------------------
+   PEOPLE ELEMENTS
+------------------------------------------------- */
+
+const peopleSearchInput =
+    document.getElementById(
+        'peopleSearchInput'
+    );
+
+const peopleSearchMessage =
+    document.getElementById(
+        'peopleSearchMessage'
+    );
+
+const peopleSearchResults =
+    document.getElementById(
+        'peopleSearchResults'
+    );
+
+/* =====================================================
+   TOP BAR PRESENCE
+===================================================== */
+
+const presenceButton =
+    document.getElementById(
+        'presenceButton'
+    );
+
+const presenceMenu =
+    document.getElementById(
+        'presenceMenu'
+    );
+
+const presenceText =
+    document.getElementById(
+        'presenceText'
+    );
+
+const presenceDot =
+    document.getElementById(
+        'presenceDot'
+    );
+
+const presenceOptions =
+    document.querySelectorAll(
+        '.presence-option'
+    );
+
+const oofReasonPanel =
+    document.getElementById(
+        'oofReasonPanel'
+    );
+
+const oofReasonInput =
+    document.getElementById(
+        'oofReasonInput'
+    );
+
+const saveOofButton =
+    document.getElementById(
+        'saveOofButton'
+    );
+
+const cancelOofButton =
+    document.getElementById(
+        'cancelOofButton'
+    );
+
+let peopleSearchTimer =
+    null;
+
         const connectionPill =
             document.getElementById(
                 'connectionPill'
@@ -4733,6 +4804,485 @@ else if (
 }
 
 /* =======================================================
+   SERVICECALL PEOPLE
+======================================================= */
+
+if (
+    peopleSearchInput &&
+    peopleSearchResults
+) {
+
+    peopleSearchInput.addEventListener(
+        'input',
+        () => {
+
+            const searchText =
+                peopleSearchInput
+                    .value
+                    .trim();
+
+
+            /*
+             * Cancel previous pending search.
+             */
+            if (peopleSearchTimer) {
+
+                clearTimeout(
+                    peopleSearchTimer
+                );
+
+                peopleSearchTimer =
+                    null;
+            }
+
+
+            /*
+             * Existing /users API requires
+             * at least two characters.
+             */
+            if (
+                searchText.length < 2
+            ) {
+
+                peopleSearchResults.innerHTML =
+                    '';
+
+                if (peopleSearchMessage) {
+
+                    peopleSearchMessage.textContent =
+                        searchText.length === 1
+                            ? 'Type at least 2 characters.'
+                            : '';
+                }
+
+                return;
+            }
+
+
+            if (peopleSearchMessage) {
+
+                peopleSearchMessage.textContent =
+                    'Searching...';
+            }
+
+
+            peopleSearchTimer =
+                setTimeout(
+                    async () => {
+
+                        try {
+
+                            const result =
+                                await window
+                                    .serviceCall
+                                    .searchUsers(
+                                        searchText
+                                    );
+
+
+                            /*
+                             * User may have typed something
+                             * different while this request
+                             * was running.
+                             */
+                            if (
+                                peopleSearchInput
+                                    .value
+                                    .trim() !==
+                                searchText
+                            ) {
+
+                                return;
+                            }
+
+
+                            if (
+                                !result ||
+                                result.success !== true
+                            ) {
+
+                                throw new Error(
+                                    result &&
+                                    result.message
+                                        ? result.message
+                                        : 'Unable to search users.'
+                                );
+                            }
+
+
+                            const users =
+                                Array.isArray(
+                                    result.users
+                                )
+                                    ? result.users
+                                    : [];
+
+
+                            peopleSearchResults.innerHTML =
+                                '';
+
+
+                            if (
+                                users.length === 0
+                            ) {
+
+                                if (
+                                    peopleSearchMessage
+                                ) {
+
+                                    peopleSearchMessage.textContent =
+                                        'No users found.';
+                                }
+
+                                return;
+                            }
+
+
+                            if (
+                                peopleSearchMessage
+                            ) {
+
+                                peopleSearchMessage.textContent =
+                                    '';
+                            }
+
+
+                            users.forEach(
+                                user => {
+
+                                    const row =
+                                        document.createElement(
+                                            'div'
+                                        );
+
+
+                                    row.className =
+                                        'people-result';
+
+
+                                    /* -------------------------
+                                       USER INFORMATION
+                                    ------------------------- */
+
+                                    const userInfo =
+                                        document.createElement(
+                                            'div'
+                                        );
+
+
+                                    const userName =
+                                        document.createElement(
+                                            'div'
+                                        );
+
+
+                                    userName.textContent =
+                                        user.name ||
+                                        'Unknown User';
+
+
+                                    userName.style.fontWeight =
+                                        '600';
+
+
+                                    const userDetails =
+                                        document.createElement(
+                                            'div'
+                                        );
+
+
+                                    userDetails.style.fontSize =
+                                        '13px';
+
+
+                                    userDetails.style.marginTop =
+                                        '4px';
+
+
+                                    const identityParts =
+                                        [];
+
+
+                                    if (
+                                        user.user_name
+                                    ) {
+
+                                        identityParts.push(
+                                            user.user_name
+                                        );
+                                    }
+
+
+                                    if (
+                                        user.email
+                                    ) {
+
+                                        identityParts.push(
+                                            user.email
+                                        );
+                                    }
+
+
+                                    userDetails.textContent =
+                                        identityParts.join(
+                                            ' • '
+                                        );
+
+
+                                    /* -------------------------
+                                       CURRENT STATUS
+                                    ------------------------- */
+
+                                    const userStatus =
+                                        document.createElement(
+                                            'div'
+                                        );
+
+
+                                    userStatus.style.fontSize =
+                                        '13px';
+
+
+                                    userStatus.style.marginTop =
+                                        '5px';
+
+
+                                    userStatus.textContent =
+                                        user.display_status ||
+                                        'Offline';
+
+
+                                    userInfo.appendChild(
+                                        userName
+                                    );
+
+
+                                    if (
+                                        identityParts.length >
+                                        0
+                                    ) {
+
+                                        userInfo.appendChild(
+                                            userDetails
+                                        );
+                                    }
+
+
+                                    userInfo.appendChild(
+                                        userStatus
+                                    );
+
+
+                                    /* -------------------------
+                                       CALL BUTTON
+                                    ------------------------- */
+
+                                    const callButton =
+                                        document.createElement(
+                                            'button'
+                                        );
+
+
+                                    callButton.type =
+                                        'button';
+
+
+                                    callButton.className =
+                                        'primary-button';
+
+
+                                    callButton.textContent =
+                                        'Call';
+
+
+                                    callButton.addEventListener(
+                                        'click',
+
+                                        async () => {
+
+                                            callButton.disabled =
+                                                true;
+
+
+                                            callButton.textContent =
+                                                'Calling...';
+
+
+                                            if (
+                                                peopleSearchMessage
+                                            ) {
+
+                                                peopleSearchMessage.textContent =
+                                                    'Calling ' +
+                                                    (
+                                                        user.name ||
+                                                        'user'
+                                                    ) +
+                                                    '...';
+                                            }
+
+
+                                            try {
+
+                                                const callResult =
+                                                    await window
+                                                        .serviceCall
+                                                        .startCall(
+                                                            user.sys_id
+                                                        );
+
+
+                                                console.log(
+                                                    'Start call result:',
+                                                    callResult
+                                                );
+
+
+                                                if (
+                                                    !callResult ||
+                                                    callResult.success !==
+                                                        true
+                                                ) {
+
+                                                    throw new Error(
+                                                        callResult &&
+                                                        callResult.message
+                                                            ? callResult.message
+                                                            : 'Unable to start call.'
+                                                    );
+                                                }
+
+
+                                                if (
+                                                    peopleSearchMessage
+                                                ) {
+
+                                                    peopleSearchMessage.textContent =
+                                                        'Calling ' +
+                                                        (
+                                                            callResult
+                                                                .target_user_name ||
+                                                            user.name ||
+                                                            'user'
+                                                        ) +
+                                                        '...';
+                                                }
+
+
+                                                /*
+                                                 * Do NOT manually open the
+                                                 * call window here.
+                                                 *
+                                                 * main.js already monitors
+                                                 * /outgoing-call and will
+                                                 * open the existing call
+                                                 * window for this call.
+                                                 */
+
+
+                                            } catch (error) {
+
+                                                console.error(
+                                                    'Start ServiceCall failed:',
+                                                    error
+                                                );
+
+
+                                                if (
+                                                    peopleSearchMessage
+                                                ) {
+
+                                                    peopleSearchMessage.textContent =
+                                                        error.message ||
+                                                        'Unable to start call.';
+                                                }
+
+
+                                                callButton.disabled =
+                                                    false;
+
+
+                                                callButton.textContent =
+                                                    'Call';
+                                            }
+                                        }
+                                    );
+
+
+                                    /* -------------------------
+                                       RESULT ROW
+                                    ------------------------- */
+
+                                    row.appendChild(
+                                        userInfo
+                                    );
+
+
+                                    row.appendChild(
+                                        callButton
+                                    );
+
+
+                                    /*
+                                     * Temporary functional layout.
+                                     * Final UI comes later.
+                                     */
+                                    row.style.display =
+                                        'flex';
+
+                                    row.style.alignItems =
+                                        'center';
+
+                                    row.style.justifyContent =
+                                        'space-between';
+
+                                    row.style.gap =
+                                        '16px';
+
+                                    row.style.padding =
+                                        '12px 0';
+
+                                    row.style.borderBottom =
+                                        '1px solid #e5e5e5';
+
+
+                                    peopleSearchResults.appendChild(
+                                        row
+                                    );
+                                }
+                            );
+
+
+                        } catch (error) {
+
+                            console.error(
+                                'People search failed:',
+                                error
+                            );
+
+
+                            peopleSearchResults.innerHTML =
+                                '';
+
+
+                            if (
+                                peopleSearchMessage
+                            ) {
+
+                                peopleSearchMessage.textContent =
+                                    error.message ||
+                                    'Unable to search users.';
+                            }
+                        }
+
+                    },
+                    300
+                );
+        }
+    );
+}
+
+/* =======================================================
    SERVICECALL NOTIFICATIONS
 ======================================================= */
 
@@ -7226,4 +7776,403 @@ if (
         loadRecordingHistory
     );
 }
+
+function updatePresenceDisplay(
+    status
+) {
+
+    const normalized =
+        String(
+            status || 'available'
+        )
+            .trim()
+            .toLowerCase();
+
+
+    let label =
+        'Available';
+
+    let cssClass =
+        'available';
+
+
+    if (
+        normalized === 'busy'
+    ) {
+
+        label = 'Busy';
+        cssClass = 'busy';
+
+    } else if (
+        normalized === 'away'
+    ) {
+
+        label = 'Away';
+        cssClass = 'away';
+
+    } else if (
+        normalized === 'out of office'
+    ) {
+
+        label = 'Out of Office';
+        cssClass = 'out-of-office';
+
+    } else if (
+        normalized === 'in call'
+    ) {
+
+        label = 'In a Call';
+        cssClass = 'in-call';
+
+    } else if (
+        normalized === 'offline'
+    ) {
+
+        label = 'Offline';
+        cssClass = 'offline';
+    }
+
+
+    if (
+        presenceText
+    ) {
+
+        presenceText.textContent =
+            label;
+    }
+
+
+    if (
+        presenceDot
+    ) {
+
+        presenceDot.className =
+            'presence-dot ' +
+            cssClass;
+    }
+}
+
+/* =====================================================
+   PRESENCE MENU
+===================================================== */
+
+if (
+    presenceButton &&
+    presenceMenu
+) {
+
+    presenceButton.addEventListener(
+        'click',
+        event => {
+
+            event.stopPropagation();
+
+            const isOpen =
+                presenceMenu.style.display ===
+                'block';
+
+
+            presenceMenu.style.display =
+                isOpen
+                    ? 'none'
+                    : 'block';
+        }
+    );
+}
+
+
+/*
+ * Available / Busy / Away / OOF
+ */
+
+presenceOptions.forEach(
+    option => {
+
+        option.addEventListener(
+            'click',
+
+            async event => {
+
+                event.stopPropagation();
+
+
+                const status =
+                    String(
+                        option.dataset.presence ||
+                        ''
+                    )
+                        .trim()
+                        .toLowerCase();
+
+
+                if (!status) {
+                    return;
+                }
+
+
+                /*
+                 * OOF needs a reason before
+                 * being saved.
+                 */
+
+                if (
+                    status ===
+                    'out of office'
+                ) {
+
+                    if (
+                        oofReasonPanel
+                    ) {
+
+                        oofReasonPanel.style.display =
+                            'block';
+                    }
+
+
+                    if (
+                        oofReasonInput
+                    ) {
+
+                        oofReasonInput.focus();
+                    }
+
+
+                    return;
+                }
+
+
+                /*
+                 * Available / Busy / Away
+                 */
+
+                try {
+
+                    const result =
+                        await window.serviceCall
+                            .updatePresence(
+                                status,
+                                ''
+                            );
+
+
+                    if (
+                        !result ||
+                        result.success !== true
+                    ) {
+
+                        throw new Error(
+                            result &&
+                            result.message
+                                ? result.message
+                                : 'Unable to update presence.'
+                        );
+                    }
+
+
+                    updatePresenceDisplay(
+                        result.effective_status ||
+                        status
+                    );
+
+
+                    /*
+                     * Clear any previous
+                     * OOF reason locally.
+                     */
+
+                    if (
+                        oofReasonInput
+                    ) {
+
+                        oofReasonInput.value =
+                            '';
+                    }
+
+
+                    if (
+                        oofReasonPanel
+                    ) {
+
+                        oofReasonPanel.style.display =
+                            'none';
+                    }
+
+
+                    if (
+                        presenceMenu
+                    ) {
+
+                        presenceMenu.style.display =
+                            'none';
+                    }
+
+
+                } catch (error) {
+
+                    console.error(
+                        'Unable to update presence:',
+                        error
+                    );
+                }
+            }
+        );
+    }
+);
+
+/* =====================================================
+   OUT OF OFFICE
+===================================================== */
+
+if (
+    saveOofButton
+) {
+
+    saveOofButton.addEventListener(
+        'click',
+
+        async event => {
+
+            event.stopPropagation();
+
+
+            const reason =
+                String(
+                    oofReasonInput
+                        ? oofReasonInput.value
+                        : ''
+                ).trim();
+
+
+            if (!reason) {
+
+                if (
+                    oofReasonInput
+                ) {
+
+                    oofReasonInput.focus();
+                }
+
+                return;
+            }
+
+
+            try {
+
+                const result =
+                    await window.serviceCall
+                        .updatePresence(
+                            'out of office',
+                            reason
+                        );
+
+
+                if (
+                    !result ||
+                    result.success !== true
+                ) {
+
+                    throw new Error(
+                        result &&
+                        result.message
+                            ? result.message
+                            : 'Unable to update Out of Office.'
+                    );
+                }
+
+
+                updatePresenceDisplay(
+                    result.effective_status ||
+                    'out of office'
+                );
+
+
+                if (
+                    oofReasonPanel
+                ) {
+
+                    oofReasonPanel.style.display =
+                        'none';
+                }
+
+
+                if (
+                    presenceMenu
+                ) {
+
+                    presenceMenu.style.display =
+                        'none';
+                }
+
+
+            } catch (error) {
+
+                console.error(
+                    'Unable to update Out of Office:',
+                    error
+                );
+            }
+        }
+    );
+}
+
+if (
+    cancelOofButton
+) {
+
+    cancelOofButton.addEventListener(
+        'click',
+        event => {
+
+            event.stopPropagation();
+
+
+            if (
+                oofReasonPanel
+            ) {
+
+                oofReasonPanel.style.display =
+                    'none';
+            }
+
+
+            if (
+                oofReasonInput
+            ) {
+
+                oofReasonInput.value =
+                    '';
+            }
+        }
+    );
+}
+
+document.addEventListener(
+    'click',
+    event => {
+
+        if (
+            presenceMenu &&
+            presenceButton &&
+            !presenceMenu.contains(
+                event.target
+            ) &&
+            !presenceButton.contains(
+                event.target
+            )
+        ) {
+
+            presenceMenu.style.display =
+                'none';
+
+
+            if (
+                oofReasonPanel
+            ) {
+
+                oofReasonPanel.style.display =
+                    'none';
+            }
+        }
+    }
+);
 });

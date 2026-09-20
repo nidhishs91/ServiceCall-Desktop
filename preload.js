@@ -190,6 +190,30 @@ startRecording:
             callSysId
         ),
 
+startCall: (
+    targetUserSysId
+) => {
+
+    return ipcRenderer.invoke(
+        'servicecall-start-call',
+        targetUserSysId
+    );
+},
+
+updatePresence: (
+    status,
+    oofReason = ''
+) => {
+
+    return ipcRenderer.invoke(
+        'servicecall-update-presence',
+        {
+            status: status,
+            oofReason: oofReason
+        }
+    );
+},
+
 
 finishRecording:
     (recordingSysId) =>
