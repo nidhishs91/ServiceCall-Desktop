@@ -6087,3 +6087,195 @@ ipcMain.handle(
         }
     }
 );
+
+/* =======================================================
+   SERVICECALL NOTIFICATIONS
+======================================================= */
+
+/*
+ * Get notifications for the currently
+ * authenticated ServiceCall user.
+ *
+ * ServiceNow determines the recipient from
+ * the authenticated OAuth user.
+ */
+ipcMain.handle(
+    'servicecall-get-notifications',
+
+    async (
+        event,
+        options = {}
+    ) => {
+
+        try {
+
+            let page =
+                parseInt(
+                    options.page,
+                    10
+                ) || 1;
+
+
+            if (page < 1) {
+                page = 1;
+            }
+
+
+            let pageSize =
+                parseInt(
+                    options.pageSize,
+                    10
+                ) || 20;
+
+
+            /*
+             * Keep desktop requests reasonable.
+             */
+            if (pageSize < 1) {
+                pageSize = 20;
+            }
+
+
+            if (pageSize > 50) {
+                pageSize = 50;
+            }
+
+            const search =
+    String(
+        options.search || ''
+    )
+        .trim()
+        .substring(
+            0,
+            100
+        );
+
+
+            const query =
+    new URLSearchParams({
+        page:
+            String(page),
+
+        page_size:
+            String(pageSize)
+    });
+
+
+if (search) {
+
+    query.set(
+        'search',
+        search
+    );
+}
+
+
+            const result =
+                await serviceCallApiRequest(
+                    '/notifications?' +
+                        query.toString(),
+                    'GET'
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to get ServiceCall notifications:',
+                error.message
+            );
+
+
+            return {
+
+                success: false,
+
+                code:
+                    error.code ||
+                    'GET_NOTIFICATIONS_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to retrieve notifications.',
+
+                notifications: [],
+
+                unread_count: 0,
+
+                page: 1,
+
+                page_size: 20,
+
+                has_more: false
+            };
+        }
+    }
+);
+
+/* =======================================================
+   MARK NOTIFICATION READ
+======================================================= */
+
+ipcMain.handle(
+    'servicecall-mark-notification-read',
+
+    async (
+        event,
+        notificationSysId
+    ) => {
+
+        try {
+
+            const sysId =
+                String(
+                    notificationSysId || ''
+                ).trim();
+
+
+            if (!sysId) {
+
+                return {
+                    success: false,
+                    code:
+                        'NOTIFICATION_REQUIRED',
+                    message:
+                        'Notification sys_id is required.'
+                };
+            }
+
+
+            return await serviceCallApiRequest(
+                '/mark-notification-read',
+                'POST',
+                {
+                    notification_sys_id:
+                        sysId
+                }
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to mark ServiceCall notification as read:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+
+                code:
+                    error.code ||
+                    'MARK_NOTIFICATION_READ_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to mark notification as read.'
+            };
+        }
+    }
+);

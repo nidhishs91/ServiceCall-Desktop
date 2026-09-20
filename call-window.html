@@ -6,13 +6,13 @@
     <meta charset="UTF-8">
 
     <meta http-equiv="Content-Security-Policy" content="
-            default-src 'self' data: blob:;
-            script-src 'self';
-            style-src 'self' 'unsafe-inline';
-            img-src 'self' data: blob:;
-            media-src 'self' blob:;
-            connect-src 'self' https: wss:;
-        ">
+        default-src 'self' data: blob:;
+        script-src 'self';
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob:;
+        media-src 'self' blob:;
+        connect-src 'self' https: wss:;
+    ">
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -383,10 +383,6 @@
         }
 
 
-        /*
-         * Agora normally inserts its own
-         * video element inside this DIV.
-         */
         .screen-share-video video {
             width:
                 100% !important;
@@ -577,6 +573,367 @@
 
             font-weight:
                 bold;
+        }
+
+
+        /* --------------------------------
+           LIVE PARTICIPANTS PANEL
+        -------------------------------- */
+
+        .participants-panel {
+            position:
+                fixed;
+
+            top:
+                54px;
+
+            right:
+                0;
+
+            bottom:
+                0;
+
+            width:
+                340px;
+
+            max-width:
+                92vw;
+
+            z-index:
+                900;
+
+            display:
+                flex;
+
+            flex-direction:
+                column;
+
+            background:
+                #ffffff;
+
+            border-left:
+                1px solid #dfe8e5;
+
+            box-shadow:
+                -8px 0 28px rgba(0, 0, 0, 0.12);
+
+            text-align:
+                left;
+        }
+
+
+        .participants-panel-header {
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                space-between;
+
+            gap:
+                12px;
+
+            padding:
+                18px;
+
+            border-bottom:
+                1px solid #e5ecea;
+        }
+
+
+        .participants-panel-heading {
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                7px;
+        }
+
+
+        .participants-panel-title {
+            font-size:
+                17px;
+
+            font-weight:
+                bold;
+
+            color:
+                #1f2d2a;
+        }
+
+
+        .participants-panel-count {
+            display:
+                inline-flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            min-width:
+                26px;
+
+            height:
+                26px;
+
+            padding:
+                0 8px;
+
+            border-radius:
+                13px;
+
+            background:
+                #e4f3ef;
+
+            color:
+                #0b6b58;
+
+            font-size:
+                12px;
+
+            font-weight:
+                bold;
+        }
+
+
+        .participants-panel-close {
+            width:
+                34px;
+
+            height:
+                34px;
+
+            border:
+                none;
+
+            border-radius:
+                8px;
+
+            background:
+                #eef3f2;
+
+            color:
+                #324540;
+
+            cursor:
+                pointer;
+
+            font-size:
+                22px;
+
+            line-height:
+                1;
+        }
+
+
+        .participants-panel-close:hover {
+            background:
+                #e1e9e7;
+        }
+
+
+        .participants-panel-body {
+            flex:
+                1;
+
+            overflow-y:
+                auto;
+
+            padding:
+                14px;
+        }
+
+
+        .participants-section-label {
+            margin:
+                3px 4px 10px 4px;
+
+            color:
+                #687772;
+
+            font-size:
+                11px;
+
+            font-weight:
+                bold;
+
+            text-transform:
+                uppercase;
+
+            letter-spacing:
+                0.5px;
+        }
+
+
+        .live-participant {
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                11px;
+
+            padding:
+                11px 10px;
+
+            margin-bottom:
+                5px;
+
+            border-radius:
+                10px;
+
+            transition:
+                background 0.12s ease;
+        }
+
+
+        .live-participant:hover {
+            background:
+                #f4f8f7;
+        }
+
+
+        .live-participant-avatar {
+            width:
+                40px;
+
+            height:
+                40px;
+
+            flex-shrink:
+                0;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            border-radius:
+                50%;
+
+            background:
+                #dcefeb;
+
+            color:
+                #0b4f46;
+
+            font-size:
+                14px;
+
+            font-weight:
+                bold;
+        }
+
+
+        .live-participant-info {
+            flex:
+                1;
+
+            min-width:
+                0;
+        }
+
+
+        .live-participant-name {
+            overflow:
+                hidden;
+
+            color:
+                #1f2d2a;
+
+            font-size:
+                14px;
+
+            font-weight:
+                600;
+
+            text-overflow:
+                ellipsis;
+
+            white-space:
+                nowrap;
+        }
+
+
+        .live-participant-meta {
+            margin-top:
+                3px;
+
+            color:
+                #71807c;
+
+            font-size:
+                12px;
+        }
+
+
+        .live-participant-status {
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                6px;
+
+            color:
+                #53635f;
+
+            font-size:
+                11px;
+
+            white-space:
+                nowrap;
+        }
+
+
+        .live-participant-status-dot {
+            width:
+                8px;
+
+            height:
+                8px;
+
+            flex-shrink:
+                0;
+
+            border-radius:
+                50%;
+
+            background:
+                #16856d;
+        }
+
+
+        .participants-empty {
+            padding:
+                40px 18px;
+
+            text-align:
+                center;
+
+            color:
+                #71807c;
+
+            font-size:
+                13px;
+
+            line-height:
+                1.5;
         }
 
 
@@ -1043,6 +1400,15 @@
                 grid-template-columns:
                     1fr;
             }
+
+
+            .participants-panel {
+                width:
+                    100%;
+
+                max-width:
+                    100%;
+            }
         }
     </style>
 
@@ -1185,6 +1551,11 @@
             </button>
 
 
+            <button class="secondary" id="participantsButton" type="button">
+                Participants
+            </button>
+
+
             <button class="secondary" id="addUserButton" type="button">
                 Add User
             </button>
@@ -1211,6 +1582,53 @@
             Call is being recorded
         </div>
 
+
+    </div>
+
+
+
+    <!-- --------------------------------
+         LIVE PARTICIPANTS PANEL
+    --------------------------------- -->
+
+    <div class="participants-panel hidden" id="participantsPanel">
+
+        <div class="participants-panel-header">
+
+            <div class="participants-panel-heading">
+
+                <div class="participants-panel-title">
+                    Participants
+                </div>
+
+
+                <span class="participants-panel-count" id="participantsPanelCount">
+                    0
+                </span>
+
+            </div>
+
+
+            <button class="participants-panel-close" id="closeParticipantsPanel" type="button"
+                title="Close participants">
+                &times;
+            </button>
+
+        </div>
+
+
+        <div class="participants-panel-body" id="participantsPanelBody">
+
+            <div class="participants-section-label">
+                In this call
+            </div>
+
+
+            <div class="participants-empty">
+                Loading participants...
+            </div>
+
+        </div>
 
     </div>
 
@@ -1244,14 +1662,19 @@
                     Search for a ServiceCall user to invite to this call.
                 </div>
 
+
                 <input class="participant-search" id="participantSearch" type="text" autocomplete="off"
                     placeholder="Search users...">
 
+
                 <div class="participant-results" id="participantResults">
+
                     <div class="participant-empty">
                         Start typing a user's name.
                     </div>
+
                 </div>
+
 
                 <div class="participant-message" id="participantMessage">
                 </div>

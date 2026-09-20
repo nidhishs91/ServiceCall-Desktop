@@ -1543,6 +1543,557 @@
             background: #fbfcfc;
         }
 
+        /* =================================================
+   NOTIFICATION SEARCH
+================================================= */
+
+        .notification-search-wrapper {
+            position: relative;
+
+            width: 100%;
+            max-width: 520px;
+
+            margin-bottom: 18px;
+        }
+
+
+        .notification-search-icon {
+            position: absolute;
+
+            left: 15px;
+            top: 50%;
+
+            transform: translateY(-50%);
+
+            width: 18px;
+            height: 18px;
+
+            color: #758782;
+
+            pointer-events: none;
+        }
+
+
+        .notification-search {
+            width: 100%;
+            height: 44px;
+
+            padding:
+                0 42px 0 44px;
+
+            border:
+                1px solid #d6e0dd;
+
+            border-radius: 11px;
+
+            outline: none;
+
+            background: white;
+            color: #1c332e;
+
+            font-size: 14px;
+
+            transition:
+                border-color 0.18s ease,
+                box-shadow 0.18s ease;
+        }
+
+
+        .notification-search::placeholder {
+            color: #91a09c;
+        }
+
+
+        .notification-search:hover {
+            border-color: #bccdc8;
+        }
+
+
+        .notification-search:focus {
+            border-color: #3d917c;
+
+            box-shadow:
+                0 0 0 3px rgba(61, 145, 124, 0.11);
+        }
+
+
+        .notification-search-wrapper:focus-within .notification-search-icon {
+            color: #25745f;
+        }
+
+
+        .notification-search::-webkit-search-cancel-button {
+            display: none;
+        }
+
+
+        .notification-search-clear {
+            position: absolute;
+
+            right: 10px;
+            top: 50%;
+
+            transform: translateY(-50%);
+
+            width: 27px;
+            height: 27px;
+
+            border: 0;
+            border-radius: 7px;
+
+            background: transparent;
+
+            color: #71817d;
+
+            display: none;
+
+            align-items: center;
+            justify-content: center;
+
+            font-size: 18px;
+
+            cursor: pointer;
+        }
+
+
+        .notification-search-clear:hover {
+            background: #edf3f1;
+
+            color: #244a41;
+        }
+
+        /* =================================================
+   NOTIFICATION SEARCH HIGHLIGHT
+================================================= */
+
+        .notification-search-highlight {
+            background: rgba(255, 193, 7, 0.28);
+            color: inherit;
+
+            padding: 0;
+            margin: 0;
+
+            border-radius: 2px;
+
+            box-decoration-break: clone;
+            -webkit-box-decoration-break: clone;
+        }
+
+        /* =================================================
+   NOTIFICATIONS
+================================================= */
+
+        .notification-nav-button {
+            display: flex;
+
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 10px;
+        }
+
+
+        .notification-unread-badge {
+            min-width: 20px;
+            height: 20px;
+
+            padding: 0 6px;
+
+            border-radius: 999px;
+
+            background: #55d6a9;
+            color: #10332c;
+
+            align-items: center;
+            justify-content: center;
+
+            font-size: 10px;
+            font-weight: 800;
+        }
+
+
+        .notification-toolbar {
+            display: flex;
+
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 16px;
+
+            margin-bottom: 18px;
+        }
+
+
+        .notification-filters {
+            display: flex;
+
+            align-items: center;
+            flex-wrap: wrap;
+
+            gap: 7px;
+        }
+
+
+        .notification-filter {
+            border:
+                1px solid #d6e0dd;
+
+            background: white;
+            color: #506660;
+
+            padding: 8px 13px;
+
+            border-radius: 999px;
+
+            font-size: 12px;
+            font-weight: 650;
+
+            cursor: pointer;
+
+            transition:
+                background 0.15s ease,
+                border-color 0.15s ease,
+                color 0.15s ease;
+        }
+
+
+        .notification-filter:hover {
+            border-color: #b8cbc5;
+
+            background: #f5f9f7;
+
+            color: #235d4f;
+        }
+
+
+        .notification-filter.active {
+            border-color: #126e5a;
+
+            background: #126e5a;
+            color: white;
+        }
+
+
+        .notifications-list {
+            display: grid;
+
+            gap: 10px;
+        }
+
+
+        .notification-card {
+            position: relative;
+
+            display: flex;
+
+            align-items: flex-start;
+
+            gap: 14px;
+
+            padding: 17px 18px;
+
+            background: white;
+
+            border:
+                1px solid #e0e7e5;
+
+            border-radius: 12px;
+
+            transition:
+                border-color 0.15s ease,
+                box-shadow 0.15s ease,
+                background 0.15s ease;
+        }
+
+
+        .notification-card:hover {
+            border-color: #c8d7d3;
+
+            box-shadow:
+                0 3px 12px rgba(23,
+                    51,
+                    45,
+                    0.045);
+        }
+
+
+        .notification-card.unread {
+            background: #f5fbf8;
+
+            border-color: #c9e4dc;
+        }
+
+
+        .notification-icon {
+            width: 40px;
+            height: 40px;
+
+            flex-shrink: 0;
+
+            border-radius: 11px;
+
+            background: #edf4f2;
+            color: #276656;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            font-size: 18px;
+        }
+
+
+        .notification-body {
+            min-width: 0;
+
+            flex: 1;
+        }
+
+
+        .notification-title-row {
+            display: flex;
+
+            align-items: flex-start;
+            justify-content: space-between;
+
+            gap: 15px;
+        }
+
+
+        .notification-title {
+            color: #213d36;
+
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+
+        .notification-time {
+            flex-shrink: 0;
+
+            color: #879590;
+
+            font-size: 11px;
+        }
+
+
+        .notification-message {
+            margin-top: 5px;
+
+            color: #667873;
+
+            font-size: 13px;
+
+            line-height: 1.5;
+
+            word-break: break-word;
+        }
+
+
+        .notification-actions {
+            display: flex;
+
+            align-items: center;
+            flex-wrap: wrap;
+
+            gap: 8px;
+
+            margin-top: 11px;
+        }
+
+
+        .notification-unread-dot {
+            width: 8px;
+            height: 8px;
+
+            flex-shrink: 0;
+
+            margin-top: 7px;
+
+            border-radius: 50%;
+
+            background: #20a27c;
+        }
+
+
+        .notification-empty {
+            padding: 45px 25px;
+
+            background: white;
+
+            border:
+                1px dashed #ccd8d4;
+
+            border-radius: 12px;
+
+            text-align: center;
+
+            color: #75837f;
+        }
+
+
+        /* Small action button used inside notification cards */
+
+        .notification-action-button {
+            border:
+                1px solid #cfdad7;
+
+            background: white;
+            color: #25463f;
+
+            padding: 7px 11px;
+
+            border-radius: 7px;
+
+            font-size: 11px;
+            font-weight: 650;
+
+            cursor: pointer;
+
+            transition:
+                background 0.15s ease,
+                border-color 0.15s ease;
+        }
+
+
+        .notification-action-button:hover {
+            background: #f1f7f4;
+
+            border-color: #b8cbc5;
+        }
+
+
+        .notification-action-button.primary {
+            border-color: #126e5a;
+
+            background: #126e5a;
+            color: white;
+        }
+
+
+        .notification-action-button.primary:hover {
+            background: #0e5e4d;
+        }
+
+
+        /* Read notifications remain visible,
+   but visually quieter. */
+
+        .notification-card.read {
+            background: white;
+
+            border-color: #e4eae8;
+        }
+
+
+        .notification-card.read .notification-title {
+            font-weight: 600;
+        }
+
+
+        .notification-card.read .notification-icon {
+            background: #f1f4f3;
+
+            color: #70817c;
+        }
+
+        /* =================================================
+   NOTIFICATION ARRIVAL ANIMATIONS
+================================================= */
+
+        @keyframes notificationNavPulse {
+
+            0% {
+                box-shadow:
+                    0 0 0 0 rgba(85, 214, 169, 0);
+            }
+
+            25% {
+                background:
+                    rgba(85, 214, 169, 0.18);
+
+                box-shadow:
+                    0 0 0 4px rgba(85, 214, 169, 0.08);
+            }
+
+            55% {
+                background:
+                    rgba(85, 214, 169, 0.08);
+            }
+
+            100% {
+                box-shadow:
+                    0 0 0 0 rgba(85, 214, 169, 0);
+            }
+        }
+
+
+        .notification-nav-button.notification-arrived {
+            animation:
+                notificationNavPulse 0.7s ease 3;
+        }
+
+
+        @keyframes notificationCardArrival {
+
+            from {
+                opacity: 0;
+
+                transform:
+                    translateY(-7px);
+            }
+
+            to {
+                opacity: 1;
+
+                transform:
+                    translateY(0);
+            }
+        }
+
+
+        .notification-card-arriving {
+            animation:
+                notificationCardArrival 0.28s ease-out;
+        }
+
+        /* =================================================
+   NOTIFICATION RESPONSIVE
+================================================= */
+
+        @media (max-width: 760px) {
+
+            .notification-toolbar {
+                align-items: stretch;
+
+                flex-direction: column;
+            }
+
+
+            .notification-filters {
+                width: 100%;
+            }
+
+
+            .notification-title-row {
+                flex-direction: column;
+
+                gap: 4px;
+            }
+
+
+            .notification-time {
+                flex-shrink: 1;
+            }
+
+
+            .notification-card {
+                padding: 15px;
+            }
+
+        }
+
 
         /* =================================================
            SETTINGS
@@ -1708,6 +2259,286 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* =====================================================
+   NOTIFICATION LIST / DETAIL TRANSITION
+===================================================== */
+
+        #notificationsView {
+            position: relative;
+            overflow: hidden;
+        }
+
+
+        /*
+ * Both notification screens use the
+ * same content area.
+ */
+        .notification-panel {
+            width: 100%;
+        }
+
+
+        /* -----------------------------------------------------
+   LIST PANEL
+----------------------------------------------------- */
+
+        .notification-list-panel {
+            transform: translateX(0);
+            opacity: 1;
+
+            transition:
+                transform 220ms ease,
+                opacity 180ms ease;
+        }
+
+
+        /*
+ * Move the list slightly left when
+ * notification details are open.
+ */
+        .notification-list-panel.detail-open {
+            display: none;
+            transform: translateX(-35px);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+
+        /* -----------------------------------------------------
+   DETAIL PANEL
+----------------------------------------------------- */
+
+        .notification-detail-panel {
+            display: none;
+
+            transform: translateX(45px);
+            opacity: 0;
+        }
+
+
+        /*
+ * Temporary visible state.
+ *
+ * JavaScript will add this when a
+ * notification is opened.
+ */
+        .notification-detail-panel.active {
+            display: block;
+
+            animation:
+                notificationDetailEnter 220ms ease forwards;
+        }
+
+
+        @keyframes notificationDetailEnter {
+
+            from {
+                transform: translateX(45px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+
+        /* -----------------------------------------------------
+   BACK BUTTON
+----------------------------------------------------- */
+
+        .notification-detail-back {
+            appearance: none;
+
+            border: 0;
+            background: transparent;
+
+            padding: 0;
+            margin: 0 0 26px 0;
+
+            font-size: 14px;
+            font-weight: 600;
+
+            cursor: pointer;
+
+            color: inherit;
+
+            opacity: 0.72;
+
+            transition:
+                opacity 150ms ease,
+                transform 150ms ease;
+        }
+
+
+        .notification-detail-back:hover {
+            opacity: 1;
+            transform: translateX(-2px);
+        }
+
+
+        /* -----------------------------------------------------
+   DETAIL HEADER
+----------------------------------------------------- */
+
+        .notification-detail-header {
+            display: flex;
+            align-items: flex-start;
+
+            gap: 18px;
+
+            padding-bottom: 24px;
+
+            border-bottom:
+                1px solid rgba(0, 0, 0, 0.08);
+        }
+
+
+        .notification-detail-icon {
+            width: 48px;
+            height: 48px;
+
+            flex: 0 0 48px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 14px;
+
+            font-size: 22px;
+
+            background:
+                rgba(0, 0, 0, 0.045);
+        }
+
+
+        .notification-detail-heading {
+            min-width: 0;
+        }
+
+
+        .notification-detail-type {
+            margin-bottom: 6px;
+
+            font-size: 12px;
+            font-weight: 700;
+
+            text-transform: uppercase;
+
+            letter-spacing: 0.06em;
+
+            opacity: 0.55;
+        }
+
+
+        .notification-detail-title {
+            margin: 0;
+
+            font-size: 24px;
+            line-height: 1.3;
+
+            font-weight: 700;
+        }
+
+
+        .notification-detail-time {
+            margin-top: 8px;
+
+            font-size: 13px;
+
+            opacity: 0.58;
+        }
+
+
+        /* -----------------------------------------------------
+   MESSAGE
+----------------------------------------------------- */
+
+        .notification-detail-content {
+            padding: 28px 0;
+        }
+
+
+        .notification-detail-message {
+            margin: 0;
+
+            max-width: 760px;
+
+            font-size: 15px;
+            line-height: 1.75;
+
+            white-space: pre-wrap;
+        }
+
+
+        /* -----------------------------------------------------
+   ACTIONS
+----------------------------------------------------- */
+
+        .notification-detail-actions {
+            display: flex;
+
+            align-items: center;
+
+            gap: 10px;
+
+            flex-wrap: wrap;
+
+            margin-top: 8px;
+        }
+
+        /* =====================================================
+   NOTIFICATION BACK TRANSITION
+===================================================== */
+
+        .notification-detail-panel.closing {
+            display: block;
+
+            animation:
+                notificationDetailExit 180ms ease forwards;
+        }
+
+
+        @keyframes notificationDetailExit {
+
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+
+            to {
+                transform: translateX(35px);
+                opacity: 0;
+            }
+        }
+
+
+        /*
+ * Smoothly restore notification list.
+ */
+        .notification-list-panel.returning {
+            display: block;
+
+            animation:
+                notificationListReturn 220ms ease forwards;
+        }
+
+
+        @keyframes notificationListReturn {
+
+            from {
+                transform: translateX(-35px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
     </style>
 
 </head>
@@ -1740,36 +2571,41 @@
 
             <nav class="navigation">
 
-
                 <button class="nav-button active" data-view="homeView">
                     Home
                 </button>
-
 
                 <button class="nav-button" data-view="peopleView">
                     People
                 </button>
 
-
                 <button class="nav-button" data-view="meetingsView">
                     Meetings
                 </button>
 
+                <button class="nav-button notification-nav-button" data-view="notificationsView">
+
+                    <span>
+                        Notifications
+                    </span>
+
+                    <span id="notificationUnreadBadge" class="notification-unread-badge" style="display: none;">
+                        0
+                    </span>
+
+                </button>
 
                 <button class="nav-button" data-view="chatView">
                     Chat
                 </button>
 
-
                 <button class="nav-button" data-view="historyView">
                     History
                 </button>
 
-
                 <button class="nav-button" data-view="recordingsView">
                     Recordings
                 </button>
-
 
             </nav>
 
@@ -2010,6 +2846,188 @@
 
                     <div id="meetingPagination" class="meeting-pagination"></div>
 
+
+                </div>
+
+                <!-- =====================================
+     NOTIFICATIONS
+====================================== -->
+
+                <div id="notificationsView" class="view">
+
+                    <div id="notificationListPanel" class="notification-panel notification-list-panel active">
+
+                        <div class="page-heading">
+
+
+                            <div>
+
+                                <h1>
+                                    Notifications
+                                </h1>
+
+                                <p>
+                                    Updates from your ServiceCall activity.
+                                </p>
+
+                            </div>
+
+
+                            <button id="markAllNotificationsReadButton" class="secondary-button" type="button"
+                                style="display: none;">
+
+                                Mark all as read
+
+                            </button>
+
+
+                        </div>
+
+
+
+                        <!-- =====================================
+     NOTIFICATION SEARCH
+====================================== -->
+
+                        <div class="notification-search-wrapper">
+
+                            <svg class="notification-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <circle cx="11" cy="11" r="7"></circle>
+
+                                <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
+
+                            </svg>
+
+
+                            <input id="notificationSearchInput" class="notification-search" type="search"
+                                placeholder="Search notifications..." autocomplete="off" spellcheck="false">
+
+
+                            <button id="notificationSearchClear" class="notification-search-clear" type="button"
+                                aria-label="Clear notification search" title="Clear search">
+                                ×
+                            </button>
+
+                        </div>
+                        <!-- =====================================
+         NOTIFICATION TOOLBAR
+    ====================================== -->
+
+                        <div class="notification-toolbar">
+
+
+                            <div class="notification-filters">
+
+                                <button class="notification-filter active" type="button" data-notification-filter="all">
+
+                                    All
+
+                                </button>
+
+
+                                <button class="notification-filter" data-notification-filter="unread">
+                                    Unread
+                                    <span id="notificationUnreadFilterCount" class="notification-filter-count"
+                                        style="display: none;">
+                                        0
+                                    </span>
+                                </button>
+
+
+                                <button class="notification-filter" type="button" data-notification-filter="read">
+
+                                    Read
+
+                                </button>
+
+                            </div>
+
+
+                            <button id="refreshNotificationsButton" class="secondary-button" type="button">
+
+                                Refresh
+
+                            </button>
+
+
+                        </div>
+
+
+                        <!-- =====================================
+         NOTIFICATION LIST
+    ====================================== -->
+
+                        <div id="notificationsContainer" class="notifications-list">
+
+
+                            <div class="loading">
+                                Open Notifications to load your notifications.
+                            </div>
+
+
+                        </div>
+
+
+                        <!-- =====================================
+         NOTIFICATION PAGINATION
+    ====================================== -->
+
+                        <div id="notificationPagination" class="meeting-pagination">
+                        </div>
+                    </div>
+
+                    <!-- =====================================
+     NOTIFICATION DETAIL
+====================================== -->
+
+                    <div id="notificationDetailPanel" class="notification-panel notification-detail-panel"
+                        aria-hidden="true">
+
+                        <button id="notificationDetailBackButton" class="notification-detail-back" type="button">
+                            ← Back to Notifications
+                        </button>
+
+
+                        <div class="notification-detail-header">
+
+                            <div id="notificationDetailIcon" class="notification-detail-icon">
+                                🔔
+                            </div>
+
+
+                            <div class="notification-detail-heading">
+
+                                <div id="notificationDetailType" class="notification-detail-type">
+                                    Notification
+                                </div>
+
+
+                                <h2 id="notificationDetailTitle" class="notification-detail-title">
+                                    Notification
+                                </h2>
+
+
+                                <div id="notificationDetailTime" class="notification-detail-time">
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="notification-detail-content">
+
+                            <p id="notificationDetailMessage" class="notification-detail-message">
+                            </p>
+
+                        </div>
+
+
+                        <div id="notificationDetailActions" class="notification-detail-actions">
+                        </div>
+
+                    </div>
 
                 </div>
 

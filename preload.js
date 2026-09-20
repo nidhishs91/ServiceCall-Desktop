@@ -346,6 +346,32 @@ completeRecording:
         );
     },
 
+    getNotifications: (
+    page = 1,
+    pageSize = 20,
+    search = ''
+) => {
+
+    return ipcRenderer.invoke(
+        'servicecall-get-notifications',
+        {
+            page: page,
+            pageSize: pageSize,
+            search: search
+        }
+    );
+},
+
+markNotificationRead: (
+    notificationSysId
+) => {
+
+    return ipcRenderer.invoke(
+        'servicecall-mark-notification-read',
+        notificationSysId
+    );
+},
+
     updateMeeting:
     (
         meetingSysId,
