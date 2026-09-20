@@ -372,6 +372,20 @@ markNotificationRead: (
     );
 },
 
+testNotificationPopup: () => {
+
+    return ipcRenderer.invoke(
+        'servicecall-test-notification-popup'
+    );
+},
+
+dismissNotificationPopup: () => {
+
+    ipcRenderer.send(
+        'servicecall-dismiss-notification-popup'
+    );
+},
+
     updateMeeting:
     (
         meetingSysId,

@@ -6303,16 +6303,67 @@ cachedNotificationResult =
             true;
 
 
-        /*
-         * Only pulse when something genuinely
-         * new arrived after initialization.
-         */
         if (
-            newlyArrivedIds.size > 0
-        ) {
+    newlyArrivedIds.size > 0
+) {
 
-            pulseNotificationsNavigation();
+    pulseNotificationsNavigation();
+
+
+    /*
+     * Show a desktop popup only for
+     * genuinely new notifications.
+     */
+    notifications.forEach(
+        notification => {
+
+            const sysId =
+                String(
+                    notification.sys_id ||
+                    ''
+                ).trim();
+
+
+            if (
+                sysId &&
+                newlyArrivedIds.has(
+                    sysId
+                )
+            ) {
+
+                window.serviceCall
+                    .showNotificationPopup(
+                        {
+                            notificationSysId:
+                                sysId,
+
+                            type:
+                                notification.type_display ||
+                                notification.type ||
+                                'Notification',
+
+                            title:
+                                notification.title ||
+                                'ServiceCall',
+
+                            message:
+                                notification.message ||
+                                ''
+                        }
+                    )
+                    .catch(
+                        error => {
+
+                            console.error(
+                                'Unable to show ServiceCall notification popup:',
+                                error
+                            );
+                        }
+                    );
+            }
         }
+    );
+}
 
 
         /*
