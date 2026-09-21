@@ -1492,6 +1492,27 @@ const currentUser =
 const authorization =
     currentUser?.authorization || {};
 
+
+/*
+ * -----------------------------------------
+ * ESTABLISH ACTIVE RUNTIME IDENTITY
+ * -----------------------------------------
+ *
+ * OAuth authentication has completed and
+ * ServiceNow has resolved the current user.
+ *
+ * Keep the active Electron runtime identity
+ * synchronized with the authenticated
+ * ServiceNow identity.
+ */
+
+currentServiceCallUser =
+    currentUser?.user || null;
+
+currentServiceCallAuthorization =
+    authorization;
+
+
 /*
  * -----------------------------------------
  * SAVE AUTHENTICATED ACCOUNT
@@ -8506,7 +8527,6 @@ async function activateSavedAccount(
         const authorization =
             currentUser?.authorization || {};
 
-
         /*
          * SECURITY CHECK:
          *
@@ -8529,6 +8549,21 @@ async function activateSavedAccount(
                 'The authenticated ServiceNow identity does not match the selected saved account.'
             );
         }
+
+        /*
+ * Restore the authenticated identity
+ * into the active Electron runtime.
+ *
+ * Saved-account activation must establish
+ * the same runtime identity state as a
+ * fresh OAuth login.
+ */
+
+currentServiceCallUser =
+    currentUser?.user || null;
+
+currentServiceCallAuthorization =
+    authorization;
 
 
         /*
