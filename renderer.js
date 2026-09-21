@@ -26,6 +26,11 @@ document.addEventListener(
                 'loginButton'
             );
 
+        const signOutButton =
+    document.getElementById(
+        'signOutButton'
+    );
+
         const openActiveCallButton =
             document.getElementById(
                 'openActiveCallButton'
@@ -469,6 +474,11 @@ const scheduleMeetingPeopleResults =
         'scheduleMeetingPeopleResults'
     );
 
+const resetPresenceButton =
+    document.getElementById(
+        'resetPresenceButton'
+    );
+
 const scheduleMeetingSelectedPeople =
     document.getElementById(
         'scheduleMeetingSelectedPeople'
@@ -608,6 +618,7 @@ if (
                     'Connected'
                 );
 
+                await loadMyPresence();
 
                 if (message) {
 
@@ -750,7 +761,7 @@ if (
         ------------------------------------------------- */
 
         window.serviceCall.onAuthStatus(
-            (data) => {
+            async(data) => {
 
                 if (message) {
 
@@ -776,7 +787,7 @@ if (
                         true,
                         'Connected'
                     );
-
+await loadMyPresence();
 
                 } else if (
                     data.status === 'warning' ||
@@ -7852,6 +7863,70 @@ function updatePresenceDisplay(
     }
 }
 
+async function loadMyPresence() {
+
+    try {
+
+        const result =
+            await window.serviceCall
+                .getMyPresence();
+
+
+        if (
+            !result ||
+            result.success !== true
+        ) {
+
+            console.warn(
+                'Unable to load presence:',
+                result
+            );
+
+            return;
+        }
+
+
+        /*
+         * Display the effective status.
+         *
+         * This respects:
+         * Offline → In Call → Ringing →
+         * user-selected presence.
+         */
+        updatePresenceDisplay(
+            result.effective_status ||
+            result.presence_status ||
+            'available'
+        );
+
+
+        /*
+         * Keep the saved OOF reason ready
+         * for editing/reuse.
+         */
+        if (
+            oofReasonInput
+        ) {
+
+            oofReasonInput.value =
+                result.oof_reason || '';
+        }
+
+
+        console.log(
+            'ServiceCall presence loaded:',
+            result
+        );
+
+    } catch (error) {
+
+        console.error(
+            'Unable to load ServiceCall presence:',
+            error
+        );
+    }
+}
+
 /* =====================================================
    PRESENCE MENU
 ===================================================== */
@@ -7973,20 +8048,6 @@ presenceOptions.forEach(
                         result.effective_status ||
                         status
                     );
-
-
-                    /*
-                     * Clear any previous
-                     * OOF reason locally.
-                     */
-
-                    if (
-                        oofReasonInput
-                    ) {
-
-                        oofReasonInput.value =
-                            '';
-                    }
 
 
                     if (
@@ -8134,14 +8195,6 @@ if (
                     'none';
             }
 
-
-            if (
-                oofReasonInput
-            ) {
-
-                oofReasonInput.value =
-                    '';
-            }
         }
     );
 }
@@ -8175,4 +8228,301 @@ document.addEventListener(
         }
     }
 );
+
+if (resetPresenceButton) {
+
+    resetPresenceButton.addEventListener(
+        'click',
+        async () => {
+
+            try {
+
+                resetPresenceButton.disabled = true;
+
+                const result =
+                    await window.serviceCall
+                        .updatePresence(
+                            'available',
+                            ''
+                        );
+
+                if (
+                    !result ||
+                    result.success !== true
+                ) {
+
+                    console.error(
+                        'Unable to reset presence:',
+                        result
+                    );
+
+                    return;
+                }
+
+
+                updatePresenceDisplay(
+                    result.effective_status ||
+                    result.presence_status ||
+                    'available'
+                );
+
+
+                if (oofReasonPanel) {
+                    oofReasonPanel.style.display =
+                        'none';
+                }
+
+
+                if (presenceMenu) {
+                    presenceMenu.style.display =
+                        'none';
+                }
+
+
+                console.log(
+                    'ServiceCall presence reset:',
+                    result
+                );
+
+            } catch (error) {
+
+                console.error(
+                    'Unable to reset ServiceCall presence:',
+                    error
+                );
+
+            } finally {
+
+                resetPresenceButton.disabled =
+                    false;
+            }
+        }
+    );
+}
+
+async function loadCurrentAccount() {
+
+    const nameElement =
+        document.getElementById(
+            'currentAccountName'
+        );
+
+    const usernameElement =
+        document.getElementById(
+            'currentAccountUsername'
+        );
+
+    const serviceCallIdElement =
+        document.getElementById(
+            'currentAccountServiceCallId'
+        );
+
+    const accountMessage =
+        document.getElementById(
+            'accountMessage'
+        );
+
+
+    try {
+
+        const result =
+            await window.serviceCall
+                .getCurrentAccount();
+
+
+        console.log(
+            'Current ServiceCall account:',
+            result
+        );
+
+
+        if (
+            !result?.success ||
+            !result?.user
+        ) {
+
+            throw new Error(
+                'Current ServiceCall account could not be loaded.'
+            );
+        }
+
+
+        const user =
+            result.user;
+
+        const authorization =
+            result.authorization || {};
+
+
+        /*
+         * NAME
+         */
+
+        if (nameElement) {
+
+            nameElement.textContent =
+                user.name ||
+                'ServiceCall User';
+        }
+
+
+        /*
+         * USERNAME
+         */
+
+        if (usernameElement) {
+
+            usernameElement.textContent =
+                user.user_name
+                    ? `@${user.user_name}`
+                    : '';
+        }
+
+
+        /*
+         * SERVICECALL ID
+         */
+
+        if (serviceCallIdElement) {
+
+            serviceCallIdElement.textContent =
+                user.servicecall_id
+                    ? `ServiceCall ID: ${user.servicecall_id}`
+                    : '';
+        }
+
+
+        /*
+         * ACCESS LEVEL
+         */
+
+        if (accountMessage) {
+
+            if (
+                authorization
+                    .is_servicecall_admin ===
+                true
+            ) {
+
+                accountMessage.textContent =
+                    'ServiceCall Administrator';
+            }
+
+            else {
+
+                accountMessage.textContent =
+                    'ServiceCall User';
+            }
+        }
+
+    }
+    catch (error) {
+
+        console.error(
+            'Failed to load current account:',
+            error
+        );
+
+
+        if (accountMessage) {
+
+            accountMessage.textContent =
+                'Unable to load account information.';
+        }
+    }
+}
+
+
+/* =====================================================
+   SIGN OUT
+===================================================== */
+
+if (signOutButton) {
+
+    signOutButton.addEventListener(
+        'click',
+        async () => {
+
+            /*
+             * Prevent duplicate sign-out requests.
+             */
+            signOutButton.disabled =
+                true;
+
+            const originalText =
+                signOutButton.textContent;
+
+            signOutButton.textContent =
+                'Signing out...';
+
+
+            const signOutMessage =
+    document.getElementById(
+        'accountMessage'
+    );
+
+
+            try {
+
+                const result =
+                    await window.serviceCall
+                        .signOut();
+
+
+                console.log(
+                    'ServiceCall sign out result:',
+                    result
+                );
+
+
+                if (
+                    !result ||
+                    result.success !== true
+                ) {
+
+                    throw new Error(
+                        result?.message ||
+                        'Unable to sign out.'
+                    );
+                }
+
+
+                /*
+                 * main.js owns navigation.
+                 *
+                 * It will load:
+                 *
+                 * auth/auth-gate.html
+                 *
+                 * after the current runtime
+                 * session has been stopped.
+                 */
+
+            } catch (error) {
+
+                console.error(
+                    'ServiceCall sign out failed:',
+                    error
+                );
+
+
+                if (accountMessage) {
+
+                    accountMessage.textContent =
+                        error?.message ||
+                        'Unable to sign out.';
+                }
+
+
+                signOutButton.disabled =
+                    false;
+
+                signOutButton.textContent =
+                    originalText;
+            }
+        }
+    );
+}
+
+await loadCurrentAccount();
 });

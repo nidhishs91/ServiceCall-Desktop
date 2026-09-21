@@ -307,8 +307,9 @@
         }
 
 
-        .presence-dot.offline {
-            background: #8c9995;
+        .presence-dot.offline,
+        .presence-option-dot.offline {
+            background: #000000;
         }
 
 
@@ -481,6 +482,69 @@
 
         .oof-reason-save:hover {
             background: #0e5e4d;
+        }
+
+        /* -------------------------------------------------
+   RESET PRESENCE
+------------------------------------------------- */
+
+        .presence-reset-divider {
+            height: 1px;
+
+            margin: 7px 4px;
+
+            background: #e7ecea;
+        }
+
+
+        .presence-reset-button {
+            width: 100%;
+
+            display: flex;
+            align-items: center;
+
+            gap: 10px;
+
+            padding: 10px 11px;
+
+            border: 0;
+
+            border-radius: 8px;
+
+            background: transparent;
+            color: #526963;
+
+            text-align: left;
+
+            font-size: 13px;
+            font-weight: 600;
+
+            cursor: pointer;
+
+            transition:
+                background 0.15s ease,
+                color 0.15s ease;
+        }
+
+
+        .presence-reset-button:hover {
+            background: #f0f6f4;
+
+            color: #185d4d;
+        }
+
+
+        .presence-reset-icon {
+            width: 9px;
+
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+
+            color: #71827d;
+
+            font-size: 16px;
+            font-weight: 700;
         }
 
         .content {
@@ -2966,6 +3030,10 @@
                                 Out of Office
                             </button>
 
+                            <button class="presence-option" type="button" data-presence="offline">
+                                <span class="presence-option-dot offline"></span>
+                                Offline
+                            </button>
 
                             <!-- OOF reason -->
 
@@ -2994,6 +3062,18 @@
                                 </div>
 
                             </div>
+
+                            <div class="presence-reset-divider"></div>
+
+                            <button id="resetPresenceButton" class="presence-reset-button" type="button">
+                                <span class="presence-reset-icon">
+                                    ↻
+                                </span>
+
+                                <span>
+                                    Reset status
+                                </span>
+                            </button>
 
 
                         </div>
@@ -3603,6 +3683,96 @@
 
                         <div id="instanceMessage"></div>
 
+                        <!-- =========================================
+     ACCOUNT SETTINGS
+========================================== -->
+
+                        <div id="accountSettingsSection" style="
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid #e1e7e5;
+    ">
+
+                            <div style="
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 700;
+        ">
+                                Account
+                            </div>
+
+                            <div style="
+            margin-bottom: 16px;
+            color: #687a76;
+            font-size: 12px;
+            line-height: 1.5;
+        ">
+                                Manage the ServiceNow account connected
+                                to ServiceCall Desktop.
+                            </div>
+
+
+                            <!-- Current Account -->
+
+                            <div id="currentAccountCard" style="
+            padding: 14px;
+            border: 1px solid #e1e7e5;
+            border-radius: 10px;
+            background: #fafcfb;
+        ">
+
+                                <div style="
+                margin-bottom: 7px;
+                color: #71827d;
+                font-size: 11px;
+                font-weight: 700;
+                text-transform: uppercase;
+            ">
+                                    Current account
+                                </div>
+
+
+                                <div id="currentAccountName" style="
+                color: #29463f;
+                font-size: 14px;
+                font-weight: 700;
+            ">
+                                    Connected ServiceNow user
+                                </div>
+
+
+                                <div id="currentAccountUsername" style="
+                margin-top: 3px;
+                color: #71827d;
+                font-size: 12px;
+            "></div>
+
+
+                                <div id="currentAccountServiceCallId" style="
+                margin-top: 3px;
+                color: #71827d;
+                font-size: 12px;
+            "></div>
+
+
+                                <div style="margin-top: 14px;">
+
+                                    <button id="signOutButton" class="secondary-button" type="button">
+                                        Sign Out
+                                    </button>
+
+                                </div>
+
+                            </div>
+
+
+                            <div id="accountMessage" style="
+            margin-top: 10px;
+            color: #526762;
+            font-size: 12px;
+        "></div>
+
+                        </div>
 
                     </div>
 

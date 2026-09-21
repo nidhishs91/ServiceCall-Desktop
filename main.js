@@ -7,6 +7,7 @@ const {
     Menu,
     desktopCapturer,
     dialog,
+    powerMonitor
 } = require('electron');
 
 const path = require('path');
@@ -29,10 +30,13 @@ let tray = null;
 let isQuitting = false;
 let incomingCallTimer = null;
 let activeIncomingCallId = null;
+let isDeviceSuspended = false;
 let outgoingCallTimer = null;
 let activeOutgoingCallId = null;
 let activeCallWindowId = null;
 let callWindowClosing = false;
+let currentServiceCallUser = null;
+let currentServiceCallAuthorization = null;
 const intentionallyLeftCallIds = new Set();
 
 const CALLBACK_HOST = '127.0.0.1';
@@ -85,6 +89,476 @@ function loadConfig() {
     );
 }
 
+function ensureAccountStore(
+    config
+) {
+
+    if (
+        !config ||
+        typeof config !== 'object'
+    ) {
+
+        config = {};
+    }
+
+
+    /*
+     * Saved ServiceCall accounts.
+     */
+    if (
+        !Array.isArray(
+            config.accounts
+        )
+    ) {
+
+        config.accounts = [];
+    }
+
+
+    /*
+     * Currently selected saved account.
+     */
+    if (
+        typeof config.activeAccountId !==
+        'string'
+    ) {
+
+        config.activeAccountId =
+            '';
+    }
+
+
+    return config;
+}
+
+/* =========================================================
+   SAVED ACCOUNT HELPERS
+========================================================= */
+
+function getSavedAccountKey(
+    instanceUrl,
+    userSysId
+) {
+
+    const normalizedInstance =
+        String(instanceUrl || '')
+            .trim()
+            .replace(/\/+$/, '')
+            .toLowerCase();
+
+    const normalizedUser =
+        String(userSysId || '')
+            .trim()
+            .toLowerCase();
+
+    if (
+        !normalizedInstance ||
+        !normalizedUser
+    ) {
+        return '';
+    }
+
+    return (
+        normalizedInstance +
+        '::' +
+        normalizedUser
+    );
+}
+
+function ensureSavedAccountStructure(config) {
+
+    if (
+        !config ||
+        typeof config !== 'object'
+    ) {
+        config = {};
+    }
+
+    if (
+        !config.savedAccounts ||
+        typeof config.savedAccounts !== 'object' ||
+        Array.isArray(config.savedAccounts)
+    ) {
+        config.savedAccounts = {};
+    }
+
+    if (
+        typeof config.activeAccountKey !== 'string'
+    ) {
+        config.activeAccountKey = '';
+    }
+
+    return config;
+}
+
+/* =========================================================
+   SAVE AUTHENTICATED ACCOUNT
+========================================================= */
+
+function saveAuthenticatedAccount(
+    config,
+    user,
+    authorization
+) {
+
+    config =
+        ensureSavedAccountStructure(
+            config
+        );
+
+
+    if (
+        !user ||
+        !user.sys_id
+    ) {
+
+        throw new Error(
+            'Authenticated ServiceCall user is missing.'
+        );
+    }
+
+
+    const accountKey =
+        getSavedAccountKey(
+            config.instanceUrl,
+            user.sys_id
+        );
+
+
+    if (!accountKey) {
+
+        throw new Error(
+            'Unable to create the ServiceCall account key.'
+        );
+    }
+
+
+    /*
+     * Preserve anything already stored
+     * for this account.
+     */
+    const existingAccount =
+        config.savedAccounts[
+            accountKey
+        ] || {};
+
+
+    const now =
+        new Date().toISOString();
+
+
+    config.savedAccounts[
+        accountKey
+    ] = {
+
+        /*
+         * Stable account identity.
+         */
+        accountKey:
+            accountKey,
+
+        instanceUrl:
+            config.instanceUrl || '',
+
+        userSysId:
+            user.sys_id,
+
+        name:
+            user.name || '',
+
+        userName:
+            user.user_name || '',
+
+        email:
+            user.email || '',
+
+        serviceCallId:
+            user.servicecall_id || '',
+
+
+        /*
+         * Authorization snapshot.
+         *
+         * IMPORTANT:
+         * This is for UI/account information.
+         * We will ALWAYS re-check /me when
+         * activating the account.
+         */
+        isServiceCallUser:
+            authorization
+                ?.is_servicecall_user ===
+            true,
+
+        isServiceCallAdmin:
+            authorization
+                ?.is_servicecall_admin ===
+            true,
+
+
+        /*
+         * Each saved account owns its
+         * own OAuth credentials.
+         *
+         * For the first migration these
+         * values come from the existing
+         * working single-account config.
+         */
+        accessToken:
+            config.accessToken ||
+            existingAccount.accessToken ||
+            '',
+
+        refreshToken:
+            config.refreshToken ||
+            existingAccount.refreshToken ||
+            '',
+
+        tokenType:
+    config.tokenType ||
+    existingAccount.tokenType ||
+    'Bearer',
+
+expiresIn:
+    config.expiresIn ||
+    existingAccount.expiresIn ||
+    0,
+
+tokenObtainedAt:
+    config.tokenObtainedAt ||
+    existingAccount.tokenObtainedAt ||
+    0,
+
+        /*
+         * Useful later for ordering the
+         * account chooser by recency.
+         */
+        addedAt:
+            existingAccount.addedAt ||
+            now,
+
+        lastUsedAt:
+            now
+    };
+
+
+    /*
+     * This account becomes the currently
+     * selected account.
+     */
+    config.activeAccountKey =
+        accountKey;
+
+
+    return {
+        config:
+            config,
+
+        accountKey:
+            accountKey,
+
+        account:
+            config.savedAccounts[
+                accountKey
+            ]
+    };
+}
+
+/* =========================================================
+   SYNC ACTIVE ACCOUNT OAUTH TOKENS
+========================================================= */
+
+function syncActiveAccountTokens(config) {
+
+    config =
+        ensureSavedAccountStructure(
+            config
+        );
+
+
+    const accountKey =
+        String(
+            config.activeAccountKey || ''
+        ).trim();
+
+
+    /*
+     * No active saved account yet.
+     *
+     * This is expected during our migration
+     * from the old single-account config.
+     */
+    if (!accountKey) {
+
+        return config;
+    }
+
+
+    const account =
+        config.savedAccounts[
+            accountKey
+        ];
+
+
+    /*
+     * Never create an account here.
+     *
+     * Account creation happens only after
+     * /me tells us who authenticated.
+     */
+    if (!account) {
+
+        console.warn(
+            'ServiceCall active saved account was not found:',
+            accountKey
+        );
+
+        return config;
+    }
+
+
+    /* -----------------------------------------
+       COPY CURRENT OAUTH SESSION
+       INTO THE ACTIVE ACCOUNT
+    ----------------------------------------- */
+
+    account.accessToken =
+        config.accessToken || '';
+
+    account.refreshToken =
+        config.refreshToken || '';
+
+    account.tokenType =
+        config.tokenType ||
+        'Bearer';
+
+    account.expiresIn =
+        config.expiresIn || 0;
+
+    account.tokenObtainedAt =
+        config.tokenObtainedAt || 0;
+
+
+    /*
+     * Keep instance information synchronized.
+     */
+    account.instanceUrl =
+        config.instanceUrl ||
+        account.instanceUrl ||
+        '';
+
+
+    /*
+     * Token refresh counts as account activity.
+     */
+    account.lastUsedAt =
+        new Date().toISOString();
+
+
+    config.savedAccounts[
+        accountKey
+    ] = account;
+
+
+    return config;
+}
+
+/* =========================================================
+   GET SAVED ACCOUNTS
+========================================================= */
+
+function getSavedAccounts() {
+
+    let config =
+        loadConfig();
+
+    config =
+        ensureSavedAccountStructure(
+            config
+        );
+
+
+    const accounts =
+        Object.values(
+            config.savedAccounts
+        );
+
+
+    /*
+     * Most recently used accounts first.
+     */
+    accounts.sort(
+        (a, b) => {
+
+            const aTime =
+                new Date(
+                    a.lastUsedAt ||
+                    a.addedAt ||
+                    0
+                ).getTime();
+
+            const bTime =
+                new Date(
+                    b.lastUsedAt ||
+                    b.addedAt ||
+                    0
+                ).getTime();
+
+            return bTime - aTime;
+        }
+    );
+
+
+    /*
+     * SECURITY:
+     *
+     * Never send OAuth tokens to the renderer.
+     */
+    return accounts.map(
+        (account) => ({
+
+            accountKey:
+                account.accountKey || '',
+
+            instanceUrl:
+                account.instanceUrl || '',
+
+            userSysId:
+                account.userSysId || '',
+
+            name:
+                account.name || '',
+
+            userName:
+                account.userName || '',
+
+            email:
+                account.email || '',
+
+            serviceCallId:
+                account.serviceCallId || '',
+
+            isServiceCallUser:
+                account.isServiceCallUser ===
+                true,
+
+            isServiceCallAdmin:
+                account.isServiceCallAdmin ===
+                true,
+
+            addedAt:
+                account.addedAt || '',
+
+            lastUsedAt:
+                account.lastUsedAt || '',
+
+            isActive:
+                account.accountKey ===
+                config.activeAccountKey
+
+        })
+    );
+}
+
 function getOrCreateDeviceId() {
 
     const config =
@@ -106,6 +580,19 @@ function getOrCreateDeviceId() {
 }
 
 async function sendHeartbeatOnce() {
+
+    if (isDeviceSuspended) {
+
+        console.log(
+            'ServiceCall heartbeat skipped because device is suspended.'
+        );
+
+        return {
+            success: true,
+            skipped: true,
+            reason: 'device_suspended'
+        };
+    }
 
     const config =
         loadConfig();
@@ -319,6 +806,70 @@ if (
 }
 
     return data;
+}
+
+async function updateDesktopState(
+    state
+) {
+
+    try {
+
+        const config =
+            loadConfig();
+
+
+        if (
+            !config.instanceUrl ||
+            !config.accessToken
+        ) {
+
+            return {
+                success: false,
+                code: 'NOT_CONNECTED'
+            };
+        }
+
+
+        const result =
+            await serviceCallApiRequest(
+                '/desktop-state',
+                'POST',
+                {
+                    device_id:
+                        getOrCreateDeviceId(),
+
+                    state:
+                        state
+                }
+            );
+
+
+        console.log(
+            'ServiceCall desktop state:',
+            result
+        );
+
+
+        return result;
+
+
+    } catch (error) {
+
+        console.error(
+            'Unable to update ServiceCall desktop state:',
+            error.message
+        );
+
+
+        return {
+            success: false,
+            code:
+                error.code ||
+                'DESKTOP_STATE_FAILED',
+            message:
+                error.message
+        };
+    }
 }
 
 async function checkIncomingCallOnce() {
@@ -924,13 +1475,135 @@ async function exchangeAuthorizationCode(
     delete config.pkceCodeVerifier;
 delete config.oauthState;
 
-saveConfig(config);
+saveConfig(
+    config
+);
+
+
+/*
+ * -----------------------------------------
+ * VERIFY SERVICECALL AUTHORIZATION
+ * -----------------------------------------
+ */
+
+const currentUser =
+    await getCurrentServiceCallUser();
+
+const authorization =
+    currentUser?.authorization || {};
+
+/*
+ * -----------------------------------------
+ * SAVE AUTHENTICATED ACCOUNT
+ * -----------------------------------------
+ */
+
+const savedAccountResult =
+    saveAuthenticatedAccount(
+        config,
+        currentUser?.user || null,
+        authorization
+    );
+
+
+saveConfig(
+    savedAccountResult.config
+);
+
+
+console.log(
+    'ServiceCall authenticated account saved:',
+    {
+        accountKey:
+            savedAccountResult.accountKey,
+
+        name:
+            savedAccountResult.account?.name,
+
+        userName:
+            savedAccountResult.account?.userName
+    }
+);
+
+
+/*
+ * -----------------------------------------
+ * ACCESS DENIED
+ * -----------------------------------------
+ */
+
+if (
+    authorization.allowed !== true
+) {
+
+    console.warn(
+        'ServiceCall access denied:',
+        currentUser
+    );
+
+
+    /*
+     * OAuth succeeded, so the person is
+     * authenticated.
+     *
+     * But we DO NOT start heartbeat,
+     * calls, meetings, etc.
+     */
+
+    return {
+        success: true,
+        authenticated: true,
+        authorized: false,
+        state: 'access_denied',
+        user:
+            currentUser?.user || null,
+        authorization: authorization
+    };
+}
+
+
+/*
+ * -----------------------------------------
+ * AUTHORIZED
+ * -----------------------------------------
+ */
+
+console.log(
+    'ServiceCall authorization successful:',
+    {
+        user:
+            currentUser?.user,
+
+        authorization:
+            authorization
+    }
+);
+
+
+/*
+ * Background services may start only
+ * after ServiceCall authorization succeeds.
+ */
 
 await startHeartbeatLoop();
 
 startIncomingCallLoop();
+
 startOutgoingCallLoop();
-return tokenData;
+
+
+return {
+    success: true,
+    authenticated: true,
+    authorized: true,
+    state: 'ready',
+    user:
+        currentUser?.user || null,
+    authorization:
+        authorization,
+    tokenData:
+        tokenData
+};
 }
 
 async function ensureValidAccessToken() {
@@ -1197,6 +1870,13 @@ function startCallbackServer() {
                                     `http://${CALLBACK_HOST}:${CALLBACK_PORT}`
                                 );
 
+
+                            /*
+                             * -----------------------------------------
+                             * VALIDATE CALLBACK PATH
+                             * -----------------------------------------
+                             */
+
                             if (
                                 callbackUrl.pathname !==
                                 '/callback'
@@ -1216,6 +1896,13 @@ function startCallbackServer() {
 
                                 return;
                             }
+
+
+                            /*
+                             * -----------------------------------------
+                             * OAUTH ERROR
+                             * -----------------------------------------
+                             */
 
                             const oauthError =
                                 callbackUrl
@@ -1249,8 +1936,15 @@ function startCallbackServer() {
                                             text-align: center;
                                             padding-top: 80px;
                                         ">
-                                            <h2>ServiceCall authorization was not completed.</h2>
-                                            <p>You can close this browser window.</p>
+                                            <h2>
+                                                ServiceCall authorization
+                                                was not completed.
+                                            </h2>
+
+                                            <p>
+                                                You can close this
+                                                browser window.
+                                            </p>
                                         </body>
                                     </html>
                                 `);
@@ -1264,6 +1958,13 @@ function startCallbackServer() {
 
                                 return;
                             }
+
+
+                            /*
+                             * -----------------------------------------
+                             * READ AUTHORIZATION CODE
+                             * -----------------------------------------
+                             */
 
                             const code =
                                 callbackUrl
@@ -1289,91 +1990,272 @@ function startCallbackServer() {
                                 );
                             }
 
-                            await exchangeAuthorizationCode(
-                                code,
-                                state
-                            );
 
-                            response.writeHead(
-                                200,
-                                {
-                                    'Content-Type':
-                                        'text/html; charset=utf-8'
-                                }
-                            );
+                            /*
+                             * -----------------------------------------
+                             * EXCHANGE CODE + CHECK SERVICECALL ACCESS
+                             * -----------------------------------------
+                             */
 
-                            response.end(`
-                                <!DOCTYPE html>
-                                <html>
-                                <head>
-                                    <title>ServiceCall Desktop</title>
-                                </head>
+                            const authResult =
+                                await exchangeAuthorizationCode(
+                                    code,
+                                    state
+                                );
 
-                                <body style="
-                                    margin: 0;
-                                    background: #f3f7f6;
-                                    font-family: Arial, sans-serif;
-                                    color: #1f2d2a;
-                                ">
 
-                                    <div style="
-                                        max-width: 520px;
-                                        margin: 100px auto;
-                                        padding: 40px;
-                                        background: white;
-                                        border-radius: 12px;
-                                        text-align: center;
-                                        box-shadow: 0 8px 28px rgba(0,0,0,0.08);
-                                    ">
-
-                                        <h1 style="
-                                            margin-bottom: 12px;
-                                        ">
-                                            ServiceCall Desktop
-                                        </h1>
-
-                                        <h2 style="
-                                            color: #0b6b58;
-                                        ">
-                                            Connected successfully
-                                        </h2>
-
-                                        <p>
-                                            Your ServiceNow account is now connected
-                                            to ServiceCall Desktop.
-                                        </p>
-
-                                        <p>
-                                            You can close this browser window
-                                            and return to ServiceCall Desktop.
-                                        </p>
-
-                                    </div>
-
-                                </body>
-                                </html>
-                            `);
-
-                            sendAuthStatus(
-                                'connected',
-                                'ServiceNow sign-in completed successfully.'
-                            );
+                            /*
+                             * -----------------------------------------
+                             * AUTHENTICATED BUT ACCESS DENIED
+                             * -----------------------------------------
+                             */
 
                             if (
-                                mainWindow &&
-                                !mainWindow.isDestroyed()
+                                authResult?.state ===
+                                'access_denied'
                             ) {
 
-                                mainWindow.show();
-                                mainWindow.focus();
+                                console.warn(
+                                    'ServiceCall OAuth succeeded but access was denied:',
+                                    authResult
+                                );
+
+
+                                response.writeHead(
+                                    200,
+                                    {
+                                        'Content-Type':
+                                            'text/html; charset=utf-8'
+                                    }
+                                );
+
+                                response.end(`
+                                    <!DOCTYPE html>
+                                    <html>
+
+                                    <head>
+                                        <title>
+                                            ServiceCall Desktop
+                                        </title>
+                                    </head>
+
+                                    <body style="
+                                        margin: 0;
+                                        background: #f3f7f6;
+                                        font-family: Arial, sans-serif;
+                                        color: #1f2d2a;
+                                    ">
+
+                                        <div style="
+                                            max-width: 520px;
+                                            margin: 100px auto;
+                                            padding: 40px;
+                                            background: white;
+                                            border-radius: 12px;
+                                            text-align: center;
+                                            box-shadow: 0 8px 28px rgba(0,0,0,0.08);
+                                        ">
+
+                                            <h1>
+                                                ServiceCall Desktop
+                                            </h1>
+
+                                            <h2>
+                                                Access unavailable
+                                            </h2>
+
+                                            <p>
+                                                Your ServiceNow sign-in
+                                                was successful, but
+                                                ServiceCall access has
+                                                not been assigned to
+                                                this account.
+                                            </p>
+
+                                            <p>
+                                                You can close this
+                                                browser window and
+                                                return to ServiceCall
+                                                Desktop.
+                                            </p>
+
+                                        </div>
+
+                                    </body>
+
+                                    </html>
+                                `);
+
+
+                                sendAuthStatus(
+                                    'access_denied',
+                                    'ServiceCall access has not been assigned to this account.'
+                                );
+
+
+                                if (
+                                    mainWindow &&
+                                    !mainWindow.isDestroyed()
+                                ) {
+
+                                    mainWindow.show();
+
+                                    mainWindow.focus();
+                                }
+
+
+                                setTimeout(
+                                    stopCallbackServer,
+                                    1000
+                                );
+
+                                return;
                             }
 
-                            setTimeout(
-                                stopCallbackServer,
-                                1000
+
+                            /*
+                             * -----------------------------------------
+                             * AUTHORIZED
+                             * -----------------------------------------
+                             */
+
+                            if (
+                                authResult?.state ===
+                                'ready'
+                            ) {
+
+                                console.log(
+                                    'ServiceCall login authorized:',
+                                    authResult.user
+                                );
+
+
+                                response.writeHead(
+                                    200,
+                                    {
+                                        'Content-Type':
+                                            'text/html; charset=utf-8'
+                                    }
+                                );
+
+                                response.end(`
+                                    <!DOCTYPE html>
+                                    <html>
+
+                                    <head>
+                                        <title>
+                                            ServiceCall Desktop
+                                        </title>
+                                    </head>
+
+                                    <body style="
+                                        margin: 0;
+                                        background: #f3f7f6;
+                                        font-family: Arial, sans-serif;
+                                        color: #1f2d2a;
+                                    ">
+
+                                        <div style="
+                                            max-width: 520px;
+                                            margin: 100px auto;
+                                            padding: 40px;
+                                            background: white;
+                                            border-radius: 12px;
+                                            text-align: center;
+                                            box-shadow: 0 8px 28px rgba(0,0,0,0.08);
+                                        ">
+
+                                            <h1 style="
+                                                margin-bottom: 12px;
+                                            ">
+                                                ServiceCall Desktop
+                                            </h1>
+
+                                            <h2 style="
+                                                color: #0b6b58;
+                                            ">
+                                                Connected successfully
+                                            </h2>
+
+                                            <p>
+                                                Your ServiceNow account
+                                                is now connected to
+                                                ServiceCall Desktop.
+                                            </p>
+
+                                            <p>
+                                                You can close this
+                                                browser window and
+                                                return to ServiceCall
+                                                Desktop.
+                                            </p>
+
+                                        </div>
+
+                                    </body>
+
+                                    </html>
+                                `);
+
+
+                                sendAuthStatus(
+                                    'connected',
+                                    'Connected to ServiceCall.'
+                                );
+
+
+                                /*
+                                 * OAuth + /me authorization passed.
+                                 *
+                                 * exchangeAuthorizationCode()
+                                 * has already started the background
+                                 * ServiceCall services.
+                                 *
+                                 * Now enter the application.
+                                 */
+
+                                if (
+                                    mainWindow &&
+                                    !mainWindow.isDestroyed()
+                                ) {
+
+                                    await mainWindow.loadFile(
+                                        'index.html'
+                                    );
+
+                                    mainWindow.show();
+
+                                    mainWindow.focus();
+                                }
+
+
+                                setTimeout(
+                                    stopCallbackServer,
+                                    1000
+                                );
+
+                                return;
+                            }
+
+
+                            /*
+                             * -----------------------------------------
+                             * UNEXPECTED AUTH RESULT
+                             * -----------------------------------------
+                             */
+
+                            throw new Error(
+                                'ServiceCall authentication completed with an unexpected result.'
                             );
 
-                        } catch (error) {
+                        }
+                        catch (error) {
+
+                            console.error(
+                                'ServiceCall OAuth callback failed:',
+                                error
+                            );
+
 
                             response.writeHead(
                                 500,
@@ -1390,24 +2272,40 @@ function startCallbackServer() {
                                         text-align: center;
                                         padding-top: 80px;
                                     ">
-                                        <h2>ServiceCall connection failed.</h2>
+
+                                        <h2>
+                                            ServiceCall connection
+                                            failed.
+                                        </h2>
+
                                         <p>
-                                            Return to ServiceCall Desktop
-                                            and try again.
+                                            Return to ServiceCall
+                                            Desktop and try again.
                                         </p>
+
                                     </body>
                                 </html>
                             `);
 
+
                             sendAuthStatus(
                                 'error',
-                                error.message
+                                error?.message ||
+                                'ServiceCall connection failed.'
                             );
+
 
                             stopCallbackServer();
                         }
                     }
                 );
+
+
+            /*
+             * -----------------------------------------
+             * CALLBACK SERVER ERROR
+             * -----------------------------------------
+             */
 
             callbackServer.on(
                 'error',
@@ -1416,9 +2314,18 @@ function startCallbackServer() {
                     callbackServer =
                         null;
 
-                    reject(error);
+                    reject(
+                        error
+                    );
                 }
             );
+
+
+            /*
+             * -----------------------------------------
+             * START CALLBACK SERVER
+             * -----------------------------------------
+             */
 
             callbackServer.listen(
                 CALLBACK_PORT,
@@ -1431,7 +2338,6 @@ function startCallbackServer() {
         }
     );
 }
-
 
 /* -------------------------------------------------------
    WINDOW
@@ -1579,51 +2485,106 @@ function showMainWindow() {
     createWindow();
 }
 
-function createWindow() {
+async function createWindow() {
 
-    mainWindow =
-        new BrowserWindow({
-            width: 900,
-            height: 650,
+    mainWindow = new BrowserWindow({
+        width: 900,
+        height: 650,
+        minWidth: 700,
+        minHeight: 500,
+        title: 'ServiceCall Desktop',
 
-            minWidth: 700,
-            minHeight: 500,
+        webPreferences: {
+            preload: path.join(
+                __dirname,
+                'preload.js'
+            ),
 
-            title:
-                'ServiceCall Desktop',
+            contextIsolation: true,
+            nodeIntegration: false
+        }
+    });
 
-            webPreferences: {
 
-                preload:
-                    path.join(
-                        __dirname,
-                        'preload.js'
-                    ),
+    /*
+     * -----------------------------------------
+     * RESOLVE STARTUP AUTHENTICATION
+     * -----------------------------------------
+     */
 
-                contextIsolation:
-                    true,
+    const startupState =
+        await resolveStartupAuthentication();
 
-                nodeIntegration:
-                    false
-            }
-        });
 
-    mainWindow.loadFile(
-        'index.html'
+    console.log(
+        'ServiceCall startup state:',
+        startupState
     );
 
-    mainWindow.on(
-    'close',
-    (event) => {
 
-        if (!isQuitting) {
+    /*
+     * -----------------------------------------
+     * AUTHORIZED USER
+     * -----------------------------------------
+     */
 
-            event.preventDefault();
+    if (
+        startupState.state === 'ready'
+    ) {
 
-            mainWindow.hide();
-        }
+        await mainWindow.loadFile(
+            'index.html'
+        );
+
+
+        /*
+         * Start background ServiceCall services
+         * ONLY after authorization succeeds.
+         */
+
+        await startHeartbeatLoop();
+
+        startIncomingCallLoop();
+
+        startOutgoingCallLoop();
     }
-);
+
+
+    /*
+     * -----------------------------------------
+     * LOGIN / ACCESS GATE
+     * -----------------------------------------
+     */
+
+    else {
+
+        await mainWindow.loadFile(
+            path.join(
+                'auth',
+                'auth-gate.html'
+            )
+        );
+    }
+
+
+    /*
+     * -----------------------------------------
+     * WINDOW CLOSE
+     * -----------------------------------------
+     */
+
+    mainWindow.on(
+        'close',
+        (event) => {
+
+            if (!isQuitting) {
+
+                event.preventDefault();
+
+                mainWindow.hide();
+            }
+        }
+    );
 }
 
 /* =====================================================
@@ -2318,10 +3279,112 @@ app.whenReady().then(
         }
 
 
-        createWindow();
+        await createWindow();
+
+        /* -----------------------------------------
+           DEVICE SLEEP / RESUME
+        ----------------------------------------- */
+
+        powerMonitor.on(
+            'suspend',
+            async () => {
+
+                console.log(
+                    'ServiceCall detected device suspend.'
+                );
 
 
-        await restoreSavedConnection();
+                isDeviceSuspended =
+                    true;
+
+
+                /*
+                 * Tell ServiceNow this device
+                 * intentionally became Away.
+                 *
+                 * Keep the user's manual presence
+                 * untouched.
+                 */
+                await updateDesktopState(
+                    'away'
+                );
+            }
+        );
+
+
+        /* -----------------------------------------
+           DEVICE SLEEP / RESUME
+        ----------------------------------------- */
+
+        powerMonitor.on(
+            'suspend',
+            async () => {
+
+                console.log(
+                    'ServiceCall detected device suspend.'
+                );
+
+
+                isDeviceSuspended =
+                    true;
+
+
+                /*
+                 * Tell ServiceNow this device
+                 * intentionally became Away.
+                 *
+                 * Keep the user's manual presence
+                 * untouched.
+                 */
+                await updateDesktopState(
+                    'away'
+                );
+            }
+        );
+
+
+        powerMonitor.on(
+            'resume',
+            async () => {
+
+                console.log(
+                    'ServiceCall detected device resume.'
+                );
+
+
+                isDeviceSuspended =
+                    false;
+
+
+                /*
+                 * A heartbeat is better than simply
+                 * changing the state to Connected:
+                 *
+                 * - marks registration Connected
+                 * - refreshes Last Seen
+                 * - proves ServiceNow is reachable
+                 */
+                try {
+
+                    const result =
+                        await sendHeartbeatOnce();
+
+
+                    console.log(
+                        'ServiceCall resume heartbeat:',
+                        result
+                    );
+
+
+                } catch (error) {
+
+                    console.error(
+                        'ServiceCall resume heartbeat failed:',
+                        error
+                    );
+                }
+            }
+        );
 
         app.on(
             'activate',
@@ -2966,6 +4029,175 @@ async function serviceCallApiRequest(
  
  
     return result;
+}
+
+async function getCurrentServiceCallUser() {
+
+    const result =
+        await serviceCallApiRequest(
+            '/me',
+            'GET'
+        );
+
+    if (
+        !result ||
+        result.success !== true
+    ) {
+        throw new Error(
+            result?.message ||
+            'Unable to retrieve the current ServiceCall user.'
+        );
+    }
+
+    return result;
+}
+
+async function resolveStartupAuthentication() {
+
+    const config =
+        loadConfig();
+
+    /*
+     * -----------------------------------------
+     * 1. INSTANCE NOT CONFIGURED
+     * -----------------------------------------
+     */
+
+    if (
+        !config ||
+        !config.instanceUrl
+    ) {
+        return {
+            authenticated: false,
+            authorized: false,
+            state: 'instance_required'
+        };
+    }
+
+
+    /*
+     * -----------------------------------------
+     * 2. NO SAVED SESSION
+     * -----------------------------------------
+     */
+
+    if (
+        !config.accessToken &&
+        !config.refreshToken
+    ) {
+        return {
+            authenticated: false,
+            authorized: false,
+            state: 'login_required'
+        };
+    }
+
+
+    /*
+     * -----------------------------------------
+     * 3. RESTORE / REFRESH SESSION
+     * -----------------------------------------
+     */
+
+    try {
+
+        /*
+         * ensureValidAccessToken() currently
+         * expects an access token.
+         *
+         * If only a refresh token remains,
+         * refresh it directly.
+         */
+
+        if (
+            !config.accessToken &&
+            config.refreshToken
+        ) {
+            await refreshAccessToken();
+        }
+        else {
+            await ensureValidAccessToken();
+        }
+
+
+        /*
+         * -------------------------------------
+         * 4. CHECK SERVICENOW IDENTITY + ROLE
+         * -------------------------------------
+         */
+
+        const currentUser =
+            await getCurrentServiceCallUser();
+
+        const authorization =
+            currentUser?.authorization || {};
+
+        const user =
+            currentUser?.user || null;
+
+        /*
+ * -----------------------------------------
+ * STORE CURRENT ACCOUNT IDENTITY
+ * -----------------------------------------
+ */
+
+currentServiceCallUser =
+    user;
+
+currentServiceCallAuthorization =
+    authorization;
+
+
+        /*
+         * -------------------------------------
+         * 5. AUTHENTICATED BUT NOT AUTHORIZED
+         * -------------------------------------
+         */
+
+        if (
+            authorization.allowed !== true
+        ) {
+            return {
+                authenticated: true,
+                authorized: false,
+                state: 'access_denied',
+                user: user,
+                authorization: authorization
+            };
+        }
+
+
+        /*
+         * -------------------------------------
+         * 6. AUTHENTICATED + AUTHORIZED
+         * -------------------------------------
+         */
+
+        return {
+            authenticated: true,
+            authorized: true,
+            state: 'ready',
+            user: user,
+            authorization: authorization
+        };
+
+    }
+    catch (error) {
+
+        console.error(
+            'ServiceCall startup authentication failed:',
+            error
+        );
+
+        return {
+            authenticated: false,
+            authorized: false,
+            state: 'login_required',
+            error:
+                error?.message ||
+                'Authentication could not be restored.'
+        };
+    }
 }
 
 ipcMain.handle(
@@ -6688,3 +7920,871 @@ ipcMain.handle(
         }
     }
 );
+
+ipcMain.handle(
+    'servicecall-get-my-presence',
+
+    async () => {
+
+        try {
+
+            const result =
+                await serviceCallApiRequest(
+                    '/presence',
+                    'GET'
+                );
+
+            return result;
+
+        } catch (error) {
+
+            console.error(
+                'Unable to get ServiceCall presence:',
+                error.message
+            );
+
+            return {
+                success: false,
+
+                code:
+                    error.code ||
+                    'GET_PRESENCE_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to retrieve presence.'
+            };
+        }
+    }
+);
+
+ipcMain.handle(
+    'servicecall-check-access',
+    async () => {
+
+        try {
+
+            /*
+             * Make sure the saved OAuth
+             * session is still usable.
+             */
+
+            await ensureValidAccessToken();
+
+
+            /*
+             * Re-check identity + current
+             * ServiceCall roles.
+             */
+
+            const currentUser =
+                await getCurrentServiceCallUser();
+
+            const authorization =
+                currentUser?.authorization || {};
+
+            currentServiceCallUser =
+    currentUser?.user || null;
+
+currentServiceCallAuthorization =
+    authorization;
+
+
+            if (
+                authorization.allowed !== true
+            ) {
+
+                return {
+                    success: true,
+                    authenticated: true,
+                    authorized: false,
+                    state: 'access_denied',
+                    user:
+                        currentUser?.user || null,
+                    authorization:
+                        authorization
+                };
+            }
+
+
+            /*
+             * ACCESS HAS NOW BEEN GRANTED
+             */
+
+            await startHeartbeatLoop();
+
+            startIncomingCallLoop();
+
+            startOutgoingCallLoop();
+
+
+            return {
+                success: true,
+                authenticated: true,
+                authorized: true,
+                state: 'ready',
+                user:
+                    currentUser?.user || null,
+                authorization:
+                    authorization
+            };
+
+        }
+        catch (error) {
+
+            console.error(
+                'ServiceCall access check failed:',
+                error
+            );
+
+            return {
+                success: false,
+                authenticated: false,
+                authorized: false,
+                state: 'login_required',
+                message:
+                    error?.message ||
+                    'Unable to check ServiceCall access.'
+            };
+        }
+    }
+);
+
+ipcMain.handle(
+    'servicecall-get-current-account',
+    async () => {
+
+        /*
+         * No authenticated identity
+         * has been resolved yet.
+         */
+
+        if (!currentServiceCallUser) {
+
+            return {
+                success: false,
+                authenticated: false,
+                user: null,
+                authorization: null
+            };
+        }
+
+
+        return {
+            success: true,
+            authenticated: true,
+
+            user:
+                currentServiceCallUser,
+
+            authorization:
+                currentServiceCallAuthorization || {
+                    allowed: false,
+                    is_servicecall_user: false,
+                    is_servicecall_admin: false
+                }
+        };
+    }
+);
+
+async function stopCurrentServiceCallSession() {
+
+    /*
+     * -----------------------------------------
+     * STOP HEARTBEAT
+     * -----------------------------------------
+     */
+
+    if (heartbeatTimer) {
+
+        clearInterval(
+            heartbeatTimer
+        );
+
+        heartbeatTimer =
+            null;
+    }
+
+
+    /*
+     * -----------------------------------------
+     * STOP INCOMING CALL MONITOR
+     * -----------------------------------------
+     */
+
+    if (incomingCallTimer) {
+
+        clearInterval(
+            incomingCallTimer
+        );
+
+        incomingCallTimer =
+            null;
+    }
+
+
+    /*
+     * -----------------------------------------
+     * STOP OUTGOING CALL MONITOR
+     * -----------------------------------------
+     */
+
+    if (outgoingCallTimer) {
+
+        clearInterval(
+            outgoingCallTimer
+        );
+
+        outgoingCallTimer =
+            null;
+    }
+
+
+    /*
+     * -----------------------------------------
+     * MARK DESKTOP OFFLINE
+     * -----------------------------------------
+     *
+     * Do this BEFORE clearing the active
+     * authenticated account.
+     */
+
+    try {
+
+    await signOutDesktopSession();
+
+} catch (error) {
+
+    console.error(
+        'ServiceCall explicit sign out failed:',
+        error
+    );
+
+
+    /*
+     * Fallback:
+     *
+     * If the dedicated sign-out endpoint
+     * fails, still try to mark this device
+     * registration offline.
+     */
+    try {
+
+        await updateDesktopState(
+            'offline'
+        );
+
+    } catch (fallbackError) {
+
+        console.error(
+            'ServiceCall offline fallback failed:',
+            fallbackError
+        );
+    }
+}
+
+
+    /*
+     * -----------------------------------------
+     * CLEAR ACTIVE IN-MEMORY IDENTITY
+     * -----------------------------------------
+     */
+
+    currentServiceCallUser =
+        null;
+
+    currentServiceCallAuthorization =
+        null;
+
+
+    activeIncomingCallId =
+        null;
+
+    activeOutgoingCallId =
+        null;
+
+
+    console.log(
+        'Current ServiceCall session stopped.'
+    );
+
+
+    return {
+        success: true
+    };
+}
+
+ipcMain.handle(
+    'servicecall-sign-out',
+    async () => {
+
+        try {
+
+            console.log(
+                'ServiceCall sign out requested.'
+            );
+
+            /*
+ * Preserve the latest OAuth session
+ * inside the currently active saved
+ * account before signing out.
+ */
+let config =
+    loadConfig();
+
+config =
+    syncActiveAccountTokens(
+        config
+    );
+
+saveConfig(
+    config
+);
+
+
+            /*
+             * Stop heartbeat/call monitoring,
+             * mark this desktop offline,
+             * and clear the active in-memory
+             * account identity.
+             */
+            await stopCurrentServiceCallSession();
+
+
+            /*
+             * IMPORTANT:
+             *
+             * Do NOT delete accessToken or
+             * refreshToken here.
+             *
+             * Saved-account support will own
+             * token storage shortly.
+             */
+
+
+            /*
+             * Return the main window to our
+             * authentication/account entry page.
+             */
+            if (
+                mainWindow &&
+                !mainWindow.isDestroyed()
+            ) {
+
+                await mainWindow.loadFile(
+                    'auth/auth-gate.html'
+                );
+
+                mainWindow.show();
+
+                mainWindow.focus();
+            }
+
+
+            console.log(
+                'ServiceCall signed out of active session.'
+            );
+
+
+            return {
+                success: true,
+                state: 'signed_out'
+            };
+
+
+        } catch (error) {
+
+            console.error(
+                'ServiceCall sign out failed:',
+                error
+            );
+
+
+            return {
+                success: false,
+                state: 'error',
+                message:
+                    error?.message ||
+                    'Unable to sign out of ServiceCall.'
+            };
+        }
+    }
+);
+
+async function signOutDesktopSession() {
+
+    const deviceId =
+        getOrCreateDeviceId();
+
+
+    const result =
+        await serviceCallApiRequest(
+            '/desktop-sign-out',
+            'POST',
+            {
+                device_id:
+                    deviceId
+            }
+        );
+
+
+    if (
+        !result ||
+        result.success !== true
+    ) {
+
+        throw new Error(
+            result?.message ||
+            'Unable to sign out of ServiceCall Desktop.'
+        );
+    }
+
+
+    console.log(
+        'ServiceCall desktop sign out:',
+        result
+    );
+
+
+    return result;
+}
+
+ipcMain.handle(
+    'servicecall-get-saved-accounts',
+    async () => {
+
+        try {
+
+            const accounts =
+                getSavedAccounts();
+
+
+            return {
+                success: true,
+                accounts: accounts
+            };
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to load ServiceCall saved accounts:',
+                error
+            );
+
+
+            return {
+                success: false,
+                accounts: [],
+                message:
+                    error?.message ||
+                    'Unable to load saved accounts.'
+            };
+        }
+    }
+);
+
+ipcMain.handle(
+    'servicecall-remove-saved-account',
+    async (
+        event,
+        accountKey
+    ) => {
+
+        try {
+
+            return await removeSavedAccount(
+                String(
+                    accountKey || ''
+                )
+            );
+
+        } catch (error) {
+
+            console.error(
+                'Unable to remove saved ServiceCall account:',
+                error
+            );
+
+
+            return {
+                success: false,
+                state: 'error',
+                message:
+                    error?.message ||
+                    'Unable to remove the saved account.'
+            };
+        }
+    }
+);
+
+async function activateSavedAccount(
+    accountKey
+) {
+
+    let config =
+        loadConfig();
+
+    config =
+        ensureSavedAccountStructure(
+            config
+        );
+
+
+    const account =
+        config.savedAccounts[
+            accountKey
+        ];
+
+
+    if (!account) {
+
+        return {
+            success: false,
+            state: 'account_not_found',
+            message:
+                'The selected ServiceCall account could not be found.'
+        };
+    }
+
+
+    /*
+     * Restore this account's instance
+     * and OAuth session into the active
+     * runtime configuration.
+     */
+
+    config.instanceUrl =
+        account.instanceUrl || '';
+
+    config.accessToken =
+        account.accessToken || '';
+
+    config.refreshToken =
+        account.refreshToken || '';
+
+    config.tokenType =
+        account.tokenType ||
+        'Bearer';
+
+    config.expiresIn =
+        account.expiresIn || 0;
+
+    config.tokenObtainedAt =
+        account.tokenObtainedAt || 0;
+
+    config.activeAccountKey =
+        accountKey;
+
+
+    saveConfig(
+        config
+    );
+
+
+    try {
+
+        /*
+         * May automatically refresh the
+         * selected account's access token.
+         */
+
+        await ensureValidAccessToken();
+
+
+        /*
+         * IMPORTANT:
+         * Never trust the role snapshot
+         * stored in savedAccounts.
+         *
+         * Ask ServiceNow again.
+         */
+
+        const currentUser =
+            await getCurrentServiceCallUser();
+
+        const authorization =
+            currentUser?.authorization || {};
+
+
+        /*
+         * SECURITY CHECK:
+         *
+         * Make sure the OAuth identity still
+         * belongs to the account that the
+         * user selected.
+         */
+
+        if (
+            String(
+                currentUser?.user?.sys_id ||
+                ''
+            ) !==
+            String(
+                account.userSysId || ''
+            )
+        ) {
+
+            throw new Error(
+                'The authenticated ServiceNow identity does not match the selected saved account.'
+            );
+        }
+
+
+        /*
+         * Refresh cached DISPLAY metadata.
+         * These values never grant access.
+         */
+
+        config =
+            loadConfig();
+
+        config =
+            ensureSavedAccountStructure(
+                config
+            );
+
+
+        const savedAccount =
+            config.savedAccounts[
+                accountKey
+            ];
+
+
+        if (savedAccount) {
+
+            savedAccount.name =
+                currentUser?.user?.name ||
+                savedAccount.name ||
+                '';
+
+            savedAccount.userName =
+                currentUser?.user?.user_name ||
+                savedAccount.userName ||
+                '';
+
+            savedAccount.email =
+                currentUser?.user?.email ||
+                '';
+
+            savedAccount.serviceCallId =
+                currentUser?.user
+                    ?.servicecall_id ||
+                '';
+
+            savedAccount.isServiceCallUser =
+                authorization
+                    .is_servicecall_user ===
+                true;
+
+            savedAccount.isServiceCallAdmin =
+                authorization
+                    .is_servicecall_admin ===
+                true;
+
+            savedAccount.lastUsedAt =
+                new Date().toISOString();
+
+
+            config.savedAccounts[
+                accountKey
+            ] =
+                savedAccount;
+
+
+            saveConfig(
+                config
+            );
+        }
+
+
+        if (
+            authorization.allowed !== true
+        ) {
+
+            return {
+                success: true,
+                authenticated: true,
+                authorized: false,
+                state: 'access_denied',
+                user:
+                    currentUser?.user || null,
+                authorization:
+                    authorization
+            };
+        }
+
+
+        await startHeartbeatLoop();
+
+        startIncomingCallLoop();
+
+        startOutgoingCallLoop();
+
+
+        return {
+            success: true,
+            authenticated: true,
+            authorized: true,
+            state: 'ready',
+            user:
+                currentUser?.user || null,
+            authorization:
+                authorization
+        };
+
+
+    } catch (error) {
+
+        console.error(
+            'Unable to activate saved ServiceCall account:',
+            error
+        );
+
+
+        return {
+            success: false,
+            authenticated: false,
+            authorized: false,
+            state:
+                'login_required',
+
+            message:
+                error?.message ||
+                'This account needs to sign in again.'
+        };
+    }
+}
+
+/* =========================================================
+   REMOVE SAVED ACCOUNT
+========================================================= */
+
+async function removeSavedAccount(
+    accountKey
+) {
+
+    let config =
+        loadConfig();
+
+    config =
+        ensureSavedAccountStructure(
+            config
+        );
+
+
+    accountKey =
+        String(
+            accountKey || ''
+        ).trim();
+
+
+    if (
+        !accountKey ||
+        !config.savedAccounts[
+            accountKey
+        ]
+    ) {
+
+        return {
+            success: false,
+            state: 'account_not_found',
+            message:
+                'The saved ServiceCall account could not be found.'
+        };
+    }
+
+
+    const wasActive =
+        config.activeAccountKey ===
+        accountKey;
+
+
+    /*
+     * If this happens to be the currently
+     * active account, stop its runtime
+     * session first.
+     */
+    if (wasActive) {
+
+        try {
+
+            await stopCurrentServiceCallSession();
+
+        } catch (error) {
+
+            console.warn(
+                'ServiceCall session cleanup during account removal failed:',
+                error
+            );
+        }
+    }
+
+
+    /*
+     * Delete the complete saved entry.
+     *
+     * Because OAuth credentials live inside
+     * this account object, its saved tokens
+     * disappear with it.
+     */
+    delete config.savedAccounts[
+        accountKey
+    ];
+
+
+    if (wasActive) {
+
+        config.activeAccountKey =
+            '';
+
+
+        /*
+         * Clear the legacy/current runtime
+         * OAuth fields too.
+         *
+         * Other saved accounts remain
+         * completely untouched.
+         */
+        delete config.accessToken;
+        delete config.refreshToken;
+        delete config.tokenType;
+        delete config.expiresIn;
+        delete config.tokenObtainedAt;
+    }
+
+
+    saveConfig(
+        config
+    );
+
+
+    console.log(
+        'ServiceCall saved account removed:',
+        accountKey
+    );
+
+
+    return {
+        success: true,
+        state: 'account_removed',
+        removedAccountKey:
+            accountKey
+    };
+}
+
+ipcMain.handle(
+    'servicecall-activate-saved-account',
+    async (
+        event,
+        accountKey
+    ) => {
+
+        return await activateSavedAccount(
+            String(
+                accountKey || ''
+            )
+        );
+    }
+);
+

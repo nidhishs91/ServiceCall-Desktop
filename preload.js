@@ -214,6 +214,48 @@ updatePresence: (
     );
 },
 
+checkAccess: () =>
+    ipcRenderer.invoke(
+        'servicecall-check-access'
+    ),
+
+getMyPresence: () => {
+
+    return ipcRenderer.invoke(
+        'servicecall-get-my-presence'
+    );
+},
+
+signOut: () =>
+    ipcRenderer.invoke(
+        'servicecall-sign-out'
+    ),
+
+getSavedAccounts: () =>
+    ipcRenderer.invoke(
+        'servicecall-get-saved-accounts'
+    ),
+
+getCurrentAccount: () =>
+    ipcRenderer.invoke(
+        'servicecall-get-current-account'
+    ),
+
+activateSavedAccount: (
+    accountKey
+) =>
+    ipcRenderer.invoke(
+        'servicecall-activate-saved-account',
+        accountKey
+    ),
+
+removeSavedAccount: (
+    accountKey
+) =>
+    ipcRenderer.invoke(
+        'servicecall-remove-saved-account',
+        accountKey
+    ),
 
 finishRecording:
     (recordingSysId) =>
