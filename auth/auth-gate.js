@@ -43,6 +43,7 @@ let savedAccounts = [];
 
 let showAllAccounts = false;
 
+
 const authenticatingView =
     document.getElementById(
         'authenticatingView'
@@ -63,55 +64,30 @@ const checkAccessButton =
         'checkAccessButton'
     );
 
+
+/*
+ * -----------------------------------------
+ * ACCESS-DENIED AUTO CHECK
+ * -----------------------------------------
+ */
+
+let accessCheckTimer = null;
+
+let accessCheckInProgress = false;
+
+const ACCESS_CHECK_INTERVAL_MS =
+    30000;
+
+
 const useAnotherAccountButton =
     document.getElementById(
         'useAnotherAccountButton'
     );
 
-useAnotherAccountButton?.addEventListener(
-    'click',
-    async () => {
-
-        try {
-
-            /*
-             * Return to the account chooser.
-             *
-             * Existing saved accounts remain
-             * available and + Add User can be
-             * used for a completely new login.
-             */
-            await showAccountChooser();
-
-        } catch (error) {
-
-            console.error(
-                'Unable to open account chooser:',
-                error
-            );
-
-
-            /*
-             * Safe fallback:
-             * if the chooser cannot load,
-             * return to the normal login view.
-             */
-            showLogin();
-
-            if (authMessage) {
-
-                authMessage.textContent =
-                    'You can sign in with another ServiceNow account.';
-            }
-        }
-    }
-);
-
 const errorView =
     document.getElementById(
         'errorView'
     );
-
 
 const instanceInput =
     document.getElementById(
@@ -156,10 +132,12 @@ function showView(view) {
         accountChooserView
     ];
 
+
     views.forEach(
         (item) => {
 
             if (item) {
+
                 item.classList.add(
                     'hidden'
                 );
@@ -167,7 +145,9 @@ function showView(view) {
         }
     );
 
+
     if (view) {
+
         view.classList.remove(
             'hidden'
         );
@@ -183,15 +163,27 @@ function showView(view) {
 
 function showLogin() {
 
+    /*
+     * Login is no longer the access-denied
+     * waiting state, so stop its timer.
+     */
+    stopAccessCheckPolling();
+
+
     showView(
         loginView
     );
 
+
     if (authMessage) {
-        authMessage.textContent = '';
+
+        authMessage.textContent =
+            '';
     }
 
+
     if (instanceInput) {
+
         instanceInput.focus();
     }
 }
@@ -205,10 +197,214 @@ function showLogin() {
 
 function showAuthenticating() {
 
+    stopAccessCheckPolling();
+
+
     showView(
         authenticatingView
     );
 }
+
+
+/*
+ * -----------------------------------------
+ * ACCESS-DENIED AUTO CHECK
+ * -----------------------------------------
+ */
+
+function stopAccessCheckPolling() {
+
+    if (accessCheckTimer) {
+
+        clearInterval(
+            accessCheckTimer
+        );
+
+        accessCheckTimer =
+            null;
+    }
+}
+
+
+async function checkAccessAutomatically() {
+
+    /*
+     * Prevent overlapping automatic
+     * access checks.
+     */
+    if (accessCheckInProgress) {
+
+        return;
+    }
+
+
+    /*
+     * Automatic checking is only valid
+     * while the OLD auth-gate access
+     * unavailable screen is visible.
+     */
+    if (
+        !accessDeniedView ||
+        accessDeniedView.classList.contains(
+            'hidden'
+        )
+    ) {
+
+        return;
+    }
+
+
+    accessCheckInProgress =
+        true;
+
+
+    try {
+
+        if (accessDeniedUser) {
+
+            accessDeniedUser.textContent =
+                'Waiting for ServiceCall access...';
+        }
+
+
+        const result =
+            await window.serviceCall
+                .checkAccess();
+
+
+        /*
+         * ACCESS STILL NOT ASSIGNED
+         */
+
+        if (
+            result?.state ===
+            'access_denied'
+        ) {
+
+            if (accessDeniedUser) {
+
+                accessDeniedUser.textContent =
+                    'Waiting for ServiceCall access...';
+            }
+
+
+            return;
+        }
+
+
+        /*
+         * ACCESS HAS NOW BEEN ASSIGNED
+         */
+
+        if (
+            result?.state ===
+            'ready'
+        ) {
+
+            stopAccessCheckPolling();
+
+
+            if (accessDeniedUser) {
+
+                accessDeniedUser.textContent =
+                    'ServiceCall access assigned. Signing you in...';
+            }
+
+
+            /*
+             * Keep the successful state visible
+             * before entering ServiceCall.
+             */
+            await new Promise(
+                (resolve) => {
+
+                    setTimeout(
+                        resolve,
+                        3500
+                    );
+                }
+            );
+
+
+            window.location.href =
+                '../index.html';
+
+
+            return;
+        }
+
+
+        /*
+         * SAVED AUTHENTICATION IS NO
+         * LONGER VALID
+         */
+
+        if (
+            result?.state ===
+            'login_required'
+        ) {
+
+            stopAccessCheckPolling();
+
+
+            showLogin();
+
+
+            if (authMessage) {
+
+                authMessage.textContent =
+                    'Your saved session has expired. Please sign in again.';
+            }
+
+
+            return;
+        }
+
+
+        console.warn(
+            'Unexpected automatic ServiceCall access-check result:',
+            result
+        );
+
+    } catch (error) {
+
+        /*
+         * Temporary network/request failures
+         * should not throw the user out of
+         * the waiting screen.
+         */
+        console.warn(
+            'Automatic ServiceCall access check failed:',
+            error
+        );
+
+
+        if (accessDeniedUser) {
+
+            accessDeniedUser.textContent =
+                'Unable to check access right now. Retrying automatically...';
+        }
+
+    } finally {
+
+        accessCheckInProgress =
+            false;
+    }
+}
+
+
+function startAccessCheckPolling() {
+
+    stopAccessCheckPolling();
+
+
+    accessCheckTimer =
+        setInterval(
+            checkAccessAutomatically,
+            ACCESS_CHECK_INTERVAL_MS
+        );
+}
+
 
 function showAccessDenied(
     message
@@ -218,13 +414,75 @@ function showAccessDenied(
         accessDeniedView
     );
 
+
     if (accessDeniedUser) {
 
         accessDeniedUser.textContent =
             message ||
-            'Required ServiceCall access has not been assigned.';
+            'Waiting for ServiceCall access...';
     }
+
+
+    /*
+     * Start lightweight authorization
+     * checking only while the OLD
+     * auth-gate access-denied page
+     * is active.
+     */
+    startAccessCheckPolling();
 }
+
+
+/*
+ * -----------------------------------------
+ * USE ANOTHER ACCOUNT
+ * -----------------------------------------
+ */
+
+useAnotherAccountButton?.addEventListener(
+    'click',
+    async () => {
+
+        stopAccessCheckPolling();
+
+
+        try {
+
+            /*
+             * Return to the saved-account
+             * chooser.
+             */
+            await showAccountChooser();
+
+        } catch (error) {
+
+            console.error(
+                'Unable to open account chooser:',
+                error
+            );
+
+
+            /*
+             * Safe fallback.
+             */
+            showLogin();
+
+
+            if (authMessage) {
+
+                authMessage.textContent =
+                    'You can sign in with another ServiceNow account.';
+            }
+        }
+    }
+);
+
+
+/*
+ * -----------------------------------------
+ * ACCOUNT ROLE LABEL
+ * -----------------------------------------
+ */
 
 function getAccountRoleLabel(
     account
@@ -233,22 +491,33 @@ function getAccountRoleLabel(
     if (
         account.isServiceCallAdmin
     ) {
+
         return 'ServiceCall Admin';
     }
+
 
     if (
         account.isServiceCallUser
     ) {
+
         return 'ServiceCall User';
     }
+
 
     return 'No ServiceCall Access';
 }
 
 
+/*
+ * -----------------------------------------
+ * RENDER SAVED ACCOUNTS
+ * -----------------------------------------
+ */
+
 function renderSavedAccounts() {
 
     if (!savedAccountsContainer) {
+
         return;
     }
 
@@ -266,11 +535,12 @@ function renderSavedAccounts() {
         .toLowerCase();
 
 
-    let filteredAccounts =
+    const filteredAccounts =
         savedAccounts.filter(
             (account) => {
 
                 if (!searchText) {
+
                     return true;
                 }
 
@@ -294,11 +564,11 @@ function renderSavedAccounts() {
 
 
     /*
-     * When searching, always show every
-     * matching account.
+     * Search always shows all matches.
      *
-     * Otherwise show only the five most
-     * recently used accounts.
+     * Otherwise show the five most
+     * recently used accounts unless
+     * View All is selected.
      */
     const accountsToRender =
         searchText ||
@@ -366,10 +636,9 @@ function renderSavedAccounts() {
 
 
                 /*
-                 * textContent is used instead
-                 * of inserting account data
-                 * through HTML.
+                 * ACCOUNT NAME
                  */
+
                 const nameElement =
                     document.createElement(
                         'div'
@@ -381,6 +650,10 @@ function renderSavedAccounts() {
                 nameElement.textContent =
                     name;
 
+
+                /*
+                 * ACCOUNT DETAILS
+                 */
 
                 const detailsElement =
                     document.createElement(
@@ -394,115 +667,14 @@ function renderSavedAccounts() {
                     details;
 
 
+                /*
+                 * ROLE
+                 */
+
                 const roleElement =
                     document.createElement(
                         'div'
                     );
-
-                const removeButton =
-    document.createElement(
-        'button'
-    );
-
-removeButton.type =
-    'button';
-
-removeButton.className =
-    'saved-account-remove';
-
-removeButton.textContent =
-    'Remove';
-
-
-removeButton.addEventListener(
-    'click',
-    async (event) => {
-
-        /*
-         * Don't trigger account activation
-         * when Remove is clicked.
-         */
-        event.stopPropagation();
-
-
-        const accountName =
-            account.name ||
-            account.userName ||
-            'this account';
-
-
-        const confirmed =
-            window.confirm(
-                'Remove ' +
-                accountName +
-                ' from ServiceCall Desktop?\n\n' +
-                'This only removes the saved sign-in from this device. ' +
-                'It does not delete the ServiceNow user.'
-            );
-
-
-        if (!confirmed) {
-            return;
-        }
-
-
-        removeButton.disabled =
-            true;
-
-
-        try {
-
-            const result =
-                await window.serviceCall
-                    .removeSavedAccount(
-                        account.accountKey
-                    );
-
-
-            if (
-                !result ||
-                result.success !== true
-            ) {
-
-                throw new Error(
-                    result?.message ||
-                    'Unable to remove account.'
-                );
-            }
-
-
-            /*
-             * Reload the chooser from the
-             * main process.
-             */
-            await showAccountChooser();
-
-
-        } catch (error) {
-
-            console.error(
-                'Unable to remove saved account:',
-                error
-            );
-
-
-            if (
-                accountChooserMessage
-            ) {
-
-                accountChooserMessage
-                    .textContent =
-                    error?.message ||
-                    'Unable to remove account.';
-            }
-
-        } finally {
-
-            removeButton.disabled =
-                false;
-        }
-    }
-);
 
                 roleElement.className =
                     'saved-account-role';
@@ -510,6 +682,116 @@ removeButton.addEventListener(
                 roleElement.textContent =
                     role;
 
+
+                /*
+                 * REMOVE BUTTON
+                 */
+
+                const removeButton =
+                    document.createElement(
+                        'button'
+                    );
+
+                removeButton.type =
+                    'button';
+
+                removeButton.className =
+                    'saved-account-remove';
+
+                removeButton.textContent =
+                    'Remove';
+
+
+                removeButton.addEventListener(
+                    'click',
+                    async (event) => {
+
+                        /*
+                         * Do not activate the account
+                         * when Remove is clicked.
+                         */
+                        event.stopPropagation();
+
+
+                        const accountName =
+                            account.name ||
+                            account.userName ||
+                            'this account';
+
+
+                        const confirmed =
+                            window.confirm(
+                                'Remove ' +
+                                accountName +
+                                ' from ServiceCall Desktop?\n\n' +
+                                'This only removes the saved sign-in from this device. ' +
+                                'It does not delete the ServiceNow user.'
+                            );
+
+
+                        if (!confirmed) {
+
+                            return;
+                        }
+
+
+                        removeButton.disabled =
+                            true;
+
+
+                        try {
+
+                            const result =
+                                await window.serviceCall
+                                    .removeSavedAccount(
+                                        account.accountKey
+                                    );
+
+
+                            if (
+                                !result ||
+                                result.success !== true
+                            ) {
+
+                                throw new Error(
+                                    result?.message ||
+                                    'Unable to remove account.'
+                                );
+                            }
+
+
+                            await showAccountChooser();
+
+                        } catch (error) {
+
+                            console.error(
+                                'Unable to remove saved account:',
+                                error
+                            );
+
+
+                            if (
+                                accountChooserMessage
+                            ) {
+
+                                accountChooserMessage
+                                    .textContent =
+                                    error?.message ||
+                                    'Unable to remove account.';
+                            }
+
+                        } finally {
+
+                            removeButton.disabled =
+                                false;
+                        }
+                    }
+                );
+
+
+                /*
+                 * BUILD ACCOUNT CARD
+                 */
 
                 button.appendChild(
                     nameElement
@@ -524,135 +806,146 @@ removeButton.addEventListener(
                 );
 
                 button.appendChild(
-    removeButton
-);
-
-
-                button.addEventListener(
-    'click',
-    async () => {
-
-        try {
-
-            if (
-                accountChooserMessage
-            ) {
-
-                accountChooserMessage
-                    .textContent =
-                    'Connecting to ' +
-                    (
-                        account.name ||
-                        account.userName ||
-                        'ServiceCall'
-                    ) +
-                    '...';
-            }
-
-
-            button.disabled =
-                true;
-
-
-            const result =
-                await window.serviceCall
-                    .activateSavedAccount(
-                        account.accountKey
-                    );
-
-
-            /*
-             * ACCOUNT AUTHORIZED
-             */
-            if (
-                result?.success === true &&
-                result.state === 'ready'
-            ) {
-
-                window.location.href =
-                    '../index.html';
-
-                return;
-            }
-
-
-            /*
-             * ACCOUNT AUTHENTICATED,
-             * BUT SERVICECALL ROLE MISSING
-             */
-            if (
-                result?.success === true &&
-                result.state ===
-                    'access_denied'
-            ) {
-
-                const identity =
-                    result?.user?.name ||
-                    result?.user?.user_name ||
-                    'This account';
-
-
-                showAccessDenied(
-                    identity +
-                    ' does not currently have ServiceCall access.'
+                    removeButton
                 );
 
-                return;
-            }
+
+                /*
+                 * ACTIVATE SAVED ACCOUNT
+                 */
+
+                button.addEventListener(
+                    'click',
+                    async () => {
+
+                        try {
+
+                            if (
+                                accountChooserMessage
+                            ) {
+
+                                accountChooserMessage
+                                    .textContent =
+                                    'Connecting to ' +
+                                    (
+                                        account.name ||
+                                        account.userName ||
+                                        'ServiceCall'
+                                    ) +
+                                    '...';
+                            }
 
 
-            /*
-             * SAVED AUTHORIZATION CAN NO
-             * LONGER BE RESTORED.
-             */
-            if (
-                result?.state ===
-                    'login_required'
-            ) {
-
-                showLogin();
-
-                if (authMessage) {
-
-                    authMessage.textContent =
-                        'Please sign in again to continue with this account.';
-                }
-
-                return;
-            }
+                            button.disabled =
+                                true;
 
 
-            throw new Error(
-                result?.message ||
-                'Unable to activate this account.'
-            );
+                            const result =
+                                await window.serviceCall
+                                    .activateSavedAccount(
+                                        account.accountKey
+                                    );
 
 
-        } catch (error) {
+                            /*
+                             * ACCOUNT AUTHORIZED
+                             */
 
-            console.error(
-                'Saved account activation failed:',
-                error
-            );
+                            if (
+                                result?.success === true &&
+                                result.state ===
+                                    'ready'
+                            ) {
+
+                                window.location.href =
+                                    '../index.html';
 
 
-            if (
-                accountChooserMessage
-            ) {
+                                return;
+                            }
 
-                accountChooserMessage
-                    .textContent =
-                    error?.message ||
-                    'Unable to open this account.';
-            }
 
-        } finally {
+                            /*
+                             * AUTHENTICATED BUT
+                             * SERVICECALL ROLE MISSING
+                             */
 
-            button.disabled =
-                false;
-        }
-    }
-);
+                            if (
+                                result?.success === true &&
+                                result.state ===
+                                    'access_denied'
+                            ) {
+
+                                const identity =
+                                    result?.user?.name ||
+                                    result?.user?.user_name ||
+                                    'This account';
+
+
+                                showAccessDenied(
+                                    identity +
+                                    ' does not currently have ServiceCall access.'
+                                );
+
+
+                                return;
+                            }
+
+
+                            /*
+                             * SAVED AUTHORIZATION CAN
+                             * NO LONGER BE RESTORED
+                             */
+
+                            if (
+                                result?.state ===
+                                    'login_required'
+                            ) {
+
+                                showLogin();
+
+
+                                if (authMessage) {
+
+                                    authMessage.textContent =
+                                        'Please sign in again to continue with this account.';
+                                }
+
+
+                                return;
+                            }
+
+
+                            throw new Error(
+                                result?.message ||
+                                'Unable to activate this account.'
+                            );
+
+                        } catch (error) {
+
+                            console.error(
+                                'Saved account activation failed:',
+                                error
+                            );
+
+
+                            if (
+                                accountChooserMessage
+                            ) {
+
+                                accountChooserMessage
+                                    .textContent =
+                                    error?.message ||
+                                    'Unable to open this account.';
+                            }
+
+                        } finally {
+
+                            button.disabled =
+                                false;
+                        }
+                    }
+                );
 
 
                 savedAccountsContainer
@@ -663,6 +956,10 @@ removeButton.addEventListener(
         );
     }
 
+
+    /*
+     * VIEW ALL / RECENT ACCOUNTS
+     */
 
     if (viewAllAccountsButton) {
 
@@ -688,7 +985,16 @@ removeButton.addEventListener(
 }
 
 
+/*
+ * -----------------------------------------
+ * SHOW ACCOUNT CHOOSER
+ * -----------------------------------------
+ */
+
 async function showAccountChooser() {
+
+    stopAccessCheckPolling();
+
 
     showView(
         accountChooserView
@@ -751,7 +1057,6 @@ async function showAccountChooser() {
                     : 'No saved accounts yet.';
         }
 
-
     } catch (error) {
 
         console.error(
@@ -769,17 +1074,24 @@ async function showAccountChooser() {
     }
 }
 
+
 /*
  * -----------------------------------------
  * ERROR VIEW
  * -----------------------------------------
  */
 
-function showError(message) {
+function showError(
+    message
+) {
+
+    stopAccessCheckPolling();
+
 
     showView(
         errorView
     );
+
 
     if (errorMessage) {
 
@@ -792,13 +1104,27 @@ function showError(message) {
 
 /*
  * -----------------------------------------
- * CONNECT BUTTON
+ * MANUAL ACCESS CHECK
  * -----------------------------------------
  */
 
 checkAccessButton?.addEventListener(
     'click',
     async () => {
+
+        /*
+         * Do not overlap with the automatic
+         * authorization request.
+         */
+        if (accessCheckInProgress) {
+
+            return;
+        }
+
+
+        accessCheckInProgress =
+            true;
+
 
         try {
 
@@ -807,6 +1133,13 @@ checkAccessButton?.addEventListener(
 
             checkAccessButton.textContent =
                 'Checking access...';
+
+
+            if (accessDeniedUser) {
+
+                accessDeniedUser.textContent =
+                    'Checking your ServiceCall access...';
+            }
 
 
             const result =
@@ -829,9 +1162,12 @@ checkAccessButton?.addEventListener(
                 'access_denied'
             ) {
 
-                showAccessDenied(
-                    'ServiceCall access has still not been assigned to this account.'
-                );
+                if (accessDeniedUser) {
+
+                    accessDeniedUser.textContent =
+                        'Waiting for ServiceCall access...';
+                }
+
 
                 return;
             }
@@ -846,14 +1182,38 @@ checkAccessButton?.addEventListener(
                 'ready'
             ) {
 
+                stopAccessCheckPolling();
+
+
+                if (accessDeniedUser) {
+
+                    accessDeniedUser.textContent =
+                        'ServiceCall access assigned. Signing you in...';
+                }
+
+
+                checkAccessButton.textContent =
+                    'Access assigned';
+
+
                 /*
-                 * Background services have
-                 * already been started by
-                 * the main process.
+                 * Match the automatic flow so
+                 * both paths feel identical.
                  */
+                await new Promise(
+                    (resolve) => {
+
+                        setTimeout(
+                            resolve,
+                            3500
+                        );
+                    }
+                );
+
 
                 window.location.href =
                     '../index.html';
+
 
                 return;
             }
@@ -868,12 +1228,18 @@ checkAccessButton?.addEventListener(
                 'login_required'
             ) {
 
+                stopAccessCheckPolling();
+
+
                 showLogin();
 
+
                 if (authMessage) {
+
                     authMessage.textContent =
                         'Please sign in again.';
                 }
+
 
                 return;
             }
@@ -884,29 +1250,52 @@ checkAccessButton?.addEventListener(
                 'Unable to verify ServiceCall access.'
             );
 
-        }
-        catch (error) {
+        } catch (error) {
 
             console.error(
                 'ServiceCall access check failed:',
                 error
             );
 
+
             showError(
                 error?.message ||
                 'Unable to check ServiceCall access.'
             );
-        }
-        finally {
 
-            checkAccessButton.disabled =
+        } finally {
+
+            accessCheckInProgress =
                 false;
 
-            checkAccessButton.textContent =
-                'Check access again';
+
+            /*
+             * Only restore the button when
+             * this view is still active.
+             */
+            if (
+                accessDeniedView &&
+                !accessDeniedView.classList.contains(
+                    'hidden'
+                )
+            ) {
+
+                checkAccessButton.disabled =
+                    false;
+
+                checkAccessButton.textContent =
+                    'Check access again';
+            }
         }
     }
 );
+
+
+/*
+ * -----------------------------------------
+ * CONNECT BUTTON
+ * -----------------------------------------
+ */
 
 connectButton?.addEventListener(
     'click',
@@ -914,15 +1303,19 @@ connectButton?.addEventListener(
 
         const instanceUrl =
             String(
-                instanceInput?.value || ''
+                instanceInput?.value ||
+                ''
             ).trim();
+
 
         if (!instanceUrl) {
 
             if (authMessage) {
+
                 authMessage.textContent =
                     'Enter your ServiceNow instance.';
             }
+
 
             return;
         }
@@ -934,16 +1327,21 @@ connectButton?.addEventListener(
                 'ServiceCall Desktop could not initialize.'
             );
 
+
             return;
         }
 
 
         try {
 
-            connectButton.disabled = true;
+            connectButton.disabled =
+                true;
+
 
             if (authMessage) {
-                authMessage.textContent = '';
+
+                authMessage.textContent =
+                    '';
             }
 
 
@@ -952,15 +1350,17 @@ connectButton?.addEventListener(
              */
 
             const saveResult =
-                await window.serviceCall.saveInstance(
-                    instanceUrl
-                );
+                await window.serviceCall
+                    .saveInstance(
+                        instanceUrl
+                    );
 
 
             if (
                 saveResult &&
                 saveResult.success === false
             ) {
+
                 throw new Error(
                     saveResult.message ||
                     'Unable to save the ServiceNow instance.'
@@ -980,28 +1380,32 @@ connectButton?.addEventListener(
              */
 
             const loginResult =
-                await window.serviceCall.startLogin();
+                await window.serviceCall
+                    .startLogin();
 
 
             if (
                 loginResult &&
                 loginResult.success === false
             ) {
+
                 throw new Error(
                     loginResult.message ||
                     'Unable to start ServiceNow authentication.'
                 );
             }
 
-        }
-        catch (error) {
+        } catch (error) {
 
             console.error(
                 'ServiceCall login failed:',
                 error
             );
 
-            connectButton.disabled = false;
+
+            connectButton.disabled =
+                false;
+
 
             showError(
                 error?.message ||
@@ -1010,6 +1414,7 @@ connectButton?.addEventListener(
         }
     }
 );
+
 
 /*
  * -----------------------------------------
@@ -1022,7 +1427,8 @@ instanceInput?.addEventListener(
     (event) => {
 
         if (
-            event.key === 'Enter'
+            event.key ===
+            'Enter'
         ) {
 
             connectButton?.click();
@@ -1045,12 +1451,6 @@ retryButton?.addEventListener(
     }
 );
 
-
-/*
- * -----------------------------------------
- * INITIAL STATE
- * -----------------------------------------
- */
 
 /*
  * -----------------------------------------
@@ -1080,6 +1480,7 @@ if (
 
                 showAuthenticating();
 
+
                 return;
             }
 
@@ -1092,32 +1493,38 @@ if (
                 /*
                  * OAuth succeeded.
                  *
-                 * Main process will perform
+                 * Main process performs
                  * /me authorization next.
                  */
 
                 if (authMessage) {
+
                     authMessage.textContent =
                         '';
                 }
 
+
                 return;
             }
 
+
             if (
-    status?.status ===
-    'access_denied'
-) {
+                status?.status ===
+                'access_denied'
+            ) {
 
-    connectButton.disabled =
-        false;
+                connectButton.disabled =
+                    false;
 
-    showAccessDenied(
-        status?.message
-    );
 
-    return;
-}
+                showAccessDenied(
+                    status?.message
+                );
+
+
+                return;
+            }
+
 
             if (
                 status?.status ===
@@ -1126,6 +1533,7 @@ if (
 
                 connectButton.disabled =
                     false;
+
 
                 showError(
                     status?.message ||
@@ -1136,15 +1544,27 @@ if (
     );
 }
 
+
+/*
+ * -----------------------------------------
+ * ACCOUNT SEARCH
+ * -----------------------------------------
+ */
+
 accountSearchInput?.addEventListener(
     'input',
     () => {
 
         renderSavedAccounts();
-
     }
 );
 
+
+/*
+ * -----------------------------------------
+ * VIEW ALL ACCOUNTS
+ * -----------------------------------------
+ */
 
 viewAllAccountsButton?.addEventListener(
     'click',
@@ -1153,20 +1573,32 @@ viewAllAccountsButton?.addEventListener(
         showAllAccounts =
             !showAllAccounts;
 
-        renderSavedAccounts();
 
+        renderSavedAccounts();
     }
 );
 
+
+/*
+ * -----------------------------------------
+ * ADD ACCOUNT
+ * -----------------------------------------
+ */
 
 addAccountButton?.addEventListener(
     'click',
     () => {
 
         showLogin();
-
     }
 );
+
+
+/*
+ * -----------------------------------------
+ * INITIALIZE AUTH GATE
+ * -----------------------------------------
+ */
 
 (async function initializeAuthGate() {
 
@@ -1186,6 +1618,7 @@ addAccountButton?.addEventListener(
         ) {
 
             await showAccountChooser();
+
 
             return;
         }

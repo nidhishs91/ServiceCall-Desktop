@@ -224,6 +224,36 @@ checkAccess: () =>
         'servicecall-check-access'
     ),
 
+onAuthorizationStatus:
+    (callback) => {
+
+        const handler =
+            (
+                event,
+                data
+            ) => {
+
+                callback(
+                    data
+                );
+            };
+
+
+        ipcRenderer.on(
+            'servicecall-authorization-status',
+            handler
+        );
+
+
+        return () => {
+
+            ipcRenderer.removeListener(
+                'servicecall-authorization-status',
+                handler
+            );
+        };
+    },
+
 getMyPresence: () => {
 
     return ipcRenderer.invoke(
