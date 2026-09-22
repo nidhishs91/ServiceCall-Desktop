@@ -9,7 +9,7 @@ const mode =
 
 const callSysId =
     params.get('callSysId') ||
-    '';
+    ''; 
 
 const personName =
     params.get('name') ||
@@ -4819,17 +4819,61 @@ startCallStatusPolling();
 window.addEventListener(
     'beforeunload',
     () => {
-
+ 
         stopAllTimers();
-
+ 
         stopRingtone();
-
+ 
+ 
         /*
-         * Final media safety cleanup.
+         * Stop any local screen capture immediately.
          *
-         * Do not await here because the window
-         * is already being destroyed.
+         * We deliberately stop the native MediaStream
+         * synchronously because beforeunload cannot
+         * reliably wait for asynchronous cleanup.
          */
+ 
+        if (localScreenStream) {
+ 
+            localScreenStream
+                .getTracks()
+                .forEach(
+                    track => {
+ 
+                        try {
+ 
+                            track.stop();
+ 
+                        } catch (error) {
+ 
+                            // Ignore final cleanup errors.
+                        }
+                    }
+                );
+        }
+ 
+ 
+        localScreenStream =
+            null;
+ 
+        localScreenNativeTrack =
+            null;
+ 
+        localScreenAgoraTrack =
+            null;
+ 
+ 
+        /*
+         * Final Agora cleanup.
+         *
+         * Do not await here because the renderer
+         * is already being destroyed.
+         *
+         * Agora leave() performs the remaining
+         * media cleanup.
+         */
+ 
         stopAgoraAudio();
     }
 );
+ 

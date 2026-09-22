@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+ 
+<head>
+    <meta charset="UTF-8">
+ 
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+ 
+    <title>ServiceCall Unavailable</title>
+ 
+    <style>
+ 
+        * {
+            box-sizing: border-box;
+        }
+ 
+        body {
+            margin: 0;
+            min-height: 100vh;
+ 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+ 
+            background: #f4f7f6;
+ 
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+ 
+            color: #1f2d2a;
+        }
+ 
+ 
+        .access-container {
+            width: 100%;
+            max-width: 520px;
+ 
+            margin: 24px;
+            padding: 48px 42px;
+ 
+            background: #ffffff;
+ 
+            border-radius: 16px;
+ 
+            box-shadow:
+                0 10px 35px
+                rgba(0, 0, 0, 0.08);
+ 
+            text-align: center;
+        }
+ 
+ 
+        .icon {
+            width: 68px;
+            height: 68px;
+ 
+            margin:
+                0 auto
+                24px auto;
+ 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+ 
+            border-radius: 50%;
+ 
+            background: #eef5f3;
+ 
+            font-size: 30px;
+        }
+ 
+ 
+        h1 {
+            margin:
+                0 0
+                14px 0;
+ 
+            font-size: 26px;
+            font-weight: 600;
+ 
+            color: #1f2d2a;
+        }
+ 
+ 
+        .message {
+            max-width: 420px;
+ 
+            margin:
+                0 auto
+                12px auto;
+ 
+            font-size: 15px;
+            line-height: 1.6;
+ 
+            color: #566460;
+        }
+ 
+ 
+        .administrator-message {
+            max-width: 420px;
+ 
+            margin:
+                20px auto
+                0 auto;
+ 
+            padding-top: 20px;
+ 
+            border-top:
+                1px solid #e7ecea;
+ 
+            font-size: 14px;
+            line-height: 1.6;
+ 
+            color: #687571;
+        }
+ 
+ 
+        .status {
+            margin-top: 25px;
+ 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+ 
+            gap: 9px;
+ 
+            min-height: 22px;
+ 
+            font-size: 13px;
+ 
+            color: #687571;
+        }
+ 
+ 
+        .status-dot {
+            width: 8px;
+            height: 8px;
+ 
+            flex-shrink: 0;
+ 
+            border-radius: 50%;
+ 
+            background: #8b9894;
+ 
+            animation:
+                pulse 1.6s
+                ease-in-out
+                infinite;
+        }
+ 
+ 
+        @keyframes pulse {
+ 
+            0%,
+            100% {
+                opacity: 0.35;
+            }
+ 
+            50% {
+                opacity: 1;
+            }
+        }
+ 
+ 
+        .check-access-button {
+            min-width: 155px;
+ 
+            margin-top: 24px;
+ 
+            padding:
+                12px 22px;
+ 
+            border: none;
+            border-radius: 8px;
+ 
+            background: #176b5b;
+            color: #ffffff;
+ 
+            font-size: 14px;
+            font-weight: 600;
+ 
+            cursor: pointer;
+ 
+            transition:
+                opacity 0.2s ease,
+                transform 0.15s ease;
+        }
+ 
+ 
+        .check-access-button:hover {
+            opacity: 0.92;
+        }
+ 
+ 
+        .check-access-button:active {
+            transform: scale(0.98);
+        }
+ 
+ 
+        .check-access-button:disabled {
+            cursor: default;
+            opacity: 0.6;
+            transform: none;
+        }
+ 
+ 
+        .footer-text {
+            margin:
+                20px 0
+                0 0;
+ 
+            font-size: 12px;
+ 
+            color: #8a9692;
+        }
+ 
+    </style>
+ 
+</head>
+ 
+ 
+<body>
+ 
+    <main class="access-container">
+ 
+        <div class="icon">
+            🔒
+        </div>
+ 
+ 
+        <h1>
+            ServiceCall is currently unavailable
+        </h1>
+ 
+ 
+        <p class="message">
+            Your account does not currently have
+            permission to access ServiceCall.
+        </p>
+ 
+ 
+        <p class="administrator-message">
+            If you believe this is an error,
+            kindly contact your administrator
+            to request or verify your ServiceCall access.
+        </p>
+ 
+ 
+        <div
+            class="status"
+            id="accessStatus"
+        >
+ 
+            <span
+                class="status-dot"
+                id="statusDot"
+            ></span>
+ 
+            <span id="accessStatusText">
+                Checking periodically for access changes...
+            </span>
+ 
+        </div>
+ 
+ 
+        <button
+            id="checkAccessButton"
+            class="check-access-button"
+            type="button"
+        >
+            Check access
+        </button>
+ 
+ 
+        <p class="footer-text">
+            ServiceCall will automatically become available
+            when access is restored.
+        </p>
+ 
+    </main>
+ 
+ 
+    <script src="access-unavailable.js"></script>
+ 
+</body>
+ 
+</html>
+ 

@@ -36,9 +36,10 @@ let activeOutgoingCallId = null;
 let activeCallWindowId = null;
 let callWindowClosing = false;
 let currentServiceCallUser = null;
-let currentServiceCallAuthorization = null;
+let currentServiceCallAuthorization = null; 
+let authorizationMonitorTimer = null;
+let serviceCallAccessUnavailable = false;
 const intentionallyLeftCallIds = new Set();
-
 const CALLBACK_HOST = '127.0.0.1';
 const CALLBACK_PORT = 42813;
 const SERVICECALL_PROTOCOL = 'servicecall';
@@ -1321,6 +1322,498 @@ function sendAuthStatus(
     }
 }
 
+/* =========================================================
+   RUNTIME SERVICECALL AUTHORIZATION MONITOR
+========================================================= */
+ 
+function stopAuthorizationMonitor() {
+ 
+    if (authorizationMonitorTimer) {
+ 
+        clearInterval(
+            authorizationMonitorTimer
+        );
+ 
+        authorizationMonitorTimer =
+            null;
+    }
+}
+
+/* =========================================================
+   SUSPEND / RESUME SERVICECALL RUNTIME
+========================================================= */
+ 
+function suspendServiceCallRuntime() {
+ 
+    console.warn(
+        'Suspending ServiceCall runtime...'
+    );
+ 
+ 
+    /*
+     * STOP HEARTBEAT
+     */
+    if (heartbeatTimer) {
+ 
+        clearInterval(
+            heartbeatTimer
+        );
+ 
+        heartbeatTimer = null;
+    }
+ 
+ 
+    /*
+     * STOP INCOMING CALL MONITOR
+     */
+    if (incomingCallTimer) {
+ 
+        clearInterval(
+            incomingCallTimer
+        );
+ 
+        incomingCallTimer = null;
+    }
+ 
+ 
+    /*
+     * STOP OUTGOING CALL MONITOR
+     */
+    if (outgoingCallTimer) {
+ 
+        clearInterval(
+            outgoingCallTimer
+        );
+ 
+        outgoingCallTimer = null;
+    }
+ 
+ 
+    /*
+     * IMPORTANT:
+     *
+     * DO NOT stop authorizationMonitorTimer.
+     *
+     * DO NOT clear OAuth tokens.
+     *
+     * DO NOT clear the active account.
+     *
+     * DO NOT call desktop-sign-out.
+     *
+     * The user is still authenticated.
+     * Only ServiceCall authorization is unavailable.
+     */
+ 
+    console.log(
+        'ServiceCall runtime suspended.'
+    );
+}
+
+async function terminateActiveSessionForAccessLoss() {
+ 
+    console.warn(
+        'Terminating active ServiceCall desktop session because access was removed...'
+    );
+ 
+ 
+    /*
+     * Remember the active call before clearing
+     * the desktop state.
+     */
+ 
+    const callSysId =
+        activeCallWindowId ||
+        activeOutgoingCallId ||
+        activeIncomingCallId ||
+        null;
+ 
+ 
+    /*
+     * Prevent polling from reopening this call
+     * if ServiceCall access is restored later.
+     */
+ 
+    if (callSysId) {
+ 
+        intentionallyLeftCallIds.add(
+            callSysId
+        );
+ 
+ 
+        console.log(
+            'ServiceCall call blocked from automatic reopen:',
+            callSysId
+        );
+    }
+ 
+ 
+    /*
+     * Force the call window to close.
+     *
+     * IMPORTANT:
+     * callWindowClosing = true bypasses the
+     * normal close handler.
+     *
+     * Normally X on a connected call only hides
+     * the window. Authorization loss must close it.
+     */
+ 
+    if (
+        callWindow &&
+        !callWindow.isDestroyed()
+    ) {
+ 
+        callWindowClosing =
+            true;
+ 
+ 
+        try {
+ 
+            callWindow.close();
+ 
+        } catch (error) {
+ 
+            console.error(
+                'Unable to close ServiceCall call window during access loss:',
+                error
+            );
+        }
+    }
+ 
+ 
+    /*
+     * Clear desktop call tracking.
+     *
+     * Restoring ServiceCall authorization must
+     * NOT restore the previous call automatically.
+     */
+ 
+    activeCallWindowId =
+        null;
+ 
+    activeIncomingCallId =
+        null;
+ 
+    activeOutgoingCallId =
+        null;
+ 
+ 
+    console.log(
+        'Active ServiceCall desktop session cleared.'
+    );
+}
+
+async function showServiceCallUnavailablePage() {
+ 
+    if (
+        !mainWindow ||
+        mainWindow.isDestroyed()
+    ) {
+        return;
+    }
+ 
+ 
+    try {
+ 
+        await mainWindow.loadFile(
+            'access-unavailable.html'
+        );
+ 
+ 
+        mainWindow.show();
+ 
+        mainWindow.focus();
+ 
+ 
+        console.log(
+            'ServiceCall unavailable page displayed.'
+        );
+ 
+    } catch (error) {
+ 
+        console.error(
+            'Unable to display ServiceCall unavailable page:',
+            error
+        );
+    }
+}
+ 
+ 
+async function restoreServiceCallApplication() {
+ 
+    if (
+        !mainWindow ||
+        mainWindow.isDestroyed()
+    ) {
+        return;
+    }
+ 
+ 
+    try {
+ 
+        await mainWindow.loadFile(
+            'index.html'
+        );
+ 
+ 
+        mainWindow.show();
+ 
+        mainWindow.focus();
+ 
+ 
+        console.log(
+            'ServiceCall application restored.'
+        );
+ 
+    } catch (error) {
+ 
+        console.error(
+            'Unable to restore ServiceCall application:',
+            error
+        );
+    }
+}
+ 
+ 
+ 
+async function resumeServiceCallRuntime() {
+ 
+    console.log(
+        'Resuming ServiceCall runtime...'
+    );
+ 
+ 
+    /*
+     * Restart operational background services.
+     */
+ 
+    await startHeartbeatLoop();
+ 
+    startIncomingCallLoop();
+ 
+    startOutgoingCallLoop();
+ 
+ 
+    console.log(
+        'ServiceCall runtime resumed.'
+    );
+}
+ 
+async function checkRuntimeAuthorizationOnce() {
+ 
+    try {
+ 
+        /*
+         * No active authenticated ServiceCall identity
+         * means there is nothing to monitor.
+         */
+ 
+        if (!currentServiceCallUser) {
+            return;
+        }
+ 
+ 
+        /*
+         * Ensure the OAuth session itself
+         * is still valid.
+         */
+ 
+        await ensureValidAccessToken();
+ 
+ 
+        /*
+         * Re-check the CURRENT ServiceNow roles.
+         *
+         * Do not trust the role snapshot stored
+         * when the user originally signed in.
+         */
+ 
+        const currentUser =
+            await getCurrentServiceCallUser();
+ 
+ 
+        const authorization =
+            currentUser?.authorization || {};
+ 
+ 
+        /*
+         * Keep current identity and authorization
+         * information synchronized.
+         */
+ 
+        currentServiceCallUser =
+            currentUser?.user || null;
+ 
+        currentServiceCallAuthorization =
+            authorization;
+ 
+ 
+        /*
+         * -----------------------------------------
+         * SERVICECALL ACCESS REMOVED
+         * -----------------------------------------
+         */
+ 
+        if (
+            authorization.allowed !== true
+        ) {
+ 
+            /*
+             * Only perform the suspension/page
+             * transition once.
+             */
+ 
+            if (!serviceCallAccessUnavailable) {
+ 
+                serviceCallAccessUnavailable =
+                    true;
+ 
+ 
+                console.warn(
+                    'ServiceCall runtime access removed.',
+                    {
+                        user:
+                            currentServiceCallUser,
+ 
+                        authorization:
+                            authorization
+                    }
+                );
+ 
+ 
+                /*
+                 * Stop ServiceCall operational
+                 * background activity.
+                 *
+                 * The authorization monitor itself
+                 * must remain running.
+                 */
+ 
+                suspendServiceCallRuntime();
+ 
+ 
+await terminateActiveSessionForAccessLoss();
+ 
+ 
+await showServiceCallUnavailablePage();
+ 
+ 
+                sendAuthStatus(
+                    'access_removed',
+                    'ServiceCall access is currently unavailable for this account.'
+                );
+            }
+ 
+ 
+            return;
+        }
+ 
+ 
+        /*
+         * -----------------------------------------
+         * SERVICECALL ACCESS RESTORED
+         * -----------------------------------------
+         */
+ 
+        if (serviceCallAccessUnavailable) {
+ 
+            console.log(
+                'ServiceCall runtime access restored.',
+                {
+                    user:
+                        currentServiceCallUser,
+ 
+                    authorization:
+                        authorization
+                }
+            );
+ 
+ 
+            /*
+             * Change the state before restoration.
+             */
+ 
+            serviceCallAccessUnavailable =
+                false;
+ 
+ 
+            try {
+ 
+                /*
+                 * Restart operational ServiceCall
+                 * background services.
+                 */
+ 
+                await resumeServiceCallRuntime();
+ 
+ 
+                /*
+                 * Return from the unavailable page
+                 * to the normal ServiceCall UI.
+                 */
+ 
+                await restoreServiceCallApplication();
+ 
+ 
+                sendAuthStatus(
+                    'access_restored',
+                    'ServiceCall access has been restored.'
+                );
+ 
+            }
+            catch (restoreError) {
+ 
+                /*
+                 * Restoration failed.
+                 *
+                 * Put ServiceCall back into the
+                 * unavailable state so the next
+                 * authorization check can retry.
+                 */
+ 
+                serviceCallAccessUnavailable =
+                    true;
+ 
+ 
+                console.error(
+                    'Unable to restore ServiceCall runtime:',
+                    restoreError
+                );
+            }
+        }
+ 
+    }
+    catch (error) {
+ 
+        console.error(
+            'ServiceCall runtime authorization check failed:',
+            error
+        );
+    }
+}
+ 
+function startAuthorizationMonitor() {
+ 
+    stopAuthorizationMonitor();
+ 
+ 
+    /*
+     * Check immediately.
+     */
+    checkRuntimeAuthorizationOnce();
+ 
+ 
+    /*
+     * Then re-check every 30 seconds.
+     */
+    authorizationMonitorTimer =
+        setInterval(
+            checkRuntimeAuthorizationOnce,
+            30000
+        );
+}
+ 
+
 
 /* -------------------------------------------------------
    TOKEN EXCHANGE
@@ -1611,6 +2104,8 @@ await startHeartbeatLoop();
 startIncomingCallLoop();
 
 startOutgoingCallLoop();
+
+startAuthorizationMonitor();
 
 
 return {
@@ -2507,78 +3002,152 @@ function showMainWindow() {
 }
 
 async function createWindow() {
-
+ 
     mainWindow = new BrowserWindow({
         width: 900,
         height: 650,
         minWidth: 700,
         minHeight: 500,
         title: 'ServiceCall Desktop',
-
+ 
         webPreferences: {
             preload: path.join(
                 __dirname,
                 'preload.js'
             ),
-
+ 
             contextIsolation: true,
             nodeIntegration: false
         }
     });
-
-
+ 
+ 
     /*
      * -----------------------------------------
      * RESOLVE STARTUP AUTHENTICATION
      * -----------------------------------------
      */
-
+ 
     const startupState =
         await resolveStartupAuthentication();
-
-
+ 
+ 
     console.log(
         'ServiceCall startup state:',
         startupState
     );
-
-
+ 
+ 
     /*
      * -----------------------------------------
      * AUTHORIZED USER
      * -----------------------------------------
      */
-
+ 
     if (
         startupState.state === 'ready'
     ) {
-
+ 
+        /*
+         * Make sure we begin in the
+         * available state.
+         */
+ 
+        serviceCallAccessUnavailable =
+            false;
+ 
+ 
         await mainWindow.loadFile(
             'index.html'
         );
-
-
+ 
+ 
         /*
          * Start background ServiceCall services
          * ONLY after authorization succeeds.
          */
-
+ 
         await startHeartbeatLoop();
-
+ 
         startIncomingCallLoop();
-
+ 
         startOutgoingCallLoop();
+ 
+        startAuthorizationMonitor();
     }
-
-
+ 
+ 
     /*
      * -----------------------------------------
-     * LOGIN / ACCESS GATE
+     * AUTHENTICATED BUT ACCESS NOT AVAILABLE
      * -----------------------------------------
      */
-
+ 
+    else if (
+        startupState.state ===
+        'access_denied'
+    ) {
+ 
+        console.warn(
+            'ServiceCall access unavailable at startup.'
+        );
+ 
+ 
+        /*
+         * The OAuth session is still valid.
+         *
+         * The user is authenticated, but does
+         * not currently have ServiceCall access.
+         */
+ 
+        serviceCallAccessUnavailable =
+            true;
+ 
+ 
+        /*
+         * Show the same unavailable page used
+         * when access is removed at runtime.
+         */
+ 
+        await mainWindow.loadFile(
+            'access-unavailable.html'
+        );
+ 
+ 
+        /*
+         * IMPORTANT:
+         *
+         * Do NOT start:
+         *
+         * - heartbeat
+         * - incoming call polling
+         * - outgoing call polling
+         *
+         * But DO keep checking authorization so
+         * ServiceCall can recover automatically.
+         */
+ 
+        startAuthorizationMonitor();
+    }
+ 
+ 
+    /*
+     * -----------------------------------------
+     * LOGIN / AUTHENTICATION GATE
+     * -----------------------------------------
+     */
+ 
     else {
-
+ 
+        /*
+         * No usable authenticated ServiceCall
+         * session exists.
+         */
+ 
+        serviceCallAccessUnavailable =
+            false;
+ 
+ 
         await mainWindow.loadFile(
             path.join(
                 'auth',
@@ -2586,27 +3155,28 @@ async function createWindow() {
             )
         );
     }
-
-
+ 
+ 
     /*
      * -----------------------------------------
      * WINDOW CLOSE
      * -----------------------------------------
      */
-
+ 
     mainWindow.on(
         'close',
         (event) => {
-
+ 
             if (!isQuitting) {
-
+ 
                 event.preventDefault();
-
+ 
                 mainWindow.hide();
             }
         }
     );
 }
+ 
 
 /* =====================================================
    SERVICECALL DESKTOP NOTIFICATION POPUP
@@ -7982,82 +8552,153 @@ ipcMain.handle(
 ipcMain.handle(
     'servicecall-check-access',
     async () => {
-
+ 
         try {
-
+ 
             /*
              * Make sure the saved OAuth
              * session is still usable.
              */
-
+ 
             await ensureValidAccessToken();
-
-
+ 
+ 
             /*
              * Re-check identity + current
              * ServiceCall roles.
              */
-
+ 
             const currentUser =
                 await getCurrentServiceCallUser();
-
+ 
             const authorization =
                 currentUser?.authorization || {};
-
+ 
+ 
+            /*
+             * Keep current runtime identity
+             * and authorization up to date.
+             */
+ 
             currentServiceCallUser =
-    currentUser?.user || null;
-
-currentServiceCallAuthorization =
-    authorization;
-
-
+                currentUser?.user || null;
+ 
+            currentServiceCallAuthorization =
+                authorization;
+ 
+ 
+            /*
+             * ACCESS IS STILL NOT AVAILABLE
+             */
+ 
             if (
                 authorization.allowed !== true
             ) {
-
+ 
                 return {
                     success: true,
                     authenticated: true,
                     authorized: false,
                     state: 'access_denied',
                     user:
-                        currentUser?.user || null,
+                        currentServiceCallUser,
                     authorization:
-                        authorization
+                        currentServiceCallAuthorization
                 };
             }
-
-
+ 
+ 
             /*
-             * ACCESS HAS NOW BEEN GRANTED
+             * ACCESS IS AVAILABLE
+             *
+             * If ServiceCall was suspended because
+             * access had previously been removed,
+             * restore the complete runtime and UI.
              */
-
-            await startHeartbeatLoop();
-
-            startIncomingCallLoop();
-
-            startOutgoingCallLoop();
-
-
+ 
+            if (serviceCallAccessUnavailable) {
+ 
+                console.log(
+                    'ServiceCall access restored by manual check.'
+                );
+ 
+ 
+                /*
+                 * Change the state before restoring.
+                 */
+ 
+                serviceCallAccessUnavailable =
+                    false;
+ 
+ 
+                try {
+ 
+                    await resumeServiceCallRuntime();
+ 
+                    await restoreServiceCallApplication();
+ 
+                }
+                catch (restoreError) {
+ 
+                    /*
+                     * Restoration failed.
+                     *
+                     * Put ServiceCall back into the
+                     * unavailable state so another
+                     * check can retry.
+                     */
+ 
+                    serviceCallAccessUnavailable =
+                        true;
+ 
+ 
+                    console.error(
+                        'Unable to restore ServiceCall after manual access check:',
+                        restoreError
+                    );
+ 
+ 
+                    throw restoreError;
+                }
+ 
+            }
+            else {
+ 
+                /*
+                 * Normal access check.
+                 *
+                 * ServiceCall was not previously
+                 * suspended.
+                 */
+ 
+                await startHeartbeatLoop();
+ 
+                startIncomingCallLoop();
+ 
+                startOutgoingCallLoop();
+            }
+ 
+ 
             return {
                 success: true,
                 authenticated: true,
                 authorized: true,
                 state: 'ready',
                 user:
-                    currentUser?.user || null,
+                    currentServiceCallUser,
                 authorization:
-                    authorization
+                    currentServiceCallAuthorization
             };
-
+ 
         }
         catch (error) {
-
+ 
             console.error(
                 'ServiceCall access check failed:',
                 error
             );
-
+ 
+ 
             return {
                 success: false,
                 authenticated: false,

@@ -124,6 +124,11 @@ contextBridge.exposeInMainWorld(
                     callSysId
                 ),
 
+        checkAccess: () =>
+    ipcRenderer.invoke(
+        'servicecall-check-access'
+    ),
+
 
         /* -------------------------
            PARTICIPANTS
