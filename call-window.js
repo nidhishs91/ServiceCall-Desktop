@@ -92,6 +92,11 @@ let participantRole =
    ELEMENTS
 ------------------------- */
 
+const participantsButtonCount =
+    document.getElementById(
+        'participantsButtonCount'
+    );
+
 const avatar =
     document.getElementById(
         'avatar'
@@ -1518,21 +1523,33 @@ function renderParticipants(
             ? participants
             : [];
 
+    const connectedParticipantCount =
+    latestCallParticipants.filter(
+        participant =>
+            String(
+                participant.status || ''
+            ).toLowerCase() ===
+            'connected'
+    ).length;
 
-    /* -------------------------
-       COUNT
-    ------------------------- */
-
-    if (participantsPanelCount) {
-
-        participantsPanelCount
-            .textContent =
-                String(
-                    latestCallParticipants
-                        .length
-                );
-    }
-
+if (participantsPanelCount) {
+ 
+    participantsPanelCount
+        .textContent =
+            String(
+                connectedParticipantCount
+            );
+}
+ 
+ 
+if (participantsButtonCount) {
+ 
+    participantsButtonCount
+        .textContent =
+            String(
+                connectedParticipantCount
+            );
+}
 
     if (!participantsPanelBody) {
         return;
