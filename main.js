@@ -37,6 +37,7 @@ let activeCallWindowId = null;
 let callWindowClosing = false;
 let currentServiceCallUser = null;
 let notificationTimer = null;
+const surfacedNotificationIds = new Set();
 let currentServiceCallAuthorization = null; 
 let authorizationMonitorTimer = null;
 let serviceCallAccessUnavailable = false;
@@ -45,7 +46,38 @@ const CALLBACK_HOST = '127.0.0.1';
 const CALLBACK_PORT = 42813;
 const SERVICECALL_PROTOCOL = 'servicecall';
 
-let notificationPopupWindow = null;
+/*
+ * -----------------------------------------
+ * DESKTOP NOTIFICATION STACK
+ * -----------------------------------------
+ *
+ * Maximum 3 notification popups are shown
+ * on screen at the same time.
+ *
+ * Additional notifications wait in the
+ * queue until a visible slot becomes free.
+ */
+ 
+const notificationPopupWindows =
+    [];
+ 
+const notificationPopupQueue =
+    [];
+ 
+const MAX_VISIBLE_NOTIFICATION_POPUPS =
+    3;
+ 
+const NOTIFICATION_POPUP_WIDTH =
+    380;
+ 
+const NOTIFICATION_POPUP_HEIGHT =
+    150;
+ 
+const NOTIFICATION_POPUP_MARGIN =
+    18;
+ 
+const NOTIFICATION_POPUP_GAP =
+    10;
 
 /* -------------------------------------------------------
    CONFIG
@@ -202,167 +234,389 @@ function saveAuthenticatedAccount(
     user,
     authorization
 ) {
-
+ 
     config =
         ensureSavedAccountStructure(
             config
         );
-
-
+ 
+ 
     if (
         !user ||
         !user.sys_id
     ) {
-
+ 
         throw new Error(
             'Authenticated ServiceCall user is missing.'
         );
     }
-
-
+ 
+ 
     const accountKey =
         getSavedAccountKey(
             config.instanceUrl,
             user.sys_id
         );
-
-
+ 
+ 
     if (!accountKey) {
-
+ 
         throw new Error(
             'Unable to create the ServiceCall account key.'
         );
     }
-
-
+ 
+ 
     /*
      * Preserve anything already stored
      * for this account.
      */
+ 
     const existingAccount =
         config.savedAccounts[
             accountKey
         ] || {};
-
-
+ 
+ 
     const now =
         new Date().toISOString();
-
-
+ 
+ 
     config.savedAccounts[
         accountKey
     ] = {
-
+ 
         /*
-         * Stable account identity.
+         * -----------------------------------------
+         * STABLE ACCOUNT IDENTITY
+         * -----------------------------------------
          */
+ 
         accountKey:
             accountKey,
-
+ 
         instanceUrl:
             config.instanceUrl || '',
-
+ 
         userSysId:
             user.sys_id,
-
+ 
         name:
             user.name || '',
-
+ 
         userName:
             user.user_name || '',
-
+ 
         email:
             user.email || '',
-
+ 
         serviceCallId:
             user.servicecall_id || '',
-
-
+ 
+ 
         /*
-         * Authorization snapshot.
+         * -----------------------------------------
+         * AUTHORIZATION SNAPSHOT
+         * -----------------------------------------
          *
-         * IMPORTANT:
-         * This is for UI/account information.
-         * We will ALWAYS re-check /me when
-         * activating the account.
+         * This is only stored for UI/account
+         * information.
+         *
+         * /me remains the authority whenever
+         * the account is activated.
          */
+ 
         isServiceCallUser:
             authorization
                 ?.is_servicecall_user ===
             true,
-
+ 
         isServiceCallAdmin:
             authorization
                 ?.is_servicecall_admin ===
             true,
-
-
+ 
+ 
         /*
-         * Each saved account owns its
-         * own OAuth credentials.
+         * -----------------------------------------
+         * OAUTH CREDENTIALS
+         * -----------------------------------------
          *
-         * For the first migration these
-         * values come from the existing
-         * working single-account config.
+         * Each saved account owns its own
+         * OAuth credentials.
          */
+ 
         accessToken:
             config.accessToken ||
             existingAccount.accessToken ||
             '',
-
+ 
         refreshToken:
             config.refreshToken ||
             existingAccount.refreshToken ||
             '',
-
+ 
         tokenType:
-    config.tokenType ||
-    existingAccount.tokenType ||
-    'Bearer',
-
-expiresIn:
-    config.expiresIn ||
-    existingAccount.expiresIn ||
-    0,
-
-tokenObtainedAt:
-    config.tokenObtainedAt ||
-    existingAccount.tokenObtainedAt ||
-    0,
-
+            config.tokenType ||
+            existingAccount.tokenType ||
+            'Bearer',
+ 
+        expiresIn:
+            config.expiresIn ||
+            existingAccount.expiresIn ||
+            0,
+ 
+        tokenObtainedAt:
+            config.tokenObtainedAt ||
+            existingAccount.tokenObtainedAt ||
+            0,
+ 
+ 
         /*
-         * Useful later for ordering the
-         * account chooser by recency.
+         * -----------------------------------------
+         * ACCOUNT TIMESTAMPS
+         * -----------------------------------------
          */
+ 
         addedAt:
             existingAccount.addedAt ||
             now,
-
+ 
         lastUsedAt:
-            now
+            now,
+ 
+ 
+        /*
+         * -----------------------------------------
+         * DESKTOP NOTIFICATION CHECKPOINT
+         * -----------------------------------------
+         *
+         * This is separate from the notification's
+         * read/unread state.
+         *
+         * It remembers the newest notification
+         * already known by the desktop for THIS
+         * ServiceCall account.
+         *
+         * IMPORTANT:
+         * Preserve the existing checkpoint when
+         * this account authenticates again.
+         */
+ 
+        notificationCheckpoint:
+            existingAccount
+                .notificationCheckpoint || {
+                    createdAt: '',
+                    sysId: ''
+                }
     };
-
-
+ 
+ 
     /*
      * This account becomes the currently
-     * selected account.
+     * selected ServiceCall account.
      */
+ 
     config.activeAccountKey =
         accountKey;
-
-
+ 
+ 
     return {
+ 
         config:
             config,
-
+ 
         accountKey:
             accountKey,
-
+ 
         account:
             config.savedAccounts[
                 accountKey
             ]
     };
+}
+
+function getActiveNotificationCheckpoint() {
+ 
+    try {
+ 
+        const config =
+            ensureSavedAccountStructure(
+                loadConfig()
+            );
+ 
+ 
+        const activeAccountKey =
+            String(
+                config.activeAccountKey || ''
+            ).trim();
+ 
+ 
+        if (
+            !activeAccountKey ||
+            !config.savedAccounts[
+                activeAccountKey
+            ]
+        ) {
+ 
+            return {
+                createdAt: '',
+                sysId: ''
+            };
+        }
+ 
+ 
+        const account =
+            config.savedAccounts[
+                activeAccountKey
+            ];
+ 
+ 
+        const checkpoint =
+            account.notificationCheckpoint ||
+            {};
+ 
+ 
+        return {
+ 
+            createdAt:
+                String(
+                    checkpoint.createdAt || ''
+                ).trim(),
+ 
+            sysId:
+                String(
+                    checkpoint.sysId || ''
+                ).trim()
+        };
+ 
+ 
+    } catch (error) {
+ 
+        console.error(
+            'Unable to read ServiceCall notification checkpoint:',
+            error
+        );
+ 
+ 
+        return {
+            createdAt: '',
+            sysId: ''
+        };
+    }
+}
+ 
+ 
+ 
+function saveActiveNotificationCheckpoint(
+    notification
+) {
+ 
+    try {
+ 
+        if (!notification) {
+            return false;
+        }
+ 
+ 
+        const notificationSysId =
+            String(
+                notification.sys_id || ''
+            ).trim();
+ 
+ 
+        const createdAt =
+            String(
+                notification.created_at || ''
+            ).trim();
+ 
+ 
+        if (
+            !notificationSysId ||
+            !createdAt
+        ) {
+ 
+            console.warn(
+                'ServiceCall notification checkpoint not saved because notification identity is incomplete:',
+                notification
+            );
+ 
+            return false;
+        }
+ 
+ 
+        const config =
+            ensureSavedAccountStructure(
+                loadConfig()
+            );
+ 
+ 
+        const activeAccountKey =
+            String(
+                config.activeAccountKey || ''
+            ).trim();
+ 
+ 
+        if (
+            !activeAccountKey ||
+            !config.savedAccounts[
+                activeAccountKey
+            ]
+        ) {
+ 
+            console.warn(
+                'ServiceCall notification checkpoint not saved because no active saved account exists.'
+            );
+ 
+            return false;
+        }
+ 
+ 
+        config.savedAccounts[
+            activeAccountKey
+        ].notificationCheckpoint = {
+ 
+            createdAt:
+                createdAt,
+ 
+            sysId:
+                notificationSysId
+        };
+ 
+ 
+        saveConfig(
+            config
+        );
+ 
+ 
+        console.log(
+            'ServiceCall notification checkpoint saved:',
+            {
+                accountKey:
+                    activeAccountKey,
+ 
+                createdAt:
+                    createdAt,
+ 
+                sysId:
+                    notificationSysId
+            }
+        );
+ 
+ 
+        return true;
+ 
+ 
+    } catch (error) {
+ 
+        console.error(
+            'Unable to save ServiceCall notification checkpoint:',
+            error
+        );
+ 
+ 
+        return false;
+    }
 }
 
 /* =========================================================
@@ -1093,124 +1347,397 @@ function stopIncomingCallLoop() {
 ========================================================= */
 
 async function checkNotificationsOnce() {
-
+ 
     try {
-
-        /*
-         * Only fetch unread notifications.
-         *
-         * We are NOT showing popups yet.
-         * First we prove background detection works.
-         */
-
+ 
         const result =
             await serviceCallApiRequest(
                 '/notifications?page=1&page_size=20&filter=unread',
                 'GET'
             );
-
-
+ 
+ 
         if (
             !result ||
             result.success !== true
         ) {
-
+ 
             console.warn(
                 'ServiceCall notification check returned no valid result:',
                 result
             );
-
+ 
             return;
         }
-
-
-        /*
-         * Support the notification array returned
-         * by the ServiceCall notifications API.
-         */
-
+ 
+ 
         const notifications =
-            Array.isArray(result.notifications)
+            Array.isArray(
+                result.notifications
+            )
                 ? result.notifications
                 : [];
-
-
+ 
+ 
+        /*
+         * -----------------------------------------
+         * NO UNREAD NOTIFICATIONS
+         * -----------------------------------------
+         */
+ 
         if (
             notifications.length === 0
         ) {
-
+ 
             console.log(
                 'ServiceCall notification check: no unread notifications.'
             );
-
+ 
             return;
         }
-
-
-        console.log(
-            'ServiceCall unread notifications detected:',
-            notifications.length
-        );
-
-
+ 
+ 
         /*
-         * Detection only for now.
-         *
-         * DO NOT:
-         * - show popup
-         * - play sound
-         * - mark as read
-         *
-         * We will add those after this test passes.
+         * -----------------------------------------
+         * CURRENT ACCOUNT CHECKPOINT
+         * -----------------------------------------
          */
-
-        notifications.forEach(
-            (notification) => {
-
+ 
+        const checkpoint =
+            getActiveNotificationCheckpoint();
+ 
+ 
+        console.log(
+            'ServiceCall notification checkpoint:',
+            checkpoint
+        );
+ 
+ 
+        /*
+         * -----------------------------------------
+         * FIRST-TIME CHECKPOINT
+         * -----------------------------------------
+         *
+         * If this account has never had a desktop
+         * notification checkpoint before, treat
+         * the newest currently existing
+         * notification as the starting point.
+         *
+         * Existing unread notifications remain
+         * unread, but are NOT replayed as desktop
+         * popups.
+         */
+ 
+        if (
+            !checkpoint.createdAt ||
+            !checkpoint.sysId
+        ) {
+ 
+            const newestNotification =
+                notifications[0];
+ 
+ 
+            if (
+                newestNotification &&
+                newestNotification.sys_id &&
+                newestNotification.created_at
+            ) {
+ 
+                saveActiveNotificationCheckpoint(
+                    newestNotification
+                );
+ 
+ 
+                /*
+                 * Also remember all notifications
+                 * returned by this poll for the
+                 * current Electron session.
+                 */
+ 
+                notifications.forEach(
+                    (notification) => {
+ 
+                        const sysId =
+                            String(
+                                notification.sys_id ||
+                                ''
+                            ).trim();
+ 
+ 
+                        if (sysId) {
+ 
+                            surfacedNotificationIds.add(
+                                sysId
+                            );
+                        }
+                    }
+                );
+ 
+ 
                 console.log(
-                    'ServiceCall notification detected:',
+                    'ServiceCall initial notification checkpoint established:',
                     {
-                        sys_id:
-                            notification.sys_id || '',
-
-                        type:
-                            notification.type || '',
-
-                        title:
-                            notification.title || '',
-
-                        message:
-                            notification.message || '',
-
-                        meeting_sys_id:
-                            notification.meeting_sys_id || ''
+                        createdAt:
+                            newestNotification.created_at,
+ 
+                        sysId:
+                            newestNotification.sys_id
                     }
                 );
             }
+ 
+ 
+            return;
+        }
+ 
+ 
+        /*
+         * -----------------------------------------
+         * FIND NOTIFICATIONS NEWER THAN CHECKPOINT
+         * -----------------------------------------
+         *
+         * ServiceNow sys_created_on uses:
+         *
+         * YYYY-MM-DD HH:mm:ss
+         *
+         * Because the components are ordered from
+         * largest to smallest, normalized values
+         * can be compared lexically.
+         *
+         * sys_id acts as the secondary identity
+         * when timestamps are equal.
+         */
+ 
+        const newNotifications = [];
+ 
+ 
+        for (
+            const notification
+            of notifications
+        ) {
+ 
+            const notificationSysId =
+                String(
+                    notification.sys_id || ''
+                ).trim();
+ 
+ 
+            const createdAt =
+                String(
+                    notification.created_at || ''
+                ).trim();
+ 
+ 
+            if (
+                !notificationSysId ||
+                !createdAt
+            ) {
+ 
+                continue;
+            }
+ 
+ 
+            /*
+             * Once we reach the exact checkpoint,
+             * everything after it is older because
+             * the API is newest-first.
+             */
+ 
+            if (
+                notificationSysId ===
+                checkpoint.sysId
+            ) {
+ 
+                break;
+            }
+ 
+ 
+            /*
+             * Anything created after the saved
+             * checkpoint is new.
+             */
+ 
+            if (
+                createdAt >
+                checkpoint.createdAt
+            ) {
+ 
+                newNotifications.push(
+                    notification
+                );
+ 
+                continue;
+            }
+ 
+ 
+            /*
+             * Same timestamp but different sys_id.
+             *
+             * This can happen when multiple
+             * notifications are inserted within
+             * the same second.
+             *
+             * Since we have not yet reached the
+             * exact checkpoint record and the API
+             * is newest-first, treat it as new.
+             */
+ 
+            if (
+                createdAt ===
+                checkpoint.createdAt &&
+                notificationSysId !==
+                checkpoint.sysId
+            ) {
+ 
+                newNotifications.push(
+                    notification
+                );
+            }
+        }
+ 
+ 
+        if (
+            newNotifications.length === 0
+        ) {
+ 
+            return;
+        }
+ 
+ 
+        console.log(
+            'ServiceCall genuinely new notifications detected:',
+            newNotifications.length
         );
-
-
+ 
+ 
+        /*
+         * -----------------------------------------
+         * SURFACE OLDEST → NEWEST
+         * -----------------------------------------
+         *
+         * API gives newest-first.
+         *
+         * Reverse the newly discovered set so
+         * desktop notifications appear in natural
+         * chronological order.
+         */
+ 
+        const notificationsToSurface =
+            newNotifications.reverse();
+ 
+ 
+        notificationsToSurface.forEach(
+            (notification) => {
+ 
+                const notificationSysId =
+                    String(
+                        notification.sys_id || ''
+                    ).trim();
+ 
+ 
+                if (
+                    !notificationSysId
+                ) {
+ 
+                    return;
+                }
+ 
+ 
+                /*
+                 * Same-session duplicate protection.
+                 */
+ 
+                if (
+                    surfacedNotificationIds.has(
+                        notificationSysId
+                    )
+                ) {
+ 
+                    return;
+                }
+ 
+ 
+                surfacedNotificationIds.add(
+                    notificationSysId
+                );
+ 
+ 
+                console.log(
+                    'ServiceCall NEW notification detected:',
+                    {
+                        sys_id:
+                            notificationSysId,
+ 
+                        type:
+                            notification.type || '',
+ 
+                        title:
+                            notification.title || '',
+ 
+                        message:
+                            notification.message || '',
+ 
+                        meeting_sys_id:
+                            notification.meeting_sys_id ||
+                            '',
+ 
+                        created_at:
+                            notification.created_at ||
+                            ''
+                    }
+                );
+ 
+ 
+                showNotificationPopup(
+                    notification
+                );
+            }
+        );
+ 
+ 
+        /*
+         * -----------------------------------------
+         * ADVANCE CHECKPOINT
+         * -----------------------------------------
+         *
+         * newNotifications was reversed above,
+         * therefore its last item is now the
+         * newest notification we processed.
+         */
+ 
+        const newestProcessedNotification =
+            notificationsToSurface[
+                notificationsToSurface.length -
+                1
+            ];
+ 
+ 
+        if (
+            newestProcessedNotification
+        ) {
+ 
+            saveActiveNotificationCheckpoint(
+                newestProcessedNotification
+            );
+        }
+ 
+ 
     } catch (error) {
-
+ 
         console.error(
             'ServiceCall notification check failed:',
             error
         );
-
-
-        /*
-         * Authentication expiry is handled
-         * consistently with our other monitors.
-         */
-
+ 
+ 
         if (
             error.code ===
             'AUTHENTICATION_REQUIRED'
         ) {
-
+ 
             stopNotificationLoop();
-
-
+ 
+ 
             sendAuthStatus(
                 'authentication_required',
                 'Your ServiceCall authorization has expired. Please sign in again.'
@@ -1218,7 +1745,6 @@ async function checkNotificationsOnce() {
         }
     }
 }
-
 
 function stopNotificationLoop() {
 
@@ -3369,6 +3895,8 @@ async function createWindow() {
         startIncomingCallLoop();
  
         startOutgoingCallLoop();
+
+        startNotificationLoop();
  
         startAuthorizationMonitor();
     }
@@ -3474,179 +4002,217 @@ async function createWindow() {
 function showNotificationPopup(
     notification
 ) {
-
+ 
     if (
         !notification ||
         !notification.sys_id
     ) {
         return;
     }
-
-
+ 
+ 
     /*
-     * For V1 we display one popup at a time.
-     *
-     * If another notification arrives while one
-     * is visible, close the old popup first.
-     *
-     * We can add stacking later.
+     * If all visible popup slots are occupied,
+     * keep this notification waiting.
      */
     if (
-        notificationPopupWindow &&
-        !notificationPopupWindow.isDestroyed()
+        notificationPopupWindows.length >=
+        MAX_VISIBLE_NOTIFICATION_POPUPS
     ) {
-
-        notificationPopupWindow.destroy();
-
-        notificationPopupWindow =
-            null;
+ 
+        notificationPopupQueue.push(
+            notification
+        );
+ 
+        console.log(
+            'ServiceCall notification queued:',
+            notification.sys_id
+        );
+ 
+        return;
     }
-
-
+ 
+ 
+    createNotificationPopupWindow(
+        notification
+    );
+}
+ 
+ 
+/* =========================================================
+   CREATE NOTIFICATION POPUP WINDOW
+========================================================= */
+ 
+function createNotificationPopupWindow(
+    notification
+) {
+ 
     const {
         screen
     } = require(
         'electron'
     );
-
-
+ 
+ 
     const display =
         screen.getPrimaryDisplay();
-
-
+ 
+ 
     const workArea =
         display.workArea;
-
-
-    const popupWidth =
-        380;
-
-    const popupHeight =
-        150;
-
-    const margin =
-        18;
-
-
+ 
+ 
+    /*
+     * Existing visible popups are counted
+     * from the bottom upward.
+     *
+     * 0 = bottom slot
+     * 1 = second slot
+     * 2 = third slot
+     */
+    const slotIndex =
+        notificationPopupWindows.length;
+ 
+ 
     const popupX =
         Math.round(
             workArea.x +
             workArea.width -
-            popupWidth -
-            margin
+            NOTIFICATION_POPUP_WIDTH -
+            NOTIFICATION_POPUP_MARGIN
         );
-
-
+ 
+ 
     const popupY =
         Math.round(
             workArea.y +
             workArea.height -
-            popupHeight -
-            margin
+            NOTIFICATION_POPUP_HEIGHT -
+            NOTIFICATION_POPUP_MARGIN -
+            (
+                slotIndex *
+                (
+                    NOTIFICATION_POPUP_HEIGHT +
+                    NOTIFICATION_POPUP_GAP
+                )
+            )
         );
-
-
-    notificationPopupWindow =
+ 
+ 
+    const popupWindow =
         new BrowserWindow({
-
+ 
             width:
-                popupWidth,
-
+                NOTIFICATION_POPUP_WIDTH,
+ 
             height:
-                popupHeight,
-
+                NOTIFICATION_POPUP_HEIGHT,
+ 
             x:
                 popupX,
-
+ 
             y:
                 popupY,
-
+ 
             frame:
                 false,
-
+ 
             transparent:
                 true,
-
+ 
             resizable:
                 false,
-
+ 
             movable:
                 false,
-
+ 
             minimizable:
                 false,
-
+ 
             maximizable:
                 false,
-
+ 
             fullscreenable:
                 false,
-
+ 
             skipTaskbar:
                 true,
-
+ 
             alwaysOnTop:
                 true,
-
+ 
             show:
                 false,
-
+ 
             focusable:
                 true,
-
+ 
             webPreferences: {
-
+ 
                 preload:
                     path.join(
                         __dirname,
                         'preload.js'
                     ),
-
+ 
                 contextIsolation:
                     true,
-
+ 
                 nodeIntegration:
                     false
             }
         });
-
-
-    notificationPopupWindow.loadFile(
+ 
+ 
+    /*
+     * Keep the notification identity attached
+     * to its own BrowserWindow.
+     */
+    popupWindow.serviceCallNotification =
+        notification;
+ 
+ 
+    notificationPopupWindows.push(
+        popupWindow
+    );
+ 
+ 
+    popupWindow.loadFile(
         'notification-popup.html',
         {
             query: {
-
+ 
                 notificationSysId:
                     String(
                         notification.sys_id ||
                         ''
                     ),
-
+ 
                 type:
                     String(
                         notification.type_display ||
                         notification.type ||
                         'Notification'
                     ),
-
+ 
                 title:
                     String(
                         notification.title ||
                         'ServiceCall'
                     ),
-
+ 
                 message:
                     String(
                         notification.message ||
                         ''
                     ),
-
+ 
                 meetingSysId:
                     String(
                         notification.meeting_sys_id ||
                         ''
                     ),
-
+ 
                 callSysId:
                     String(
                         notification.call_sys_id ||
@@ -3655,36 +4221,156 @@ function showNotificationPopup(
             }
         }
     );
-
-
-    notificationPopupWindow.once(
+ 
+ 
+    popupWindow.once(
         'ready-to-show',
         () => {
-
+ 
             if (
-                !notificationPopupWindow ||
-                notificationPopupWindow.isDestroyed()
+                popupWindow.isDestroyed()
             ) {
                 return;
             }
-
-
-            /*
-             * Show without stealing keyboard focus
-             * from whatever the user is doing.
-             */
-            notificationPopupWindow.showInactive();
+ 
+ 
+            popupWindow.showInactive();
         }
     );
-
-
-    notificationPopupWindow.on(
+ 
+ 
+    popupWindow.on(
         'closed',
         () => {
-
-            notificationPopupWindow =
-                null;
+ 
+            const popupIndex =
+                notificationPopupWindows.indexOf(
+                    popupWindow
+                );
+ 
+ 
+            if (
+                popupIndex !== -1
+            ) {
+ 
+                notificationPopupWindows.splice(
+                    popupIndex,
+                    1
+                );
+            }
+ 
+ 
+            /*
+             * Reposition whatever remains,
+             * then use the newly available slot
+             * for the next queued notification.
+             */
+            repositionNotificationPopups();
+ 
+ 
+            showNextQueuedNotification();
         }
+    );
+}
+ 
+ 
+/* =========================================================
+   REPOSITION VISIBLE NOTIFICATIONS
+========================================================= */
+ 
+function repositionNotificationPopups() {
+ 
+    const {
+        screen
+    } = require(
+        'electron'
+    );
+ 
+ 
+    const display =
+        screen.getPrimaryDisplay();
+ 
+ 
+    const workArea =
+        display.workArea;
+ 
+ 
+    notificationPopupWindows.forEach(
+        (
+            popupWindow,
+            index
+        ) => {
+ 
+            if (
+                !popupWindow ||
+                popupWindow.isDestroyed()
+            ) {
+                return;
+            }
+ 
+ 
+            const popupX =
+                Math.round(
+                    workArea.x +
+                    workArea.width -
+                    NOTIFICATION_POPUP_WIDTH -
+                    NOTIFICATION_POPUP_MARGIN
+                );
+ 
+ 
+            const popupY =
+                Math.round(
+                    workArea.y +
+                    workArea.height -
+                    NOTIFICATION_POPUP_HEIGHT -
+                    NOTIFICATION_POPUP_MARGIN -
+                    (
+                        index *
+                        (
+                            NOTIFICATION_POPUP_HEIGHT +
+                            NOTIFICATION_POPUP_GAP
+                        )
+                    )
+                );
+ 
+ 
+            popupWindow.setPosition(
+                popupX,
+                popupY,
+                true
+            );
+        }
+    );
+}
+ 
+ 
+/* =========================================================
+   SHOW NEXT QUEUED NOTIFICATION
+========================================================= */
+ 
+function showNextQueuedNotification() {
+ 
+    if (
+        notificationPopupWindows.length >=
+        MAX_VISIBLE_NOTIFICATION_POPUPS
+    ) {
+        return;
+    }
+ 
+ 
+    if (
+        notificationPopupQueue.length === 0
+    ) {
+        return;
+    }
+ 
+ 
+    const nextNotification =
+        notificationPopupQueue.shift();
+ 
+ 
+    createNotificationPopupWindow(
+        nextNotification
     );
 }
 
@@ -8660,18 +9346,142 @@ ipcMain.handle(
 
 ipcMain.on(
     'servicecall-dismiss-notification-popup',
-
-    () => {
-
+    (
+        event
+    ) => {
+ 
+        /*
+         * Get the exact BrowserWindow that
+         * sent this dismiss request.
+         *
+         * This is important now because several
+         * notification popups may exist at once.
+         */
+ 
+        const popupWindow =
+            BrowserWindow.fromWebContents(
+                event.sender
+            );
+ 
+ 
         if (
-            notificationPopupWindow &&
-            !notificationPopupWindow.isDestroyed()
+            !popupWindow ||
+            popupWindow.isDestroyed()
         ) {
+ 
+            return;
+        }
+ 
+ 
+        popupWindow.destroy();
+    }
+);
 
-            notificationPopupWindow.destroy();
-
-            notificationPopupWindow =
-                null;
+ipcMain.on(
+    'servicecall-open-notification',
+    (
+        event,
+        notificationData
+    ) => {
+ 
+        console.log(
+            'ServiceCall notification OPEN request received:',
+            notificationData
+        );
+ 
+ 
+        /*
+         * Restore ServiceCall when the user
+         * clicks a desktop notification.
+         */
+ 
+        showMainWindow();
+ 
+ 
+        /*
+         * Make sure the main ServiceCall
+         * window is brought to the front.
+         */
+ 
+        if (
+            !mainWindow ||
+            mainWindow.isDestroyed()
+        ) {
+            return;
+        }
+ 
+ 
+        if (
+            mainWindow.isMinimized()
+        ) {
+ 
+            mainWindow.restore();
+        }
+ 
+ 
+        mainWindow.show();
+ 
+        mainWindow.focus();
+ 
+ 
+        /*
+         * -----------------------------------------
+         * MEETING NOTIFICATION
+         * -----------------------------------------
+         *
+         * If this notification belongs to a
+         * meeting, forward that meeting to the
+         * main renderer.
+         *
+         * The renderer will remain responsible
+         * for securely retrieving the meeting
+         * details from ServiceNow.
+         */
+ 
+        const meetingSysId =
+            String(
+                notificationData &&
+                notificationData.meetingSysId
+                    ? notificationData.meetingSysId
+                    : ''
+            ).trim();
+ 
+ 
+        if (
+            /^[0-9a-f]{32}$/i.test(
+                meetingSysId
+            )
+        ) {
+ 
+            console.log(
+                'Opening meeting from ServiceCall notification:',
+                meetingSysId
+            );
+ 
+ 
+            mainWindow.webContents.send(
+                'servicecall-open-notification-meeting',
+                {
+                    meetingSysId:
+                        meetingSysId,
+ 
+                    notificationSysId:
+                        String(
+                            notificationData &&
+                            notificationData.notificationSysId
+                                ? notificationData.notificationSysId
+                                : ''
+                        ),
+ 
+                    type:
+                        String(
+                            notificationData &&
+                            notificationData.type
+                                ? notificationData.type
+                                : ''
+                        )
+                }
+            );
         }
     }
 );
@@ -9043,61 +9853,97 @@ ipcMain.handle(
 );
 
 async function stopCurrentServiceCallSession() {
-
+ 
     /*
      * -----------------------------------------
      * STOP HEARTBEAT
      * -----------------------------------------
      */
-
+ 
     if (heartbeatTimer) {
-
+ 
         clearInterval(
             heartbeatTimer
         );
-
+ 
         heartbeatTimer =
             null;
     }
-
-
+ 
+ 
     /*
      * -----------------------------------------
      * STOP INCOMING CALL MONITOR
      * -----------------------------------------
      */
-
+ 
     if (incomingCallTimer) {
-
+ 
         clearInterval(
             incomingCallTimer
         );
-
+ 
         incomingCallTimer =
             null;
     }
-
-
+ 
+ 
     /*
      * -----------------------------------------
      * STOP OUTGOING CALL MONITOR
      * -----------------------------------------
      */
-
+ 
     if (outgoingCallTimer) {
-
+ 
         clearInterval(
             outgoingCallTimer
         );
-
+ 
         outgoingCallTimer =
             null;
     }
-
+ 
+ 
+    /*
+     * -----------------------------------------
+     * STOP NOTIFICATION MONITOR
+     * -----------------------------------------
+     */
+ 
     stopNotificationLoop();
-
+ 
+ 
+    /*
+     * -----------------------------------------
+     * STOP AUTHORIZATION MONITOR
+     * -----------------------------------------
+     */
+ 
     stopAuthorizationMonitor();
-
+ 
+ 
+    /*
+     * -----------------------------------------
+     * RESET NOTIFICATION SESSION STATE
+     * -----------------------------------------
+     *
+     * Desktop notification detection state
+     * belongs to the currently authenticated
+     * ServiceCall account.
+     *
+     * The next account must establish its own
+     * notification baseline.
+     */
+ 
+    surfacedNotificationIds.clear();
+ 
+    console.log('ServiceCall Notification Session state reset')
+ 
+ 
+    console.log(
+        'ServiceCall notification baseline reset.'
+    );
     /*
      * -----------------------------------------
      * MARK DESKTOP OFFLINE
@@ -9106,67 +9952,68 @@ async function stopCurrentServiceCallSession() {
      * Do this BEFORE clearing the active
      * authenticated account.
      */
-
+ 
     try {
-
-    await signOutDesktopSession();
-
-} catch (error) {
-
-    console.error(
-        'ServiceCall explicit sign out failed:',
-        error
-    );
-
-
-    /*
-     * Fallback:
-     *
-     * If the dedicated sign-out endpoint
-     * fails, still try to mark this device
-     * registration offline.
-     */
-    try {
-
-        await updateDesktopState(
-            'offline'
-        );
-
-    } catch (fallbackError) {
-
+ 
+        await signOutDesktopSession();
+ 
+    } catch (error) {
+ 
         console.error(
-            'ServiceCall offline fallback failed:',
-            fallbackError
+            'ServiceCall explicit sign out failed:',
+            error
         );
+ 
+ 
+        /*
+         * Fallback:
+         *
+         * If the dedicated sign-out endpoint
+         * fails, still try to mark this device
+         * registration offline.
+         */
+ 
+        try {
+ 
+            await updateDesktopState(
+                'offline'
+            );
+ 
+        } catch (fallbackError) {
+ 
+            console.error(
+                'ServiceCall offline fallback failed:',
+                fallbackError
+            );
+        }
     }
-}
-
-
+ 
+ 
     /*
      * -----------------------------------------
      * CLEAR ACTIVE IN-MEMORY IDENTITY
      * -----------------------------------------
      */
-
+ 
     currentServiceCallUser =
         null;
-
+ 
     currentServiceCallAuthorization =
         null;
-
-
+ 
+ 
     activeIncomingCallId =
         null;
-
+ 
     activeOutgoingCallId =
         null;
-
-
+ 
+ 
     console.log(
         'Current ServiceCall session stopped.'
     );
-
-
+ 
+ 
     return {
         success: true
     };

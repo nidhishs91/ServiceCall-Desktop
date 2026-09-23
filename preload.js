@@ -487,6 +487,35 @@ dismissNotificationPopup: () => {
     );
 },
 
+openNotification: (
+    notificationData
+) => {
+ 
+    ipcRenderer.send(
+        'servicecall-open-notification',
+        notificationData
+    );
+ 
+},
+
+onNotificationMeetingOpen: (
+    callback
+) => {
+ 
+    ipcRenderer.on(
+        'servicecall-open-notification-meeting',
+        (
+            event,
+            data
+        ) => {
+ 
+            callback(
+                data
+            );
+        }
+    );
+},
+
     updateMeeting:
     (
         meetingSysId,

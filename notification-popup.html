@@ -380,6 +380,8 @@
                 'notificationSysId'
             ) || '';
 
+        const meetingSysId = params.get('meetingSysId') || '';
+
 
         const type =
             (
@@ -612,20 +614,43 @@
         ----------------------------------------- */
 
         popup.addEventListener(
-            'click',
-            () => {
-
-                console.log(
-                    'ServiceCall notification clicked:',
-                    notificationSysId
-                );
-
-                /*
-                 * Exact notification navigation
-                 * comes after the visual test.
-                 */
-            }
+    'click',
+    () => {
+ 
+        console.log(
+            'ServiceCall notification clicked:',
+            notificationSysId
         );
+ 
+ 
+        clearTimeout(
+            autoDismissTimer
+        );
+ 
+ 
+        if (
+            window.serviceCall &&
+            window.serviceCall.openNotification
+        ) {
+ 
+            window.serviceCall.openNotification(
+    {
+        notificationSysId:
+            notificationSysId,
+ 
+        type:
+            type,
+ 
+        meetingSysId:
+            meetingSysId
+    }
+);
+ 
+            dismissPopup();
+        }
+    }
+);
+ 
 
     </script>
 

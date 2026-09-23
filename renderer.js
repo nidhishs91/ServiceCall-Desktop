@@ -4106,6 +4106,101 @@ if (
 }
 
 
+/* =================================================
+   OPEN MEETING FROM DESKTOP NOTIFICATION
+================================================= */
+ 
+if (
+    window.serviceCall &&
+    typeof window.serviceCall
+        .onNotificationMeetingOpen ===
+        'function'
+) {
+ 
+    window.serviceCall
+        .onNotificationMeetingOpen(
+            async (data) => {
+ 
+                try {
+ 
+                    const meetingSysId =
+                        String(
+                            data &&
+                            data.meetingSysId
+                                ? data.meetingSysId
+                                : ''
+                        ).trim();
+ 
+ 
+                    console.log(
+                        'ServiceCall meeting notification received:',
+                        data
+                    );
+ 
+ 
+                    /*
+                     * Validate the meeting sys_id
+                     * before doing anything.
+                     */
+                    if (
+                        !/^[0-9a-f]{32}$/i.test(
+                            meetingSysId
+                        )
+                    ) {
+ 
+                        console.error(
+                            'Invalid meeting sys_id from notification.'
+                        );
+ 
+                        return;
+                    }
+ 
+ 
+                    /*
+                     * Use the existing Meetings
+                     * navigation button.
+                     *
+                     * This means we reuse the exact
+                     * same navigation logic already
+                     * used by the sidebar.
+                     */
+                    const meetingsNavigationButton =
+                        document.querySelector(
+                            '.nav-button[data-view="meetingsView"]'
+                        );
+ 
+ 
+                    if (
+                        meetingsNavigationButton
+                    ) {
+ 
+                        meetingsNavigationButton.click();
+                    }
+ 
+ 
+                    /*
+                     * Open the exact meeting using
+                     * the existing secure flow.
+                     *
+                     * This calls ServiceNow again
+                     * to retrieve/authorize the
+                     * meeting before displaying it.
+                     */
+                    await openMeetingFromDeepLink(
+                        meetingSysId
+                    );
+ 
+ 
+                } catch (error) {
+ 
+                    console.error(
+                        'Unable to open meeting from notification:',
+                        error
+                    );
+                }
+            }
+        );
+}
    /* =================================================
    SERVICECALL DEEP LINK
 ================================================= */
@@ -6893,25 +6988,29 @@ cachedNotificationResult =
             ) {
 
                 window.serviceCall
-                    .showNotificationPopup(
-                        {
-                            notificationSysId:
-                                sysId,
-
-                            type:
-                                notification.type_display ||
-                                notification.type ||
-                                'Notification',
-
-                            title:
-                                notification.title ||
-                                'ServiceCall',
-
-                            message:
-                                notification.message ||
-                                ''
-                        }
-                    )
+    .showNotificationPopup(
+        {
+            notificationSysId:
+                sysId,
+ 
+            type:
+                notification.type_display ||
+                notification.type ||
+                'Notification',
+ 
+            title:
+                notification.title ||
+                'ServiceCall',
+ 
+            message:
+                notification.message ||
+                '',
+ 
+            meetingSysId:
+                notification.meeting_sys_id ||
+                ''
+        }
+    )
                     .catch(
                         error => {
 
