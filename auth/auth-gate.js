@@ -23,6 +23,11 @@ const savedAccountsContainer =
         'savedAccountsContainer'
     );
 
+const backToAccountsButton =
+    document.getElementById(
+        'backToAccountsButton'
+    );
+
 const viewAllAccountsButton =
     document.getElementById(
         'viewAllAccountsButton'
@@ -175,6 +180,20 @@ function showLogin() {
     );
 
 
+    /*
+     * Back to Accounts is useful only when
+     * this device already has saved
+     * ServiceCall accounts.
+     */
+    if (backToAccountsButton) {
+
+        backToAccountsButton.classList.toggle(
+            'hidden',
+            savedAccounts.length === 0
+        );
+    }
+
+
     if (authMessage) {
 
         authMessage.textContent =
@@ -187,7 +206,6 @@ function showLogin() {
         instanceInput.focus();
     }
 }
-
 
 /*
  * -----------------------------------------
@@ -569,15 +587,9 @@ function renderSavedAccounts() {
      * Otherwise show the five most
      * recently used accounts unless
      * View All is selected.
-     */
-    const accountsToRender =
-        searchText ||
-        showAllAccounts
-            ? filteredAccounts
-            : filteredAccounts.slice(
-                0,
-                5
-            );
+    */
+
+    const accountsToRender = filteredAccounts;
 
 
     if (
@@ -957,31 +969,16 @@ function renderSavedAccounts() {
     }
 
 
-    /*
-     * VIEW ALL / RECENT ACCOUNTS
-     */
+   /*
+ * Account scrolling replaces the old
+ * View All / Show Recent behavior.
+ */
+if (viewAllAccountsButton) {
 
-    if (viewAllAccountsButton) {
-
-        const needsViewAll =
-            !searchText &&
-            savedAccounts.length > 5;
-
-
-        viewAllAccountsButton
-            .classList.toggle(
-                'hidden',
-                !needsViewAll
-            );
-
-
-        viewAllAccountsButton.textContent =
-            showAllAccounts
-                ? 'Show recent accounts'
-                : 'View all accounts (' +
-                  savedAccounts.length +
-                  ')';
-    }
+    viewAllAccountsButton.classList.add(
+        'hidden'
+    );
+}
 }
 
 
@@ -1578,7 +1575,29 @@ viewAllAccountsButton?.addEventListener(
     }
 );
 
+/*
+ * -----------------------------------------
+ * BACK TO SAVED ACCOUNTS
+ * -----------------------------------------
+ */
 
+backToAccountsButton?.addEventListener(
+    'click',
+    async () => {
+
+        try {
+
+            await showAccountChooser();
+
+        } catch (error) {
+
+            console.error(
+                'Unable to return to saved accounts:',
+                error
+            );
+        }
+    }
+);
 /*
  * -----------------------------------------
  * ADD ACCOUNT

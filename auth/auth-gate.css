@@ -296,7 +296,48 @@ button {
     display: flex;
     flex-direction: column;
     gap: 8px;
+
     margin: 16px 0;
+
+    /*
+     * Roughly two account cards remain visible
+     * without turning the entire auth card
+     * into a very tall window.
+     */
+    max-height: 230px;
+
+    /*
+     * No scrollbar when the accounts fit.
+     * Scroll automatically appears only when
+     * the list exceeds the available height.
+     */
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    /*
+     * Prevent the scrollbar from sitting
+     * directly against account cards.
+     */
+    padding-right: 5px;
+
+    scrollbar-gutter: stable;
+}
+
+.saved-accounts-container::-webkit-scrollbar {
+    width: 7px;
+}
+
+.saved-accounts-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.saved-accounts-container::-webkit-scrollbar-thumb {
+    background: #c7d1ce;
+    border-radius: 10px;
+}
+
+.saved-accounts-container::-webkit-scrollbar-thumb:hover {
+    background: #9fadaa;
 }
 
 .saved-account {
@@ -377,4 +418,36 @@ button {
 .saved-account-remove:hover {
     opacity: 1;
     text-decoration: underline;
+}
+
+.back-to-accounts-button {
+    width: auto;
+
+    display: block;
+
+    margin:
+        0 0 22px;
+
+    padding: 0;
+
+    border: 0;
+
+    background: transparent;
+
+    color: #0b6b58;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    text-align: left;
+
+    cursor: pointer;
+}
+
+.back-to-accounts-button:hover {
+    text-decoration: underline;
+}
+
+.back-to-accounts-button.hidden {
+    display: none;
 }

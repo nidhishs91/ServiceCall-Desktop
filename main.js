@@ -1238,19 +1238,6 @@ async function checkIncomingCallOnce() {
                         'conference';
 
 
-                /*
-                 * For an existing conference,
-                 * show the connected participant
-                 * summary returned by ServiceNow.
-                 *
-                 * Example:
-                 *
-                 * Nidhish, Divyani
-                 *
-                 * or
-                 *
-                 * Nidhish, Divyani +2
-                 */
                 const displayName =
                     isConference
                         ? (

@@ -83,13 +83,14 @@
                     1,
                     0.36,
                     1) forwards;
+
+            cursor: pointer;
         }
 
 
         @keyframes popupEnter {
 
             from {
-
                 opacity: 0;
 
                 transform:
@@ -97,7 +98,6 @@
             }
 
             to {
-
                 opacity: 1;
 
                 transform:
@@ -293,13 +293,8 @@
 
 
         /* -----------------------------------------
-           CLICKABLE
+           CLOSING
         ----------------------------------------- */
-
-        .notification-popup {
-            cursor: pointer;
-        }
-
 
         .notification-popup.closing {
 
@@ -329,6 +324,7 @@
     </style>
 
 </head>
+
 
 <body>
 
@@ -369,6 +365,10 @@
 
     <script>
 
+        /* -----------------------------------------
+           QUERY PARAMETERS
+        ----------------------------------------- */
+
         const params =
             new URLSearchParams(
                 window.location.search
@@ -380,7 +380,11 @@
                 'notificationSysId'
             ) || '';
 
-        const meetingSysId = params.get('meetingSysId') || '';
+
+        const meetingSysId =
+            params.get(
+                'meetingSysId'
+            ) || '';
 
 
         const type =
@@ -390,6 +394,7 @@
                 ) ||
                 'Notification'
             )
+                .trim()
                 .toLowerCase();
 
 
@@ -406,6 +411,32 @@
             ) ||
             '';
 
+
+        /* -----------------------------------------
+           NOTIFICATION TYPE
+        ----------------------------------------- */
+
+        /*
+         * Meeting Started is intentionally
+         * different from an ordinary desktop
+         * notification.
+         *
+         * It behaves more like an incoming
+         * actionable event:
+         *
+         * - ringtone loops
+         * - popup remains visible
+         * - no 7-second auto dismiss
+         */
+        const isMeetingStarted =
+            type === 'meeting started' ||
+            type === 'meeting_started' ||
+            type === 'meeting-started';
+
+
+        /* -----------------------------------------
+           ELEMENTS
+        ----------------------------------------- */
 
         const popup =
             document.getElementById(
@@ -438,8 +469,8 @@
 
 
         /* -----------------------------------------
-   NOTIFICATION SOUND
------------------------------------------ */
+           AUDIO
+        ----------------------------------------- */
 
         const notificationSound =
             new Audio(
@@ -455,16 +486,97 @@
             0.65;
 
 
-        /*
-         * Play the sound once when this
-         * notification popup appears.
-         */
+        const meetingRingtone =
+            new Audio(
+                './assets/sounds/ringtone.mp3'
+            );
+
+
+        meetingRingtone.preload =
+            'auto';
+
+
+        meetingRingtone.volume =
+            0.70;
+
+
+        meetingRingtone.loop =
+            true;
+
+
+        /* -----------------------------------------
+           STOP AUDIO
+        ----------------------------------------- */
+
+        function stopPopupAudio() {
+
+            try {
+
+                notificationSound.pause();
+
+                notificationSound.currentTime =
+                    0;
+
+            } catch (error) {
+
+                console.warn(
+                    'Unable to stop notification sound:',
+                    error
+                );
+            }
+
+
+            try {
+
+                meetingRingtone.pause();
+
+                meetingRingtone.currentTime =
+                    0;
+
+            } catch (error) {
+
+                console.warn(
+                    'Unable to stop meeting ringtone:',
+                    error
+                );
+            }
+        }
+
+
+        /* -----------------------------------------
+           PLAY AUDIO
+        ----------------------------------------- */
+
         window.addEventListener(
             'DOMContentLoaded',
             async () => {
 
                 try {
 
+                    /*
+                     * MEETING STARTED
+                     *
+                     * Use looping ringtone.
+                     */
+                    if (
+                        isMeetingStarted
+                    ) {
+
+                        meetingRingtone.currentTime =
+                            0;
+
+                        await meetingRingtone.play();
+
+                        return;
+                    }
+
+
+                    /*
+                     * NORMAL NOTIFICATION
+                     *
+                     * Play ordinary notification
+                     * sound once.
+                     */
                     notificationSound.currentTime =
                         0;
 
@@ -473,12 +585,13 @@
                 } catch (error) {
 
                     console.warn(
-                        'ServiceCall notification sound could not be played:',
+                        'ServiceCall notification audio could not be played:',
                         error
                     );
                 }
             }
         );
+
 
         /* -----------------------------------------
            CONTENT
@@ -492,13 +605,22 @@
             message;
 
 
-        /*
-         * Basic icon selection.
-         *
-         * Later this same popup can support
-         * calls, chats and system notifications.
-         */
+        /* -----------------------------------------
+           ICON
+        ----------------------------------------- */
+
         if (
+            isMeetingStarted
+        ) {
+
+            /*
+             * Distinguish an active meeting
+             * from an ordinary calendar event.
+             */
+            icon.textContent =
+                '☎';
+
+        } else if (
             type.includes(
                 'meeting'
             )
@@ -533,16 +655,43 @@
 
 
         /* -----------------------------------------
-           DISMISS ANIMATION
+           DISMISS
         ----------------------------------------- */
 
+        let popupDismissed =
+            false;
+
+
         function dismissPopup() {
+
+            /*
+             * Prevent duplicate close actions.
+             */
+            if (
+                popupDismissed
+            ) {
+
+                return;
+            }
+
+
+            popupDismissed =
+                true;
+
+
+            /*
+             * Audio must stop immediately,
+             * before the close animation.
+             */
+            stopPopupAudio();
+
 
             if (
                 popup.classList.contains(
                     'closing'
                 )
             ) {
+
                 return;
             }
 
@@ -552,19 +701,13 @@
             );
 
 
-            /*
-             * For this first visual test we
-             * simply hide the popup content.
-             *
-             * Main-process window destruction
-             * will be wired next.
-             */
             setTimeout(
                 () => {
 
                     if (
                         window.serviceCall &&
-                        window.serviceCall.dismissNotificationPopup
+                        window.serviceCall
+                            .dismissNotificationPopup
                     ) {
 
                         window.serviceCall
@@ -576,19 +719,57 @@
             );
         }
 
+
         /* -----------------------------------------
-   AUTO DISMISS
------------------------------------------ */
+           AUTO DISMISS
+        ----------------------------------------- */
 
-        const autoDismissTimer =
-            setTimeout(
-                () => {
+        let autoDismissTimer =
+            null;
 
-                    dismissPopup();
 
-                },
-                7000
-            );
+        /*
+         * Normal notifications disappear after
+         * seven seconds.
+         *
+         * Meeting Started notifications remain
+         * visible until the user handles them.
+         */
+        if (
+            !isMeetingStarted
+        ) {
+
+            autoDismissTimer =
+                setTimeout(
+                    () => {
+
+                        dismissPopup();
+
+                    },
+                    7000
+                );
+        }
+
+
+        /* -----------------------------------------
+           CLEAR AUTO DISMISS
+        ----------------------------------------- */
+
+        function clearAutoDismiss() {
+
+            if (
+                autoDismissTimer
+            ) {
+
+                clearTimeout(
+                    autoDismissTimer
+                );
+
+                autoDismissTimer =
+                    null;
+            }
+        }
+
 
         /* -----------------------------------------
            X BUTTON
@@ -600,9 +781,9 @@
 
                 event.stopPropagation();
 
-                clearTimeout(
-                    autoDismissTimer
-                );
+
+                clearAutoDismiss();
+
 
                 dismissPopup();
             }
@@ -614,43 +795,74 @@
         ----------------------------------------- */
 
         popup.addEventListener(
-    'click',
-    () => {
- 
-        console.log(
-            'ServiceCall notification clicked:',
-            notificationSysId
+            'click',
+            () => {
+
+                console.log(
+                    'ServiceCall notification clicked:',
+                    notificationSysId,
+                    type,
+                    meetingSysId
+                );
+
+
+                clearAutoDismiss();
+
+
+                /*
+                 * Stop ringtone immediately.
+                 *
+                 * Don't wait for Electron IPC or
+                 * navigation to finish.
+                 */
+                stopPopupAudio();
+
+
+                if (
+                    window.serviceCall &&
+                    window.serviceCall
+                        .openNotification
+                ) {
+
+                    window.serviceCall
+                        .openNotification(
+                            {
+                                notificationSysId:
+                                    notificationSysId,
+
+                                type:
+                                    type,
+
+                                meetingSysId:
+                                    meetingSysId
+                            }
+                        );
+                }
+
+
+                dismissPopup();
+            }
         );
- 
- 
-        clearTimeout(
-            autoDismissTimer
+
+
+        /* -----------------------------------------
+           WINDOW CLEANUP
+        ----------------------------------------- */
+
+        /*
+         * Extra protection against audio
+         * continuing during window destruction,
+         * reload or application shutdown.
+         */
+        window.addEventListener(
+            'beforeunload',
+            () => {
+
+                clearAutoDismiss();
+
+                stopPopupAudio();
+            }
         );
- 
- 
-        if (
-            window.serviceCall &&
-            window.serviceCall.openNotification
-        ) {
- 
-            window.serviceCall.openNotification(
-    {
-        notificationSysId:
-            notificationSysId,
- 
-        type:
-            type,
- 
-        meetingSysId:
-            meetingSysId
-    }
-);
- 
-            dismissPopup();
-        }
-    }
-);
- 
 
     </script>
 
