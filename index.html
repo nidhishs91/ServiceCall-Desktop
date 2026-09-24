@@ -2592,8 +2592,16 @@
 ================================================= */
 
         .chat-conversations-header {
+            min-height: 48px;
+
             padding:
-                15px 17px 10px;
+                10px 12px 8px 17px;
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 10px;
 
             color: #526963;
 
@@ -2603,6 +2611,53 @@
             text-transform: uppercase;
 
             letter-spacing: 0.04em;
+        }
+
+
+        .chat-new-group-button {
+            flex-shrink: 0;
+
+            height: 30px;
+
+            padding:
+                0 10px;
+
+            border:
+                1px solid #c9d9d4;
+
+            border-radius: 8px;
+
+            background: white;
+            color: #17634f;
+
+            font-size: 11px;
+            font-weight: 700;
+
+            text-transform: none;
+            letter-spacing: normal;
+
+            cursor: pointer;
+
+            transition:
+                background 0.15s ease,
+                border-color 0.15s ease,
+                color 0.15s ease,
+                transform 0.15s ease;
+        }
+
+
+        .chat-new-group-button:hover {
+            background: #eaf5f1;
+
+            border-color: #9fc4b8;
+
+            color: #105642;
+        }
+
+
+        .chat-new-group-button:active {
+            transform:
+                translateY(1px);
         }
 
 
@@ -3531,6 +3586,394 @@
                 notificationListReturn 220ms ease forwards;
         }
 
+        /* =================================================
+   CREATE GROUP MODAL
+================================================= */
+
+        .chat-create-group-modal {
+            position: fixed;
+
+            inset: 0;
+
+            z-index: 2100;
+
+            display: none;
+
+            align-items: center;
+            justify-content: center;
+
+            padding: 28px;
+        }
+
+
+        .chat-create-group-modal.open {
+            display: flex;
+        }
+
+
+        .chat-create-group-backdrop {
+            position: absolute;
+
+            inset: 0;
+
+            background:
+                rgba(10, 28, 24, 0.46);
+
+            backdrop-filter:
+                blur(2px);
+        }
+
+
+        .chat-create-group-dialog {
+            position: relative;
+
+            width:
+                min(560px, 100%);
+
+            max-height:
+                calc(100vh - 56px);
+
+            display: flex;
+            flex-direction: column;
+
+            overflow: hidden;
+
+            background: white;
+
+            border:
+                1px solid #dce5e2;
+
+            border-radius: 16px;
+
+            box-shadow:
+                0 24px 70px rgba(10, 37, 31, 0.22);
+        }
+
+
+        /* HEADER */
+
+        .chat-create-group-header {
+            display: flex;
+
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 20px;
+
+            padding:
+                20px 22px;
+
+            border-bottom:
+                1px solid #e7ecea;
+        }
+
+
+        .chat-create-group-heading {
+            color: #193a32;
+
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+
+        .chat-create-group-subtitle {
+            margin-top: 4px;
+
+            color: #7b8c87;
+
+            font-size: 12px;
+        }
+
+
+        .chat-create-group-close {
+            width: 34px;
+            height: 34px;
+
+            flex-shrink: 0;
+
+            border: 0;
+
+            border-radius: 9px;
+
+            background: transparent;
+            color: #667b75;
+
+            font-size: 22px;
+            line-height: 1;
+
+            cursor: pointer;
+        }
+
+
+        .chat-create-group-close:hover {
+            background: #edf3f1;
+
+            color: #234a40;
+        }
+
+
+        /* CONTENT */
+
+        .chat-create-group-content {
+            padding: 22px;
+
+            overflow-y: auto;
+        }
+
+
+        .chat-create-group-field {
+            margin-bottom: 20px;
+        }
+
+
+        .chat-create-group-label {
+            display: block;
+
+            margin-bottom: 7px;
+
+            color: #38544d;
+
+            font-size: 13px;
+            font-weight: 650;
+        }
+
+
+        .chat-create-group-input {
+            width: 100%;
+            height: 44px;
+
+            padding:
+                0 13px;
+
+            border:
+                1px solid #d6e0dd;
+
+            border-radius: 10px;
+
+            outline: none;
+
+            background: white;
+            color: #29463f;
+
+            font-family: inherit;
+            font-size: 14px;
+
+            transition:
+                border-color 0.18s ease,
+                box-shadow 0.18s ease;
+        }
+
+
+        .chat-create-group-input:focus {
+            border-color: #3d917c;
+
+            box-shadow:
+                0 0 0 3px rgba(61, 145, 124, 0.11);
+        }
+
+
+        /* SEARCH */
+
+        .chat-create-group-search-wrapper {
+            position: relative;
+        }
+
+
+        .chat-create-group-results {
+            position: absolute;
+
+            z-index: 25;
+
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+
+            max-height: 220px;
+
+            overflow-y: auto;
+
+            background: white;
+
+            border:
+                1px solid #dce5e2;
+
+            border-radius: 10px;
+
+            box-shadow:
+                0 12px 30px rgba(20, 55, 47, 0.14);
+        }
+
+
+        /* SELECTED PEOPLE */
+
+        .chat-create-group-selected-people {
+            display: flex;
+
+            flex-wrap: wrap;
+
+            gap: 8px;
+
+            min-height: 32px;
+
+            margin-top: 12px;
+        }
+
+
+        .chat-create-group-no-people {
+            color: #83918d;
+
+            font-size: 12px;
+        }
+
+
+        /* USER CHIP */
+
+        .chat-create-group-chip {
+            display: inline-flex;
+
+            align-items: center;
+
+            gap: 7px;
+
+            min-height: 30px;
+
+            padding:
+                5px 8px 5px 10px;
+
+            border:
+                1px solid #cce0da;
+
+            border-radius: 999px;
+
+            background: #edf7f3;
+
+            color: #24594b;
+
+            font-size: 12px;
+            font-weight: 650;
+        }
+
+
+        .chat-create-group-chip-remove {
+            width: 19px;
+            height: 19px;
+
+            display: inline-flex;
+
+            align-items: center;
+            justify-content: center;
+
+            padding: 0;
+
+            border: 0;
+
+            border-radius: 50%;
+
+            background: transparent;
+            color: #66837b;
+
+            font-size: 15px;
+
+            cursor: pointer;
+        }
+
+
+        .chat-create-group-chip-remove:hover {
+            background: #d5ebe4;
+
+            color: #174f40;
+        }
+
+
+        /* SEARCH RESULT */
+
+        .chat-create-group-result {
+            width: 100%;
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 11px;
+
+            padding:
+                10px 12px;
+
+            border: 0;
+
+            background: white;
+
+            color: #29463f;
+
+            text-align: left;
+
+            cursor: pointer;
+        }
+
+
+        .chat-create-group-result:hover {
+            background: #f1f7f5;
+        }
+
+
+        .chat-create-group-result.selected {
+            background: #e9f5f1;
+        }
+
+
+        .chat-create-group-result-checkbox {
+            width: 17px;
+            height: 17px;
+
+            flex-shrink: 0;
+        }
+
+
+        .chat-create-group-result-name {
+            min-width: 0;
+
+            flex: 1;
+
+            overflow: hidden;
+
+            text-overflow: ellipsis;
+            white-space: nowrap;
+
+            font-size: 13px;
+            font-weight: 650;
+        }
+
+
+        /* MESSAGE */
+
+        .chat-create-group-message {
+            min-height: 18px;
+
+            color: #a33f3f;
+
+            font-size: 12px;
+        }
+
+
+        /* FOOTER */
+
+        .chat-create-group-footer {
+            display: flex;
+
+            align-items: center;
+            justify-content: flex-end;
+
+            gap: 10px;
+
+            padding:
+                15px 22px;
+
+            border-top:
+                1px solid #e7ecea;
+
+            background: #fbfcfc;
+        }
+
 
         @keyframes notificationListReturn {
 
@@ -4222,10 +4665,9 @@
 
                             </div>
 
-                            <!-- SAVED CHAT CONVERSATIONS -->
-
-                            <div id="chatConversationList" class="chat-conversation-list"></div>
-
+                            <!-- =====================================
+     CONVERSATIONS
+====================================== -->
 
                             <div class="chat-conversations-header">
 
@@ -4233,10 +4675,14 @@
                                     Conversations
                                 </span>
 
+
+                                <button id="chatNewGroupButton" class="chat-new-group-button" type="button"
+                                    title="Create group">
+                                    + New Group
+                                </button>
+
                             </div>
 
-
-                            <!-- Real conversations will be rendered here -->
 
                             <div id="chatConversationList" class="chat-conversation-list">
 
@@ -4246,12 +4692,15 @@
                                         💬
                                     </div>
 
+
                                     <div class="chat-conversation-empty-title">
                                         No conversations yet
                                     </div>
 
+
                                     <div class="chat-conversation-empty-text">
-                                        Search for someone above to start a conversation.
+                                        Search for someone above or create a group
+                                        to start a conversation.
                                     </div>
 
                                 </div>
@@ -4402,6 +4851,123 @@
                             </div>
 
                         </section>
+
+                    </div>
+
+                </div>
+
+                <!-- =====================================
+     CREATE GROUP MODAL
+====================================== -->
+
+                <div id="chatCreateGroupModal" class="chat-create-group-modal" aria-hidden="true">
+
+                    <div id="chatCreateGroupBackdrop" class="chat-create-group-backdrop"></div>
+
+
+                    <div class="chat-create-group-dialog" role="dialog" aria-modal="true"
+                        aria-labelledby="chatCreateGroupTitle">
+
+                        <!-- HEADER -->
+
+                        <div class="chat-create-group-header">
+
+                            <div>
+
+                                <div id="chatCreateGroupTitle" class="chat-create-group-heading">
+                                    Create new group
+                                </div>
+
+                                <div class="chat-create-group-subtitle">
+                                    Add ServiceCall users to a group conversation.
+                                </div>
+
+                            </div>
+
+
+                            <button id="chatCreateGroupCloseButton" class="chat-create-group-close" type="button"
+                                aria-label="Close">
+                                ×
+                            </button>
+
+                        </div>
+
+
+                        <!-- CONTENT -->
+
+                        <div class="chat-create-group-content">
+
+                            <!-- GROUP NAME -->
+
+                            <div class="chat-create-group-field">
+
+                                <label class="chat-create-group-label" for="chatCreateGroupNameInput">
+                                    Group name
+                                </label>
+
+
+                                <input id="chatCreateGroupNameInput" class="chat-create-group-input" type="text"
+                                    maxlength="200" placeholder="For example: ServiceCall Team" autocomplete="off">
+
+                            </div>
+
+
+                            <!-- PEOPLE -->
+
+                            <div class="chat-create-group-field">
+
+                                <label class="chat-create-group-label" for="chatCreateGroupPeopleSearch">
+                                    Add people
+                                </label>
+
+
+                                <div class="chat-create-group-search-wrapper">
+
+                                    <input id="chatCreateGroupPeopleSearch" class="chat-create-group-input"
+                                        type="search" placeholder="Search ServiceCall users..." autocomplete="off"
+                                        spellcheck="false">
+
+
+                                    <div id="chatCreateGroupPeopleResults" class="chat-create-group-results"
+                                        style="display: none;"></div>
+
+                                </div>
+
+
+                                <!-- MULTI-SELECTED USERS -->
+
+                                <div id="chatCreateGroupSelectedPeople" class="chat-create-group-selected-people">
+
+                                    <div id="chatCreateGroupNoPeople" class="chat-create-group-no-people">
+                                        No people selected yet.
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+
+                            <!-- ERROR / STATUS -->
+
+                            <div id="chatCreateGroupMessage" class="chat-create-group-message"></div>
+
+                        </div>
+
+
+                        <!-- FOOTER -->
+
+                        <div class="chat-create-group-footer">
+
+                            <button id="chatCreateGroupCancelButton" class="secondary-button" type="button">
+                                Cancel
+                            </button>
+
+
+                            <button id="chatCreateGroupSubmitButton" class="primary-button" type="button" disabled>
+                                Create Group
+                            </button>
+
+                        </div>
 
                     </div>
 

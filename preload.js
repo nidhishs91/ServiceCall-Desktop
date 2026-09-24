@@ -174,6 +174,16 @@ markConversationRead:
             conversationSysId
         ),
 
+createGroup:
+    (title, participantSysIds) =>
+        ipcRenderer.invoke(
+            'servicecall-create-group',
+            {
+                title,
+                participantSysIds
+            }
+        ),
+
 setMessageReaction:
     (
         messageSysId,

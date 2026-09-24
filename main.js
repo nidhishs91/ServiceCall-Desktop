@@ -11099,3 +11099,106 @@ ipcMain.handle(
     }
 );
 
+ipcMain.handle(
+    'servicecall-create-group',
+
+    async (
+        event,
+        payload = {}
+    ) => {
+
+        const title =
+            String(
+                payload.title || ''
+            ).trim();
+
+
+        const participantSysIds =
+            Array.isArray(
+                payload.participantSysIds
+            )
+                ? payload.participantSysIds
+                : [];
+
+
+        /* =========================================
+           VALIDATION
+        ========================================= */
+
+        if (!title) {
+
+            return {
+                success: false,
+                code: 'GROUP_TITLE_REQUIRED',
+                message:
+                    'Group title is required.'
+            };
+        }
+
+
+        if (
+            participantSysIds.length === 0
+        ) {
+
+            return {
+                success: false,
+                code: 'PARTICIPANTS_REQUIRED',
+                message:
+                    'Select at least one participant.'
+            };
+        }
+
+
+        try {
+
+            /*
+             * IMPORTANT:
+             *
+             * serviceCallApiRequest uses:
+             *
+             * path,
+             * method,
+             * body
+             *
+             * This is the same convention as
+             * send-message and message-reaction.
+             */
+
+            const result =
+                await serviceCallApiRequest(
+                    '/create-group',
+                    'POST',
+                    {
+                        title:
+                            title,
+
+                        participant_sys_ids:
+                            participantSysIds
+                    }
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to create ServiceCall group:',
+                error
+            );
+
+
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'CREATE_GROUP_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to create group.'
+            };
+        }
+    }
+);

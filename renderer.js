@@ -45,6 +45,25 @@ const peopleSearchInput =
         'peopleSearchInput'
     );
 
+/* -------------------------------------------------
+   GROUP CHAT STATE
+------------------------------------------------- */
+
+let chatCreateGroupSearchTimer =
+    null;
+
+
+/*
+ * Map:
+ *
+ * user sys_id -> user object
+ *
+ * A Map is important because selections
+ * must survive when the search text changes.
+ */
+const chatCreateGroupSelectedUsers =
+    new Map();
+
 const peopleSearchMessage =
     document.getElementById(
         'peopleSearchMessage'
@@ -12806,6 +12825,999 @@ async function loadCurrentAccount() {
                 'Unable to load account information.';
         }
     }
+}
+
+/* =========================================
+   CREATE GROUP MODAL
+========================================= */
+
+function openChatCreateGroupModal() {
+
+    if (!chatCreateGroupModal) {
+        return;
+    }
+
+    chatCreateGroupModal.classList.add(
+        'open'
+    );
+
+    chatCreateGroupModal.setAttribute(
+        'aria-hidden',
+        'false'
+    );
+
+    if (chatCreateGroupMessage) {
+
+        chatCreateGroupMessage.textContent =
+            '';
+    }
+
+    setTimeout(
+        () => {
+
+            if (chatCreateGroupNameInput) {
+
+                chatCreateGroupNameInput.focus();
+            }
+
+        },
+        50
+    );
+}
+
+
+function closeChatCreateGroupModal() {
+
+    if (!chatCreateGroupModal) {
+        return;
+    }
+
+    chatCreateGroupModal.classList.remove(
+        'open'
+    );
+
+    chatCreateGroupModal.setAttribute(
+        'aria-hidden',
+        'true'
+    );
+}
+
+
+/* =========================================
+   CREATE GROUP MODAL EVENTS
+========================================= */
+
+if (chatNewGroupButton) {
+
+    chatNewGroupButton.addEventListener(
+        'click',
+        () => {
+
+            openChatCreateGroupModal();
+        }
+    );
+}
+
+
+if (chatCreateGroupCloseButton) {
+
+    chatCreateGroupCloseButton.addEventListener(
+        'click',
+        () => {
+
+            closeChatCreateGroupModal();
+        }
+    );
+}
+
+
+if (chatCreateGroupCancelButton) {
+
+    chatCreateGroupCancelButton.addEventListener(
+        'click',
+        () => {
+
+            closeChatCreateGroupModal();
+        }
+    );
+}
+
+
+if (chatCreateGroupBackdrop) {
+
+    chatCreateGroupBackdrop.addEventListener(
+        'click',
+        () => {
+
+            closeChatCreateGroupModal();
+        }
+    );
+}
+
+
+document.addEventListener(
+    'keydown',
+    event => {
+
+        if (
+            event.key === 'Escape' &&
+            chatCreateGroupModal &&
+            chatCreateGroupModal.classList.contains(
+                'open'
+            )
+        ) {
+
+            closeChatCreateGroupModal();
+        }
+    }
+);
+
+if (
+    chatCreateGroupSubmitButton
+) {
+
+    chatCreateGroupSubmitButton.addEventListener(
+        'click',
+
+        async () => {
+
+            const title =
+                chatCreateGroupNameInput
+                    ? chatCreateGroupNameInput
+                        .value
+                        .trim()
+                    : '';
+
+
+            const participantSysIds =
+                Array.from(
+                    chatCreateGroupSelectedUsers
+                        .keys()
+                );
+
+
+            /* -------------------------
+               VALIDATION
+            ------------------------- */
+
+            if (!title) {
+
+                if (chatCreateGroupMessage) {
+
+                    chatCreateGroupMessage.textContent =
+                        'Enter a group name.';
+                }
+
+                return;
+            }
+
+
+            if (
+                participantSysIds.length === 0
+            ) {
+
+                if (chatCreateGroupMessage) {
+
+                    chatCreateGroupMessage.textContent =
+                        'Select at least one person.';
+                }
+
+                return;
+            }
+
+
+            /*
+             * Lock immediately.
+             * Prevents duplicate groups from
+             * repeated clicks.
+             */
+            chatCreateGroupSubmitButton.disabled =
+                true;
+
+
+            const originalText =
+                chatCreateGroupSubmitButton
+                    .textContent;
+
+
+            chatCreateGroupSubmitButton.textContent =
+                'Creating...';
+
+
+            if (chatCreateGroupMessage) {
+
+                chatCreateGroupMessage.textContent =
+                    '';
+            }
+
+
+            try {
+
+                const result =
+                    await window
+                        .serviceCall
+                        .createGroup(
+                            title,
+                            participantSysIds
+                        );
+
+
+                console.log(
+                    'ServiceCall create group:',
+                    result
+                );
+
+
+                if (
+                    !result ||
+                    result.success !== true
+                ) {
+
+                    throw new Error(
+                        result &&
+                        result.message
+                            ? result.message
+                            : 'Unable to create group.'
+                    );
+                }
+
+
+                /* -------------------------
+                   SUCCESS
+                ------------------------- */
+
+                closeChatCreateGroupModal();
+
+
+                /*
+                 * Clear local group state.
+                 */
+                chatCreateGroupSelectedUsers
+                    .clear();
+
+
+                if (chatCreateGroupNameInput) {
+
+                    chatCreateGroupNameInput.value =
+                        '';
+                }
+
+
+                if (chatCreateGroupPeopleSearch) {
+
+                    chatCreateGroupPeopleSearch.value =
+                        '';
+                }
+
+
+                if (chatCreateGroupPeopleResults) {
+
+                    chatCreateGroupPeopleResults.innerHTML =
+                        '';
+
+                    chatCreateGroupPeopleResults.style.display =
+                        'none';
+                }
+
+
+                renderChatCreateGroupSelectedPeople();
+
+
+                /*
+                 * Reload sidebar.
+                 *
+                 * The newly-created group should
+                 * now come from /conversations.
+                 */
+                await loadChatConversations();
+
+            } catch (error) {
+
+                console.error(
+                    'Create ServiceCall group failed:',
+                    error
+                );
+
+
+                if (chatCreateGroupMessage) {
+
+                    chatCreateGroupMessage.textContent =
+                        error &&
+                        error.message
+                            ? error.message
+                            : 'Unable to create group.';
+                }
+
+            } finally {
+
+                chatCreateGroupSubmitButton.textContent =
+                    originalText;
+
+
+                /*
+                 * Re-evaluate instead of blindly
+                 * enabling the button.
+                 */
+                updateChatCreateGroupSubmitState();
+            }
+        }
+    );
+}
+
+/* =====================================================
+   CREATE GROUP VALIDATION
+===================================================== */
+
+function updateChatCreateGroupSubmitState() {
+
+    if (!chatCreateGroupSubmitButton) {
+        return;
+    }
+
+
+    const groupName =
+        chatCreateGroupNameInput
+            ? chatCreateGroupNameInput
+                .value
+                .trim()
+            : '';
+
+
+    const hasPeople =
+        chatCreateGroupSelectedUsers
+            .size > 0;
+
+
+    chatCreateGroupSubmitButton.disabled =
+        !groupName ||
+        !hasPeople;
+}
+
+
+/* =====================================================
+   RENDER SELECTED GROUP USERS
+===================================================== */
+
+function renderChatCreateGroupSelectedPeople() {
+
+    if (
+        !chatCreateGroupSelectedPeople
+    ) {
+
+        return;
+    }
+
+
+    chatCreateGroupSelectedPeople.innerHTML =
+        '';
+
+
+    /* -------------------------
+       EMPTY
+    ------------------------- */
+
+    if (
+        chatCreateGroupSelectedUsers
+            .size === 0
+    ) {
+
+        const empty =
+            document.createElement(
+                'div'
+            );
+
+
+        empty.className =
+            'chat-create-group-no-people';
+
+
+        empty.textContent =
+            'No people selected yet.';
+
+
+        chatCreateGroupSelectedPeople
+            .appendChild(
+                empty
+            );
+
+
+        updateChatCreateGroupSubmitState();
+
+        return;
+    }
+
+
+    /* -------------------------
+       CHIPS
+    ------------------------- */
+
+    chatCreateGroupSelectedUsers
+        .forEach(
+            user => {
+
+                const chip =
+                    document.createElement(
+                        'div'
+                    );
+
+
+                chip.className =
+                    'chat-create-group-chip';
+
+
+                const name =
+                    document.createElement(
+                        'span'
+                    );
+
+
+                name.textContent =
+                    user.name ||
+                    user.user_name ||
+                    'Unknown User';
+
+
+                const removeButton =
+                    document.createElement(
+                        'button'
+                    );
+
+
+                removeButton.type =
+                    'button';
+
+
+                removeButton.className =
+                    'chat-create-group-chip-remove';
+
+
+                removeButton.textContent =
+                    '×';
+
+
+                removeButton.title =
+                    'Remove';
+
+
+                removeButton.addEventListener(
+                    'click',
+
+                    () => {
+
+                        const sysId =
+                            String(
+                                user.sys_id ||
+                                ''
+                            );
+
+
+                        chatCreateGroupSelectedUsers
+                            .delete(
+                                sysId
+                            );
+
+
+                        renderChatCreateGroupSelectedPeople();
+
+
+                        /*
+                         * Refresh visible search
+                         * results so its checkbox
+                         * immediately becomes
+                         * unchecked.
+                         */
+                        searchChatCreateGroupPeople();
+                    }
+                );
+
+
+                chip.appendChild(
+                    name
+                );
+
+
+                chip.appendChild(
+                    removeButton
+                );
+
+
+                chatCreateGroupSelectedPeople
+                    .appendChild(
+                        chip
+                    );
+            }
+        );
+
+
+    updateChatCreateGroupSubmitState();
+}
+
+/* =====================================================
+   SEARCH USERS FOR GROUP
+===================================================== */
+
+async function searchChatCreateGroupPeople() {
+
+    if (
+        !chatCreateGroupPeopleSearch ||
+        !chatCreateGroupPeopleResults
+    ) {
+
+        return;
+    }
+
+
+    const searchText =
+        chatCreateGroupPeopleSearch
+            .value
+            .trim();
+
+
+    /* -------------------------
+       TOO SHORT
+    ------------------------- */
+
+    if (
+        searchText.length < 2
+    ) {
+
+        chatCreateGroupPeopleResults.innerHTML =
+            '';
+
+        chatCreateGroupPeopleResults.style.display =
+            'none';
+
+        return;
+    }
+
+
+    try {
+
+        const result =
+            await window
+                .serviceCall
+                .searchUsers(
+                    searchText
+                );
+
+
+        /*
+         * Ignore stale search response.
+         */
+        if (
+            chatCreateGroupPeopleSearch
+                .value
+                .trim() !==
+            searchText
+        ) {
+
+            return;
+        }
+
+
+        if (
+            !result ||
+            result.success !== true
+        ) {
+
+            throw new Error(
+                result &&
+                result.message
+                    ? result.message
+                    : 'Unable to search users.'
+            );
+        }
+
+
+        const users =
+            Array.isArray(
+                result.users
+            )
+                ? result.users
+                : [];
+
+
+        chatCreateGroupPeopleResults.innerHTML =
+            '';
+
+
+        /* -------------------------
+           NO RESULTS
+        ------------------------- */
+
+        if (
+            users.length === 0
+        ) {
+
+            const empty =
+                document.createElement(
+                    'div'
+                );
+
+
+            empty.textContent =
+                'No users found.';
+
+
+            empty.style.padding =
+                '14px';
+
+
+            empty.style.color =
+                '#71827d';
+
+
+            empty.style.fontSize =
+                '12px';
+
+
+            chatCreateGroupPeopleResults
+                .appendChild(
+                    empty
+                );
+
+
+            chatCreateGroupPeopleResults.style.display =
+                'block';
+
+
+            return;
+        }
+
+
+        /* -------------------------
+           RESULTS
+        ------------------------- */
+
+        users.forEach(
+            user => {
+
+                const sysId =
+                    String(
+                        user.sys_id ||
+                        ''
+                    ).trim();
+
+
+                if (!sysId) {
+                    return;
+                }
+
+
+                const selected =
+                    chatCreateGroupSelectedUsers
+                        .has(
+                            sysId
+                        );
+
+
+                const row =
+                    document.createElement(
+                        'button'
+                    );
+
+
+                row.type =
+                    'button';
+
+
+                row.className =
+                    selected
+                        ? 'chat-create-group-result selected'
+                        : 'chat-create-group-result';
+
+
+                /* -------------------------
+                   CHECKBOX
+                ------------------------- */
+
+                const checkbox =
+                    document.createElement(
+                        'input'
+                    );
+
+
+                checkbox.type =
+                    'checkbox';
+
+
+                checkbox.className =
+                    'chat-create-group-result-checkbox';
+
+
+                checkbox.checked =
+                    selected;
+
+                checkbox.addEventListener(
+    'click',
+    event => {
+
+        /*
+         * Do not let the click bubble to
+         * the row, otherwise selection
+         * would toggle twice.
+         */
+        event.stopPropagation();
+
+
+        if (
+            chatCreateGroupSelectedUsers
+                .has(
+                    sysId
+                )
+        ) {
+
+            chatCreateGroupSelectedUsers
+                .delete(
+                    sysId
+                );
+
+        } else {
+
+            chatCreateGroupSelectedUsers
+                .set(
+                    sysId,
+                    user
+                );
+        }
+
+
+        const nowSelected =
+            chatCreateGroupSelectedUsers
+                .has(
+                    sysId
+                );
+
+
+        checkbox.checked =
+            nowSelected;
+
+
+        row.classList.toggle(
+            'selected',
+            nowSelected
+        );
+
+
+        renderChatCreateGroupSelectedPeople();
+    }
+);
+
+
+                /*
+                 * Row handles selection.
+                 * Prevent checkbox itself
+                 * from producing a second click.
+                 */
+                checkbox.addEventListener(
+                    'click',
+
+                    event => {
+
+                        event.preventDefault();
+                    }
+                );
+
+
+                /* -------------------------
+                   NAME
+                ------------------------- */
+
+                const name =
+                    document.createElement(
+                        'div'
+                    );
+
+
+                name.className =
+                    'chat-create-group-result-name';
+
+
+                name.textContent =
+                    user.name ||
+                    user.user_name ||
+                    'Unknown User';
+
+
+                row.appendChild(
+                    checkbox
+                );
+
+
+                row.appendChild(
+                    name
+                );
+
+
+                /* -------------------------
+                   MULTI-SELECT
+                ------------------------- */
+
+                row.addEventListener(
+                    'click',
+
+                    () => {
+
+                        if (
+                            chatCreateGroupSelectedUsers
+                                .has(
+                                    sysId
+                                )
+                        ) {
+
+                            chatCreateGroupSelectedUsers
+                                .delete(
+                                    sysId
+                                );
+
+                        } else {
+
+                            chatCreateGroupSelectedUsers
+                                .set(
+                                    sysId,
+                                    user
+                                );
+                        }
+
+
+                        renderChatCreateGroupSelectedPeople();
+
+
+                        /*
+                         * Update this result immediately.
+                         */
+                        const nowSelected =
+                            chatCreateGroupSelectedUsers
+                                .has(
+                                    sysId
+                                );
+
+
+                        checkbox.checked =
+                            nowSelected;
+
+
+                        row.classList.toggle(
+                            'selected',
+                            nowSelected
+                        );
+                    }
+                );
+
+
+                chatCreateGroupPeopleResults
+                    .appendChild(
+                        row
+                    );
+            }
+        );
+
+
+        chatCreateGroupPeopleResults.style.display =
+            'block';
+
+
+    } catch (error) {
+
+        console.error(
+            'Create group user search failed:',
+            error
+        );
+
+
+        chatCreateGroupPeopleResults.innerHTML =
+            '';
+
+
+        const errorResult =
+            document.createElement(
+                'div'
+            );
+
+
+        errorResult.textContent =
+            error &&
+            error.message
+                ? error.message
+                : 'Unable to search users.';
+
+
+        errorResult.style.padding =
+            '14px';
+
+
+        errorResult.style.color =
+            '#a33f3f';
+
+
+        errorResult.style.fontSize =
+            '12px';
+
+
+        chatCreateGroupPeopleResults
+            .appendChild(
+                errorResult
+            );
+
+
+        chatCreateGroupPeopleResults.style.display =
+            'block';
+    }
+}
+
+/* =====================================================
+   CREATE GROUP SEARCH EVENTS
+===================================================== */
+
+if (
+    chatCreateGroupPeopleSearch
+) {
+
+    chatCreateGroupPeopleSearch.addEventListener(
+        'input',
+
+        () => {
+
+            if (
+                chatCreateGroupSearchTimer
+            ) {
+
+                clearTimeout(
+                    chatCreateGroupSearchTimer
+                );
+            }
+
+
+            const searchText =
+                chatCreateGroupPeopleSearch
+                    .value
+                    .trim();
+
+
+            if (
+                searchText.length < 2
+            ) {
+
+                if (
+                    chatCreateGroupPeopleResults
+                ) {
+
+                    chatCreateGroupPeopleResults.innerHTML =
+                        '';
+
+                    chatCreateGroupPeopleResults.style.display =
+                        'none';
+                }
+
+                return;
+            }
+
+
+            chatCreateGroupSearchTimer =
+                setTimeout(
+                    () => {
+
+                        searchChatCreateGroupPeople();
+
+                    },
+                    300
+                );
+        }
+    );
+}
+
+if (
+    chatCreateGroupNameInput
+) {
+
+    chatCreateGroupNameInput.addEventListener(
+        'input',
+
+        () => {
+
+            updateChatCreateGroupSubmitState();
+        }
+    );
 }
 
 
