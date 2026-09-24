@@ -5798,7 +5798,7 @@ if (
  */
 if (messageSysId) {
 
-    row._serviceCallRenderReactions =
+    messageRow._serviceCallRenderReactions =
         (
             reactions,
             myReaction
@@ -6380,22 +6380,6 @@ async function checkForNewChatMessages() {
             )
                 ? result.messages
                 : [];
-
-        updates.forEach(
-    update => {
-
-        if (!update) {
-            return;
-        }
-
-
-        updateChatMessageReactions(
-            update.message_sys_id,
-            update.reactions || [],
-            update.my_reaction || ''
-        );
-    }
-);
 
 
         /*
