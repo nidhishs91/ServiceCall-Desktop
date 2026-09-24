@@ -71,6 +71,7 @@ const chatSendButton =
     );
 let activeChatConversation =
     null;
+let lastChatMessageSysId = '';
 
 /* -------------------------------------------------
    CHAT ELEMENTS
@@ -352,6 +353,12 @@ let notificationSearchTimer = null;
 
 let knownNotificationIds =
     new Set();
+
+let chatMessageSyncTimer =
+    null;
+
+let chatMessageSyncRunning =
+    false;
 
 /*
  * Notifications currently loaded from ServiceNow.
@@ -5228,6 +5235,32 @@ async function openChatConversation(
                 ? result.messages
                 : [];
 
+        /*
+ * Remember the newest message returned
+ * by ServiceNow.
+ *
+ * This becomes the checkpoint for
+ * silent incremental synchronization.
+ */
+if (messages.length > 0) {
+
+    const newestMessage =
+        messages[
+            messages.length - 1
+        ];
+
+
+    lastChatMessageSysId =
+        String(
+            newestMessage.sys_id ||
+            ''
+        ).trim();
+
+} else {
+
+    lastChatMessageSysId =
+        '';
+}
 
         if (!chatMessages) {
             return;
@@ -5408,6 +5441,341 @@ if (
 let chatMessageSending =
     false;
 
+/* =======================================================
+   SERVICECALL CHAT - APPEND MESSAGE
+======================================================= */
+
+function appendChatMessage(
+    message
+) {
+
+    if (
+        !chatMessages ||
+        !message
+    ) {
+        return;
+    }
+
+
+    /*
+     * Remove beginning/loading placeholder
+     * if one is currently visible.
+     */
+    const placeholder =
+        chatMessages.querySelector(
+            '.chat-message-placeholder'
+        );
+
+    if (placeholder) {
+        placeholder.remove();
+    }
+
+
+    const messageRow =
+        document.createElement(
+            'div'
+        );
+
+
+    messageRow.style.cssText = `
+        display:flex;
+        flex-direction:column;
+        align-items:${
+            message.is_mine
+                ? 'flex-end'
+                : 'flex-start'
+        };
+        margin:8px 14px;
+    `;
+
+
+    const bubble =
+        document.createElement(
+            'div'
+        );
+
+
+    bubble.textContent =
+        message.text || '';
+
+
+    bubble.style.cssText = `
+        max-width:70%;
+        padding:9px 12px;
+        border-radius:12px;
+        font-size:13px;
+        line-height:1.4;
+        white-space:pre-wrap;
+        overflow-wrap:anywhere;
+        background:${
+            message.is_mine
+                ? '#dff3ec'
+                : '#f1f3f2'
+        };
+        color:#1f2927;
+    `;
+
+
+    const metadata =
+        document.createElement(
+            'div'
+        );
+
+
+    metadata.textContent =
+        message.sent_at || '';
+
+
+    metadata.style.cssText = `
+        margin-top:3px;
+        font-size:10px;
+        color:#89918f;
+    `;
+
+
+    messageRow.appendChild(
+        bubble
+    );
+
+
+    messageRow.appendChild(
+        metadata
+    );
+
+
+    chatMessages.appendChild(
+        messageRow
+    );
+
+
+    /*
+     * Keep newest message visible.
+     */
+    chatMessages.scrollTop =
+        chatMessages.scrollHeight;
+}
+
+async function checkForNewChatMessages() {
+
+    /*
+     * Nothing to synchronize unless
+     * a conversation is currently open.
+     */
+    if (
+        !activeChatConversation ||
+        !activeChatConversation.sys_id
+    ) {
+        return;
+    }
+
+
+    /*
+     * We need an existing checkpoint.
+     *
+     * Initial conversation loading is
+     * responsible for establishing it.
+     */
+    if (!lastChatMessageSysId) {
+        return;
+    }
+
+
+    /*
+     * Remember which conversation this
+     * request belongs to.
+     *
+     * The user may switch conversations
+     * while the request is running.
+     */
+    const conversationSysId =
+        activeChatConversation.sys_id;
+
+
+    const checkpointSysId =
+        lastChatMessageSysId;
+
+
+    try {
+
+        const result =
+            await window
+                .serviceCall
+                .getMessages(
+                    conversationSysId,
+                    checkpointSysId
+                );
+
+
+        if (
+            !result ||
+            result.success !== true
+        ) {
+
+            console.warn(
+                'Silent chat synchronization failed:',
+                result
+            );
+
+            return;
+        }
+
+
+        /*
+         * Conversation changed while
+         * ServiceNow was responding.
+         *
+         * Ignore this old response.
+         */
+        if (
+            !activeChatConversation ||
+            activeChatConversation.sys_id !==
+                conversationSysId
+        ) {
+            return;
+        }
+
+
+        const newMessages =
+            Array.isArray(
+                result.messages
+            )
+                ? result.messages
+                : [];
+
+
+        /*
+         * Nothing new.
+         *
+         * Do absolutely nothing to the UI.
+         */
+        if (
+            newMessages.length === 0
+        ) {
+            return;
+        }
+
+
+        /*
+         * Append ONLY messages returned
+         * after our checkpoint.
+         */
+        newMessages.forEach(
+            newMessage => {
+
+                appendChatMessage(
+                    newMessage
+                );
+            }
+        );
+
+
+        /*
+         * Move checkpoint to the newest
+         * message we just received.
+         */
+        const newestMessage =
+            newMessages[
+                newMessages.length - 1
+            ];
+
+
+        lastChatMessageSysId =
+            String(
+                newestMessage.sys_id ||
+                lastChatMessageSysId
+            ).trim();
+
+
+        console.log(
+            'Silent Chat sync:',
+            newMessages.length,
+            'new message(s). New checkpoint:',
+            lastChatMessageSysId
+        );
+
+
+    } catch (error) {
+
+        /*
+         * Silent synchronization should
+         * never destroy/open/reload Chat.
+         */
+        console.error(
+            'Silent Chat synchronization error:',
+            error
+        );
+    }
+}
+
+function stopChatMessageSync() {
+
+    if (chatMessageSyncTimer) {
+
+        clearInterval(
+            chatMessageSyncTimer
+        );
+
+        chatMessageSyncTimer =
+            null;
+    }
+}
+
+
+function startChatMessageSync() {
+
+    /*
+     * Never allow multiple polling
+     * timers to run together.
+     */
+    stopChatMessageSync();
+
+
+    chatMessageSyncTimer =
+        setInterval(
+            async () => {
+
+                /*
+                 * Prevent overlapping requests
+                 * if ServiceNow responds slowly.
+                 */
+                if (chatMessageSyncRunning) {
+                    return;
+                }
+
+
+                if (
+                    !activeChatConversation ||
+                    !activeChatConversation.sys_id ||
+                    !lastChatMessageSysId
+                ) {
+                    return;
+                }
+
+
+                chatMessageSyncRunning =
+                    true;
+
+
+                try {
+
+                    await checkForNewChatMessages();
+
+                } finally {
+
+                    chatMessageSyncRunning =
+                        false;
+                }
+
+            },
+
+            2000
+        );
+}
+
+window.testChatSync =
+    checkForNewChatMessages;
+
+startChatMessageSync();
 
 async function sendActiveChatMessage() {
 
@@ -5524,23 +5892,111 @@ async function sendActiveChatMessage() {
         resizeChatMessageInput();
 
 
-        /*
-         * Reload this conversation from
-         * ServiceNow so the server remains
-         * the source of truth.
-         */
-        await openChatConversation(
-            activeChatConversation
-        );
+       /*
+ * Append only the successfully
+ * stored message.
+ *
+ * Do NOT reload the conversation.
+ */
+appendChatMessage({
+    text:
+        result.message_text ||
+        result.text ||
+        message,
+
+    sent_at:
+        result.sent_at ||
+        '',
+
+    is_mine:
+        true
+});
 
 
+/*
+ * Update our in-memory conversation.
+ */
+activeChatConversation
+    .last_message_preview =
+        message;
+
+activeChatConversation
+    .last_message_at =
+        result.sent_at ||
+        activeChatConversation
+            .last_message_at ||
+        '';
+
+
+/*
+ * Update ONLY this conversation's
+ * preview in the sidebar.
+ *
+ * We are deliberately not calling
+ * loadChatConversations().
+ */
+const conversationRows =
+    chatConversationList
+        ? chatConversationList
+            .querySelectorAll(
+                'button'
+            )
+        : [];
+
+
+conversationRows.forEach(
+    row => {
+
         /*
-         * Refresh left-side preview too.
+         * The currently active direct
+         * conversation can be matched by
+         * its displayed user name for now.
          *
-         * It should now show the newly
-         * sent message.
+         * We will give rows explicit
+         * conversation IDs when we build
+         * silent synchronization next.
          */
-        await loadChatConversations();
+        const rowName =
+            row.querySelector(
+                'div > div:first-child'
+            );
+
+
+        if (
+            !rowName ||
+            rowName.textContent !==
+                (
+                    activeChatConversation
+                        .display_name ||
+                    activeChatConversation
+                        .title ||
+                    'Conversation'
+                )
+        ) {
+            return;
+        }
+
+
+        const information =
+            row.children[1];
+
+
+        if (!information) {
+            return;
+        }
+
+
+        const preview =
+            information.children[1];
+
+
+        if (preview) {
+
+            preview.textContent =
+                message;
+        }
+    }
+);
 
 
     } catch (error) {

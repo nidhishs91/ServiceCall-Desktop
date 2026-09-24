@@ -10654,12 +10654,20 @@ ipcMain.handle(
 
     async (
         event,
-        conversationSysId
+        payload = {}
     ) => {
 
         const conversationId =
             String(
-                conversationSysId || ''
+                payload.conversationSysId ||
+                ''
+            ).trim();
+
+
+        const afterMessageSysId =
+            String(
+                payload.afterMessageSysId ||
+                ''
             ).trim();
 
 
@@ -10678,12 +10686,37 @@ ipcMain.handle(
 
         try {
 
+            /*
+             * Normal initial load:
+             *
+             * /messages?conversation_id=...
+             */
+            let endpoint =
+                '/messages?conversation_id=' +
+                encodeURIComponent(
+                    conversationId
+                );
+
+
+            /*
+             * Silent incremental refresh:
+             *
+             * /messages?conversation_id=...
+             * &after=<last_message_sys_id>
+             */
+            if (afterMessageSysId) {
+
+                endpoint +=
+                    '&after=' +
+                    encodeURIComponent(
+                        afterMessageSysId
+                    );
+            }
+
+
             const result =
                 await serviceCallApiRequest(
-                    '/messages?conversation_id=' +
-                        encodeURIComponent(
-                            conversationId
-                        ),
+                    endpoint,
                     'GET'
                 );
 
@@ -10701,15 +10734,12 @@ ipcMain.handle(
 
             return {
                 success: false,
-
                 code:
                     error.code ||
                     'GET_MESSAGES_FAILED',
-
                 message:
                     error.message ||
                     'Unable to retrieve messages.',
-
                 messages: []
             };
         }

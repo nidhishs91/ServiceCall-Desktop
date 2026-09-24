@@ -120,10 +120,19 @@ getConversations:
         ),
 
         getMessages:
-    (conversationSysId) =>
+    (
+        conversationSysId,
+        afterMessageSysId = ''
+    ) =>
         ipcRenderer.invoke(
             'servicecall-get-messages',
-            conversationSysId
+            {
+                conversationSysId:
+                    conversationSysId,
+
+                afterMessageSysId:
+                    afterMessageSysId
+            }
         ),
 
         sendMessage:
