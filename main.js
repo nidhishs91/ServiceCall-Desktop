@@ -11036,41 +11036,39 @@ ipcMain.handle(
 
 ipcMain.handle(
     'servicecall-mark-conversation-read',
+
     async (
         event,
         conversationSysId
     ) => {
 
+        conversationSysId =
+            String(
+                conversationSysId || ''
+            ).trim();
+
+
+        if (!conversationSysId) {
+
+            return {
+                success: false,
+                code:
+                    'CONVERSATION_REQUIRED',
+                message:
+                    'Conversation is required.'
+            };
+        }
+
+
         try {
-
-            conversationSysId =
-                String(
-                    conversationSysId || ''
-                ).trim();
-
-
-            if (!conversationSysId) {
-
-                return {
-                    success: false,
-                    code:
-                        'CONVERSATION_REQUIRED',
-                    message:
-                        'Conversation is required.'
-                };
-            }
-
 
             const result =
                 await serviceCallApiRequest(
                     '/mark-conversation-read',
+                    'POST',
                     {
-                        method: 'POST',
-
-                        body: {
-                            conversation_id:
-                                conversationSysId
-                        }
+                        conversation_id:
+                            conversationSysId
                     }
                 );
 
@@ -11081,19 +11079,20 @@ ipcMain.handle(
         } catch (error) {
 
             console.error(
-                'Unable to mark conversation as read:',
-                error
+                'Unable to mark ServiceCall conversation as read:',
+                error.message
             );
 
 
             return {
                 success: false,
+
                 code:
+                    error.code ||
                     'MARK_CONVERSATION_READ_FAILED',
+
                 message:
-                    error &&
-                    error.message ?
-                    error.message :
+                    error.message ||
                     'Unable to mark conversation as read.'
             };
         }

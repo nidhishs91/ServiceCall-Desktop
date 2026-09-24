@@ -5572,16 +5572,58 @@ function appendChatMessage(
     }
 
 
-    const messageSysId =
-        String(
-            message.sys_id || ''
-        ).trim();
+   const messageSysId =
+    String(
+        message.sys_id || ''
+    ).trim();
 
 
-    const messageRow =
-        document.createElement(
-            'div'
+/* =====================================================
+   DUPLICATE MESSAGE PROTECTION
+
+   The same ServiceNow message can reach the renderer
+   through more than one path:
+
+   1. /send-message response
+   2. silent message synchronization
+
+   A ServiceNow message sys_id must only ever have
+   one visible message row.
+===================================================== */
+
+if (messageSysId) {
+
+    const existingMessageRow =
+        Array.from(
+            chatMessages.querySelectorAll(
+                '.chat-message-row'
+            )
+        ).find(
+            existingRow =>
+                String(
+                    existingRow.dataset
+                        .messageSysId || ''
+                ) ===
+                messageSysId
         );
+
+
+    if (existingMessageRow) {
+
+        console.log(
+            'Duplicate chat message ignored:',
+            messageSysId
+        );
+
+        return;
+    }
+}
+
+
+const messageRow =
+    document.createElement(
+        'div'
+    );
 
 
     messageRow.className =
