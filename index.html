@@ -2430,6 +2430,675 @@
 
         }
 
+        /* =================================================
+   CHAT
+================================================= */
+
+        .chat-page-heading {
+            margin-bottom: 18px;
+        }
+
+
+        .chat-workspace {
+            height: calc(100vh - 165px);
+
+            display: grid;
+            grid-template-columns:
+                minmax(260px, 320px) minmax(0, 1fr);
+
+            overflow: hidden;
+
+            background: white;
+
+            border:
+                1px solid #dfe7e4;
+
+            border-radius: 14px;
+
+            box-shadow:
+                0 2px 8px rgba(23, 51, 45, 0.035);
+        }
+
+
+        /* =================================================
+   CHAT SIDEBAR
+================================================= */
+
+        .chat-sidebar {
+            min-width: 0;
+
+            display: flex;
+            flex-direction: column;
+
+            background: #fbfcfc;
+
+            border-right:
+                1px solid #e3e9e7;
+        }
+
+
+        .chat-search-section {
+            position: relative;
+
+            padding: 16px;
+
+            border-bottom:
+                1px solid #e7ecea;
+        }
+
+
+        .chat-search-wrapper {
+            position: relative;
+        }
+
+
+        .chat-search-icon {
+            position: absolute;
+
+            left: 13px;
+            top: 50%;
+
+            width: 17px;
+            height: 17px;
+
+            transform:
+                translateY(-50%);
+
+            color: #758782;
+
+            pointer-events: none;
+        }
+
+
+        .chat-search-input {
+            width: 100%;
+            height: 42px;
+
+            padding:
+                0 13px 0 40px;
+
+            border:
+                1px solid #d6e0dd;
+
+            border-radius: 10px;
+
+            outline: none;
+
+            background: white;
+            color: #1c332e;
+
+            font-size: 13px;
+
+            transition:
+                border-color 0.18s ease,
+                box-shadow 0.18s ease;
+        }
+
+
+        .chat-search-input::placeholder {
+            color: #91a09c;
+        }
+
+
+        .chat-search-input:focus {
+            border-color: #3d917c;
+
+            box-shadow:
+                0 0 0 3px rgba(61, 145, 124, 0.11);
+        }
+
+
+        .chat-search-wrapper:focus-within .chat-search-icon {
+            color: #25745f;
+        }
+
+
+        .chat-search-input::-webkit-search-cancel-button {
+            display: none;
+        }
+
+
+        /* =================================================
+   PEOPLE SEARCH RESULTS
+================================================= */
+
+        .chat-people-search-results {
+            position: absolute;
+
+            z-index: 50;
+
+            top: 66px;
+            left: 16px;
+            right: 16px;
+
+            max-height: 300px;
+
+            overflow-y: auto;
+
+            background: white;
+
+            border:
+                1px solid #dce5e2;
+
+            border-radius: 11px;
+
+            box-shadow:
+                0 14px 35px rgba(16, 47, 43, 0.15);
+        }
+
+
+        /* =================================================
+   CONVERSATIONS
+================================================= */
+
+        .chat-conversations-header {
+            padding:
+                15px 17px 10px;
+
+            color: #526963;
+
+            font-size: 12px;
+            font-weight: 750;
+
+            text-transform: uppercase;
+
+            letter-spacing: 0.04em;
+        }
+
+
+        .chat-conversation-list {
+            flex: 1;
+
+            min-height: 0;
+
+            overflow-y: auto;
+
+            padding:
+                0 8px 12px;
+        }
+
+
+        .chat-conversation-empty {
+            padding:
+                38px 18px;
+
+            text-align: center;
+
+            color: #7c8c87;
+        }
+
+
+        .chat-conversation-empty-icon {
+            margin-bottom: 10px;
+
+            font-size: 25px;
+        }
+
+
+        .chat-conversation-empty-title {
+            margin-bottom: 5px;
+
+            color: #405b54;
+
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+
+        .chat-conversation-empty-text {
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+
+        /* =================================================
+   CHAT MAIN AREA
+================================================= */
+
+        .chat-main {
+            min-width: 0;
+            min-height: 0;
+
+            display: flex;
+
+            background: white;
+        }
+
+
+        .chat-empty-state {
+            width: 100%;
+
+            display: flex;
+            flex-direction: column;
+
+            align-items: center;
+            justify-content: center;
+
+            padding: 40px;
+
+            text-align: center;
+
+            color: #71827d;
+        }
+
+
+        .chat-empty-icon {
+            width: 64px;
+            height: 64px;
+
+            margin-bottom: 18px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 18px;
+
+            background: #edf5f2;
+
+            font-size: 27px;
+        }
+
+
+        .chat-empty-state h2 {
+            margin:
+                0 0 8px;
+
+            color: #29463f;
+
+            font-size: 20px;
+        }
+
+
+        .chat-empty-state p {
+            max-width: 390px;
+
+            margin: 0;
+
+            color: #7a8b86;
+
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+
+        /* =================================================
+   ACTIVE CONVERSATION
+================================================= */
+
+        .chat-conversation-panel {
+            width: 100%;
+            min-width: 0;
+            min-height: 0;
+
+            display: flex;
+            flex-direction: column;
+        }
+
+
+        .chat-conversation-header {
+            min-height: 72px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 20px;
+
+            padding:
+                12px 18px;
+
+            border-bottom:
+                1px solid #e7ecea;
+        }
+
+
+        .chat-user-information {
+            min-width: 0;
+
+            display: flex;
+            align-items: center;
+
+            gap: 11px;
+        }
+
+
+        .chat-user-avatar {
+            width: 40px;
+            height: 40px;
+
+            flex-shrink: 0;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 50%;
+
+            background: #dff3ec;
+            color: #17634f;
+
+            font-size: 14px;
+            font-weight: 800;
+        }
+
+
+        .chat-user-details {
+            min-width: 0;
+        }
+
+
+        .chat-user-name {
+            overflow: hidden;
+
+            color: #213d36;
+
+            font-size: 14px;
+            font-weight: 700;
+
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+
+        .chat-user-presence {
+            display: flex;
+
+            align-items: center;
+
+            gap: 6px;
+
+            margin-top: 4px;
+
+            color: #758782;
+
+            font-size: 11px;
+        }
+
+
+        .chat-user-presence-dot {
+            width: 8px;
+            height: 8px;
+
+            flex-shrink: 0;
+
+            border-radius: 50%;
+        }
+
+
+        .chat-user-presence-dot.available {
+            background: #22a06b;
+        }
+
+
+        .chat-user-presence-dot.busy,
+        .chat-user-presence-dot.in-call {
+            background: #d94c4c;
+        }
+
+
+        .chat-user-presence-dot.away {
+            background: #e0a21a;
+        }
+
+
+        .chat-user-presence-dot.out-of-office {
+            background: #7c63c7;
+        }
+
+
+        .chat-user-presence-dot.offline {
+            background: #7d8b87;
+        }
+
+
+        /* =================================================
+   HEADER ACTIONS
+================================================= */
+
+        .chat-header-actions {
+            display: flex;
+
+            align-items: center;
+
+            gap: 7px;
+
+            flex-shrink: 0;
+        }
+
+
+        .chat-header-action {
+            width: 38px;
+            height: 38px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border:
+                1px solid #d7e1de;
+
+            border-radius: 10px;
+
+            background: white;
+            color: #36564e;
+
+            cursor: pointer;
+
+            transition:
+                background 0.15s ease,
+                border-color 0.15s ease,
+                transform 0.15s ease;
+        }
+
+
+        .chat-header-action:hover {
+            background: #f1f7f4;
+
+            border-color: #b9cec8;
+        }
+
+
+        .chat-header-action:active {
+            transform:
+                scale(0.96);
+        }
+
+
+        .chat-call-action {
+            background: #126e5a;
+            border-color: #126e5a;
+
+            color: white;
+        }
+
+
+        .chat-call-action:hover {
+            background: #0e5e4d;
+            border-color: #0e5e4d;
+        }
+
+
+        /* =================================================
+   MESSAGES
+================================================= */
+
+        .chat-messages {
+            flex: 1;
+
+            min-height: 0;
+
+            overflow-y: auto;
+
+            padding: 22px;
+
+            background: #fafcfb;
+        }
+
+
+        .chat-message-placeholder {
+            height: 100%;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            color: #93a09c;
+
+            text-align: center;
+
+            font-size: 12px;
+        }
+
+
+        /* =================================================
+   MESSAGE COMPOSER
+================================================= */
+
+        .chat-composer {
+            display: flex;
+
+            align-items: flex-end;
+
+            gap: 9px;
+
+            padding: 13px 15px;
+
+            border-top:
+                1px solid #e7ecea;
+
+            background: white;
+        }
+
+
+        .chat-composer-actions {
+            display: flex;
+
+            align-items: center;
+
+            gap: 3px;
+        }
+
+
+        .chat-composer-action {
+            width: 35px;
+            height: 35px;
+
+            border: 0;
+
+            border-radius: 8px;
+
+            background: transparent;
+
+            cursor: pointer;
+
+            font-size: 17px;
+        }
+
+
+        .chat-composer-action:hover:not(:disabled) {
+            background: #edf3f1;
+        }
+
+
+        .chat-composer-action:disabled {
+            opacity: 0.45;
+
+            cursor: default;
+        }
+
+
+        .chat-message-input {
+            flex: 1;
+
+            min-width: 0;
+
+            min-height: 40px;
+            max-height: 120px;
+
+            padding:
+                10px 12px;
+
+            border:
+                1px solid #d6e0dd;
+
+            border-radius: 10px;
+
+            outline: none;
+
+            resize: none;
+
+            font-family: inherit;
+            font-size: 13px;
+
+            line-height: 1.45;
+
+            color: #29463f;
+        }
+
+
+        .chat-message-input:focus {
+            border-color: #3d917c;
+
+            box-shadow:
+                0 0 0 3px rgba(61, 145, 124, 0.09);
+        }
+
+
+        .chat-message-input:disabled {
+            background: #f6f8f7;
+
+            cursor: default;
+        }
+
+
+        .chat-send-button {
+            min-width: 65px;
+            height: 40px;
+
+            padding:
+                0 14px;
+
+            border: 0;
+
+            border-radius: 9px;
+
+            background: #126e5a;
+            color: white;
+
+            font-size: 12px;
+            font-weight: 700;
+
+            cursor: pointer;
+        }
+
+
+        .chat-send-button:hover:not(:disabled) {
+            background: #0e5e4d;
+        }
+
+
+        .chat-send-button:disabled {
+            opacity: 0.45;
+
+            cursor: default;
+        }
+
+
+        /* =================================================
+   CHAT RESPONSIVE
+================================================= */
+
+        @media (max-width: 850px) {
+
+            .chat-workspace {
+                grid-template-columns:
+                    240px minmax(0, 1fr);
+            }
+
+        }
 
         /* =================================================
            SETTINGS
@@ -2911,9 +3580,9 @@
                     Home
                 </button>
 
-                <button class="nav-button" data-view="peopleView">
+                <!-- <button class="nav-button" data-view="peopleView">
                     People
-                </button>
+                </button> -->
 
                 <button class="nav-button" data-view="meetingsView">
                     Meetings
@@ -3497,43 +4166,246 @@
 
                 </div>
 
-
                 <!-- =====================================
-                     CHAT
-                ====================================== -->
+     CHAT
+====================================== -->
 
                 <div id="chatView" class="view">
 
-
-                    <div class="page-heading">
-
+                    <div class="page-heading chat-page-heading">
 
                         <div>
-
-
                             <h1>
                                 Chat
                             </h1>
 
-
                             <p>
-                                Your ServiceCall conversations.
+                                Messages, calls and conversations with
+                                ServiceCall users.
                             </p>
-
-
                         </div>
 
-
                     </div>
 
 
-                    <div class="card placeholder">
-                        Chat is coming next.
-                    </div>
+                    <div class="chat-workspace">
 
+                        <!-- =============================
+             LEFT SIDE
+        ============================== -->
+
+                        <aside class="chat-sidebar">
+
+                            <div class="chat-search-section">
+
+                                <div class="chat-search-wrapper">
+
+                                    <svg class="chat-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                        aria-hidden="true">
+                                        <circle cx="11" cy="11" r="7"></circle>
+
+                                        <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
+                                    </svg>
+
+
+                                    <input id="chatPeopleSearchInput" class="chat-search-input" type="search"
+                                        placeholder="Search people..." autocomplete="off" spellcheck="false">
+
+                                </div>
+
+
+                                <!-- Search results will be rendered here later -->
+
+                                <div id="chatPeopleSearchResults" class="chat-people-search-results"
+                                    style="display: none;"></div>
+
+                            </div>
+
+                            <!-- SAVED CHAT CONVERSATIONS -->
+
+                            <div id="chatConversationList" class="chat-conversation-list"></div>
+
+
+                            <div class="chat-conversations-header">
+
+                                <span>
+                                    Conversations
+                                </span>
+
+                            </div>
+
+
+                            <!-- Real conversations will be rendered here -->
+
+                            <div id="chatConversationList" class="chat-conversation-list">
+
+                                <div class="chat-conversation-empty">
+
+                                    <div class="chat-conversation-empty-icon">
+                                        💬
+                                    </div>
+
+                                    <div class="chat-conversation-empty-title">
+                                        No conversations yet
+                                    </div>
+
+                                    <div class="chat-conversation-empty-text">
+                                        Search for someone above to start a conversation.
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                        </aside>
+
+
+                        <!-- =============================
+             RIGHT SIDE
+        ============================== -->
+
+                        <section class="chat-main">
+
+                            <!-- Empty state shown until somebody is selected -->
+
+                            <div id="chatEmptyState" class="chat-empty-state">
+
+                                <div class="chat-empty-icon">
+                                    💬
+                                </div>
+
+                                <h2>
+                                    Select a conversation
+                                </h2>
+
+                                <p>
+                                    Search for a ServiceCall user or select an
+                                    existing conversation to start chatting.
+                                </p>
+
+                            </div>
+
+
+                            <!--
+                This becomes visible when a user/conversation
+                is selected. We will wire it in renderer.js next.
+            -->
+
+                            <div id="chatConversationPanel" class="chat-conversation-panel" style="display: none;">
+
+                                <!-- Conversation header -->
+
+                                <header class="chat-conversation-header">
+
+                                    <div class="chat-user-information">
+
+                                        <div id="chatUserAvatar" class="chat-user-avatar">
+                                            ?
+                                        </div>
+
+
+                                        <div class="chat-user-details">
+
+                                            <div id="chatUserName" class="chat-user-name">
+                                                User
+                                            </div>
+
+
+                                            <div class="chat-user-presence">
+
+                                                <span id="chatUserPresenceDot"
+                                                    class="chat-user-presence-dot offline"></span>
+
+                                                <span id="chatUserPresenceText">
+                                                    Offline
+                                                </span>
+
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+
+
+                                    <div class="chat-header-actions">
+
+                                        <!-- Calendar / availability -->
+
+                                        <button id="chatCalendarButton" class="chat-header-action" type="button"
+                                            title="View availability" aria-label="View availability">
+                                            <span aria-hidden="true">
+                                                📅
+                                            </span>
+                                        </button>
+
+
+                                        <!-- Direct call -->
+
+                                        <button id="chatCallButton" class="chat-header-action chat-call-action"
+                                            type="button" title="Call" aria-label="Call">
+                                            <span aria-hidden="true">
+                                                ☎
+                                            </span>
+                                        </button>
+
+                                    </div>
+
+                                </header>
+
+
+                                <!-- Messages -->
+
+                                <div id="chatMessages" class="chat-messages">
+
+                                    <div class="chat-message-placeholder">
+
+                                        <div>
+                                            This is the beginning of your conversation.
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+
+                                <!-- Composer -->
+
+                                <div class="chat-composer">
+
+                                    <div class="chat-composer-actions">
+
+                                        <button id="chatAttachButton" class="chat-composer-action" type="button"
+                                            title="Attach file" disabled>
+                                            📎
+                                        </button>
+
+
+                                        <button id="chatEmojiButton" class="chat-composer-action" type="button"
+                                            title="Emoji" disabled>
+                                            😊
+                                        </button>
+
+                                    </div>
+
+
+                                    <textarea id="chatMessageInput" class="chat-message-input" rows="1"
+                                        placeholder="Type a message..." disabled></textarea>
+
+
+                                    <button id="chatSendButton" class="chat-send-button" type="button" disabled>
+                                        Send
+                                    </button>
+
+                                </div>
+
+                            </div>
+
+                        </section>
+
+                    </div>
 
                 </div>
-
 
                 <!-- =====================================
                      HISTORY
@@ -3616,6 +4488,7 @@
 
 
                 </div>
+
 
 
                 <!-- =====================================

@@ -269,6 +269,42 @@ if (isMeeting) {
     }
 }
 
+/* =====================================================
+   MEETING END / LEAVE SOUND
+===================================================== */
+
+function playMeetingLeaveEndSound() {
+
+    try {
+
+        const audio =
+            new Audio(
+                'assets/sounds/end-meet.mp3'
+            );
+
+        audio.volume =
+            0.70;
+
+        audio.play()
+            .catch(
+                error => {
+
+                    console.error(
+                        'Unable to play meeting leave/end sound:',
+                        error
+                    );
+                }
+            );
+
+    } catch (error) {
+
+        console.error(
+            'Meeting leave/end sound failed:',
+            error
+        );
+    }
+}
+
 /* -------------------------
    RINGTONE
 ------------------------- */
@@ -4592,6 +4628,10 @@ document
                         );
                     }
 
+                    if(isMeeting){
+                        playMeetingLeaveEndSound();
+                    }
+
 
                     /*
                      * ServiceNow has successfully
@@ -4686,6 +4726,10 @@ if (
                     : 'Unable to leave call.'
             )
     );
+}
+
+if(isMeeting){
+    playMeetingLeaveEndSound();
 }
 
 

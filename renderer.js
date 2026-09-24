@@ -55,6 +55,88 @@ const peopleSearchResults =
         'peopleSearchResults'
     );
 
+const chatMessages =
+    document.getElementById(
+        'chatMessages'
+    );
+
+const chatMessageInput =
+    document.getElementById(
+        'chatMessageInput'
+    );
+
+const chatSendButton =
+    document.getElementById(
+        'chatSendButton'
+    );
+let activeChatConversation =
+    null;
+
+/* -------------------------------------------------
+   CHAT ELEMENTS
+------------------------------------------------- */
+
+const chatPeopleSearchInput =
+    document.getElementById(
+        'chatPeopleSearchInput'
+    );
+
+const chatPeopleSearchResults =
+    document.getElementById(
+        'chatPeopleSearchResults'
+    );
+
+const chatConversationList =
+    document.getElementById(
+        'chatConversationList'
+    );
+
+const chatEmptyState =
+    document.getElementById(
+        'chatEmptyState'
+    );
+
+const chatConversationPanel =
+    document.getElementById(
+        'chatConversationPanel'
+    );
+
+const chatUserAvatar =
+    document.getElementById(
+        'chatUserAvatar'
+    );
+
+const chatUserName =
+    document.getElementById(
+        'chatUserName'
+    );
+
+const chatUserPresenceDot =
+    document.getElementById(
+        'chatUserPresenceDot'
+    );
+
+const chatUserPresenceText =
+    document.getElementById(
+        'chatUserPresenceText'
+    );
+
+const chatCallButton =
+    document.getElementById(
+        'chatCallButton'
+    );
+
+const chatCalendarButton =
+    document.getElementById(
+        'chatCalendarButton'
+    );
+
+let chatPeopleSearchTimer =
+    null;
+
+let activeChatUser =
+    null;
+
 /* =====================================================
    TOP BAR PRESENCE
 ===================================================== */
@@ -1007,6 +1089,18 @@ if (currentPageTitle) {
 } else {
 
     stopMeetingsAutoRefresh();
+}
+
+/*
+ * Load real Chat conversations
+ * whenever Chat is opened.
+ */
+if (
+    targetView ===
+    'chatView'
+) {
+
+    await loadChatConversations();
 }
 
 
@@ -2138,6 +2232,8 @@ if (meetingDetailsActionButton) {
                         );
                     }
 
+                    playMeetingJoinStartSound();
+
 
                     /*
                      * main.js already opens the
@@ -2196,6 +2292,8 @@ if (meetingDetailsActionButton) {
                                 : 'Unable to join meeting.'
                         );
                     }
+
+                    playMeetingJoinStartSound();
 
 
                     meetingDetailsModal.classList.remove(
@@ -2776,6 +2874,8 @@ if (
                     );
                 }
 
+                playMeetingJoinStartSound();
+
 
                 console.log(
                     'Meeting started:',
@@ -2872,6 +2972,8 @@ if (
                             : 'Unable to join meeting.'
                     );
                 }
+
+                playMeetingJoinStartSound();
 
 
                 console.log(
@@ -2977,6 +3079,8 @@ if (
                     result
                 );
 
+                playMeetingLeaveEndSound();
+
 
                 await loadMeetings(true);
 
@@ -3072,6 +3176,8 @@ if (
                     'Meeting ended:',
                     result
                 );
+
+                playMeetingLeaveEndSound();
 
 
                 /*
@@ -4905,6 +5011,2146 @@ else if (
                 scheduleMeetingSubmitButton.disabled =
                     false;
             }
+        }
+    );
+}
+
+/* =======================================================
+   SERVICECALL CHAT - OPEN CONVERSATION
+======================================================= */
+
+async function openChatConversation(
+    conversation
+) {
+
+    if (
+        !conversation ||
+        !conversation.sys_id
+    ) {
+        return;
+    }
+
+
+    activeChatConversation =
+        conversation;
+
+
+    /*
+     * Direct conversations already contain
+     * the other ServiceCall user's sys_id.
+     *
+     * This preserves the existing Chat
+     * direct-call architecture.
+     */
+    if (
+        conversation.type === 'direct' &&
+        conversation.other_user_sys_id
+    ) {
+
+        activeChatUser = {
+
+            sys_id:
+                conversation.other_user_sys_id,
+
+            name:
+                conversation.other_user_name ||
+                conversation.display_name ||
+                'Unknown User',
+
+            user_name:
+                conversation.other_user_user_name ||
+                '',
+
+            /*
+             * /conversations does not yet return
+             * live presence.
+             *
+             * Presence can be refreshed separately
+             * later.
+             */
+            display_status:
+                'Offline'
+        };
+
+    } else {
+
+        activeChatUser =
+            null;
+    }
+
+
+    const displayName =
+        conversation.display_name ||
+        conversation.title ||
+        'Conversation';
+
+
+    /* -------------------------
+       HEADER NAME
+    ------------------------- */
+
+    if (chatUserName) {
+
+        chatUserName.textContent =
+            displayName;
+    }
+
+
+    /* -------------------------
+       AVATAR
+    ------------------------- */
+
+    if (chatUserAvatar) {
+
+        const nameParts =
+            displayName
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean);
+
+
+        let initials =
+            '?';
+
+
+        if (
+            nameParts.length >= 2
+        ) {
+
+            initials =
+                (
+                    nameParts[0][0] +
+                    nameParts[
+                        nameParts.length - 1
+                    ][0]
+                ).toUpperCase();
+
+        } else if (
+            nameParts.length === 1
+        ) {
+
+            initials =
+                nameParts[0][0]
+                    .toUpperCase();
+        }
+
+
+        chatUserAvatar.textContent =
+            initials;
+    }
+
+
+    /* -------------------------
+       TEMPORARY PRESENCE
+    ------------------------- */
+
+    if (chatUserPresenceText) {
+
+        chatUserPresenceText.textContent =
+            'Offline';
+    }
+
+
+    if (chatUserPresenceDot) {
+
+        chatUserPresenceDot.className =
+            'chat-user-presence-dot offline';
+    }
+
+
+    /* -------------------------
+       SHOW CONVERSATION PANEL
+    ------------------------- */
+
+    if (chatEmptyState) {
+
+        chatEmptyState.style.display =
+            'none';
+    }
+
+
+    if (chatConversationPanel) {
+
+        chatConversationPanel.style.display =
+            'flex';
+    }
+
+
+    /* -------------------------
+       LOADING STATE
+    ------------------------- */
+
+    if (chatMessages) {
+
+        chatMessages.innerHTML = `
+            <div class="chat-message-placeholder">
+                <div>
+                    Loading messages...
+                </div>
+            </div>
+        `;
+    }
+
+    try {
+
+        const result =
+            await window
+                .serviceCall
+                .getMessages(
+                    conversation.sys_id
+                );
+
+
+        console.log(
+            'ServiceCall conversation messages:',
+            result
+        );
+
+
+        if (
+            !result ||
+            result.success !== true
+        ) {
+
+            throw new Error(
+                result &&
+                result.message
+                    ? result.message
+                    : 'Unable to load messages.'
+            );
+        }
+
+
+        const messages =
+            Array.isArray(
+                result.messages
+            )
+                ? result.messages
+                : [];
+
+
+        if (!chatMessages) {
+            return;
+        }
+
+
+        chatMessages.innerHTML =
+            '';
+
+
+        /* -------------------------
+           NO MESSAGES
+        ------------------------- */
+
+        if (
+            messages.length === 0
+        ) {
+
+            chatMessages.innerHTML = `
+                <div class="chat-message-placeholder">
+                    <div>
+                        This is the beginning of your conversation.
+                    </div>
+                </div>
+            `;
+
+            return;
+        }
+
+
+        /* -------------------------
+           RENDER MESSAGES
+        ------------------------- */
+
+        messages.forEach(
+            message => {
+
+                const messageRow =
+                    document.createElement(
+                        'div'
+                    );
+
+
+                messageRow.style.cssText = `
+                    display:flex;
+                    flex-direction:column;
+                    align-items:${
+                        message.is_mine
+                            ? 'flex-end'
+                            : 'flex-start'
+                    };
+                    margin:8px 14px;
+                `;
+
+
+                const bubble =
+                    document.createElement(
+                        'div'
+                    );
+
+
+                bubble.textContent =
+                    message.text || '';
+
+
+                bubble.style.cssText = `
+                    max-width:70%;
+                    padding:9px 12px;
+                    border-radius:12px;
+                    font-size:13px;
+                    line-height:1.4;
+                    white-space:pre-wrap;
+                    overflow-wrap:anywhere;
+                    background:${
+                        message.is_mine
+                            ? '#dff3ec'
+                            : '#f1f3f2'
+                    };
+                    color:#1f2927;
+                `;
+
+
+                const metadata =
+                    document.createElement(
+                        'div'
+                    );
+
+
+                metadata.textContent =
+                    message.sent_at || '';
+
+
+                metadata.style.cssText = `
+                    margin-top:3px;
+                    font-size:10px;
+                    color:#89918f;
+                `;
+
+
+                messageRow.appendChild(
+                    bubble
+                );
+
+
+                messageRow.appendChild(
+                    metadata
+                );
+
+
+                chatMessages.appendChild(
+                    messageRow
+                );
+            }
+        );
+
+
+        /*
+         * Start at the newest message.
+         */
+        chatMessages.scrollTop =
+            chatMessages.scrollHeight;
+
+        /*
+ * Enable composer for direct chat.
+ */
+if (
+    conversation.type === 'direct' &&
+    conversation.other_user_sys_id
+) {
+
+    if (chatMessageInput) {
+
+        chatMessageInput.disabled =
+            false;
+
+        chatMessageInput.placeholder =
+            'Type a message...';
+    }
+
+
+    if (chatSendButton) {
+
+        chatSendButton.disabled =
+            !String(
+                chatMessageInput
+                    ? chatMessageInput.value
+                    : ''
+            ).trim();
+    }
+}
+
+
+    } catch (error) {
+
+        console.error(
+            'Unable to open ServiceCall conversation:',
+            error
+        );
+
+
+        if (chatMessages) {
+
+            chatMessages.innerHTML = `
+                <div class="chat-message-placeholder">
+                    <div>
+                        Unable to load messages.
+                    </div>
+                </div>
+            `;
+        }
+    }
+}
+
+/* =======================================================
+   SERVICECALL CHAT - SEND MESSAGE
+======================================================= */
+
+let chatMessageSending =
+    false;
+
+
+async function sendActiveChatMessage() {
+
+    if (chatMessageSending) {
+        return;
+    }
+
+
+    if (
+        !activeChatConversation ||
+        activeChatConversation.type !==
+            'direct' ||
+        !activeChatConversation
+            .other_user_sys_id
+    ) {
+
+        console.warn(
+            'No active direct conversation.'
+        );
+
+        return;
+    }
+
+
+    if (!chatMessageInput) {
+        return;
+    }
+
+
+    const message =
+        String(
+            chatMessageInput.value || ''
+        ).trim();
+
+
+    if (!message) {
+        return;
+    }
+
+
+    if (message.length > 10000) {
+
+        console.error(
+            'Message exceeds 10000 characters.'
+        );
+
+        return;
+    }
+
+
+    chatMessageSending =
+        true;
+
+
+    /*
+     * Lock immediately.
+     *
+     * Prevents double-click / duplicate send.
+     */
+    chatMessageInput.disabled =
+        true;
+
+
+    if (chatSendButton) {
+
+        chatSendButton.disabled =
+            true;
+
+        chatSendButton.textContent =
+            'Sending...';
+    }
+
+
+    try {
+
+        const result =
+            await window
+                .serviceCall
+                .sendMessage(
+                    activeChatConversation
+                        .other_user_sys_id,
+
+                    message
+                );
+
+
+        console.log(
+            'ServiceCall message sent:',
+            result
+        );
+
+
+        if (
+            !result ||
+            result.success !== true
+        ) {
+
+            throw new Error(
+                result &&
+                result.message
+                    ? result.message
+                    : 'Unable to send message.'
+            );
+        }
+
+
+        /*
+         * IMPORTANT:
+         * Only clear after server success.
+         */
+        chatMessageInput.value =
+            '';
+
+        resizeChatMessageInput();
+
+
+        /*
+         * Reload this conversation from
+         * ServiceNow so the server remains
+         * the source of truth.
+         */
+        await openChatConversation(
+            activeChatConversation
+        );
+
+
+        /*
+         * Refresh left-side preview too.
+         *
+         * It should now show the newly
+         * sent message.
+         */
+        await loadChatConversations();
+
+
+    } catch (error) {
+
+        console.error(
+            'Unable to send ServiceCall message:',
+            error
+        );
+
+
+        /*
+         * Do NOT clear the text.
+         *
+         * The user can retry.
+         */
+        chatMessageInput.disabled =
+            false;
+
+
+        if (chatSendButton) {
+
+            chatSendButton.disabled =
+                false;
+        }
+
+    } finally {
+
+        chatMessageSending =
+            false;
+
+
+        if (chatSendButton) {
+
+            chatSendButton.textContent =
+                'Send';
+        }
+
+
+        if (chatMessageInput) {
+
+            chatMessageInput.disabled =
+                false;
+
+
+            if (chatSendButton) {
+
+                chatSendButton.disabled =
+                    !String(
+                        chatMessageInput.value ||
+                        ''
+                    ).trim();
+            }
+
+
+            chatMessageInput.focus();
+        }
+    }
+}
+
+/* =======================================================
+   SERVICECALL CHAT - SEND BUTTON
+======================================================= */
+
+if (chatSendButton) {
+
+    chatSendButton.addEventListener(
+        'click',
+
+        async () => {
+
+            await sendActiveChatMessage();
+        }
+    );
+}
+
+
+/* =======================================================
+   SERVICECALL CHAT - MESSAGE INPUT
+======================================================= */
+
+if (chatMessageInput) {
+
+    chatMessageInput.addEventListener(
+        'input',
+
+        () => {
+
+            /*
+             * Grow / shrink composer
+             * according to message content.
+             */
+            resizeChatMessageInput();
+
+
+            if (
+                !chatSendButton ||
+                chatMessageSending
+            ) {
+                return;
+            }
+
+
+            chatSendButton.disabled =
+                !String(
+                    chatMessageInput.value ||
+                    ''
+                ).trim();
+        }
+    );
+}
+
+/* =======================================================
+   SERVICECALL CHAT - KEYBOARD SEND
+======================================================= */
+
+if (chatMessageInput) {
+
+    chatMessageInput.addEventListener(
+        'keydown',
+
+        async event => {
+
+            if (event.key !== 'Enter') {
+                return;
+            }
+
+
+            /*
+             * CTRL + ENTER
+             * Explicitly insert a newline.
+             */
+            if (event.ctrlKey) {
+
+                event.preventDefault();
+
+
+                const start =
+                    chatMessageInput
+                        .selectionStart;
+
+                const end =
+                    chatMessageInput
+                        .selectionEnd;
+
+
+                const currentValue =
+                    chatMessageInput.value;
+
+
+                chatMessageInput.value =
+                    currentValue.substring(
+                        0,
+                        start
+                    ) +
+                    '\n' +
+                    currentValue.substring(
+                        end
+                    );
+
+
+                const newPosition =
+                    start + 1;
+
+
+                chatMessageInput
+                    .setSelectionRange(
+                        newPosition,
+                        newPosition
+                    );
+
+
+                /*
+                 * Trigger normal input behavior
+                 * after changing value manually.
+                 */
+                chatMessageInput.dispatchEvent(
+                    new Event(
+                        'input',
+                        {
+                            bubbles: true
+                        }
+                    )
+                );
+
+
+                return;
+            }
+
+
+            /*
+             * ENTER
+             * Send.
+             *
+             * Shift + Enter is also allowed
+             * as a normal newline.
+             */
+            if (
+                event.shiftKey ||
+                event.altKey ||
+                event.metaKey
+            ) {
+
+                return;
+            }
+
+
+            event.preventDefault();
+
+
+            if (chatMessageSending) {
+                return;
+            }
+
+
+            const message =
+                String(
+                    chatMessageInput.value ||
+                    ''
+                ).trim();
+
+
+            if (!message) {
+                return;
+            }
+
+
+            await sendActiveChatMessage();
+        }
+    );
+}
+
+/* =======================================================
+   SERVICECALL CHAT - CONVERSATIONS
+======================================================= */
+
+async function loadChatConversations() {
+
+    if (!chatConversationList) {
+        return;
+    }
+
+
+    chatConversationList.innerHTML = `
+        <div style="
+            padding:14px;
+            font-size:12px;
+            color:#6b7774;
+        ">
+            Loading conversations...
+        </div>
+    `;
+
+
+    try {
+
+        const result =
+            await window
+                .serviceCall
+                .getConversations();
+
+
+        console.log(
+            'ServiceCall conversations:',
+            result
+        );
+
+
+        if (
+            !result ||
+            result.success !== true
+        ) {
+
+            throw new Error(
+                result &&
+                result.message
+                    ? result.message
+                    : 'Unable to load conversations.'
+            );
+        }
+
+
+        const conversations =
+            Array.isArray(
+                result.conversations
+            )
+                ? result.conversations
+                : [];
+
+
+        chatConversationList.innerHTML =
+            '';
+
+
+        if (
+            conversations.length === 0
+        ) {
+
+            chatConversationList.innerHTML = `
+                <div style="
+                    padding:14px;
+                    font-size:12px;
+                    color:#6b7774;
+                ">
+                    No conversations yet.
+                </div>
+            `;
+
+            return;
+        }
+
+
+        conversations.forEach(
+            conversation => {
+
+                const row =
+                    document.createElement(
+                        'button'
+                    );
+
+
+                row.type =
+                    'button';
+
+
+                row.style.cssText = `
+                    width:100%;
+                    display:flex;
+                    align-items:center;
+                    gap:12px;
+                    padding:12px 14px;
+                    border:0;
+                    border-bottom:1px solid #edf1ef;
+                    background:white;
+                    text-align:left;
+                    cursor:pointer;
+                `;
+
+
+                /* -------------------------
+                   DISPLAY NAME
+                ------------------------- */
+
+                const displayName =
+                    conversation.display_name ||
+                    conversation.title ||
+                    'Conversation';
+
+
+                /* -------------------------
+                   INITIALS
+                ------------------------- */
+
+                const nameParts =
+                    displayName
+                        .trim()
+                        .split(/\s+/)
+                        .filter(Boolean);
+
+
+                let initials =
+                    '?';
+
+
+                if (
+                    nameParts.length >= 2
+                ) {
+
+                    initials =
+                        (
+                            nameParts[0][0] +
+                            nameParts[
+                                nameParts.length - 1
+                            ][0]
+                        ).toUpperCase();
+
+                } else if (
+                    nameParts.length === 1
+                ) {
+
+                    initials =
+                        nameParts[0][0]
+                            .toUpperCase();
+                }
+
+
+                const avatar =
+                    document.createElement(
+                        'div'
+                    );
+
+
+                avatar.textContent =
+                    initials;
+
+
+                avatar.style.cssText = `
+                    width:38px;
+                    height:38px;
+                    min-width:38px;
+                    border-radius:50%;
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    background:#dff3ec;
+                    color:#17634f;
+                    font-size:12px;
+                    font-weight:700;
+                `;
+
+
+                /* -------------------------
+                   TEXT
+                ------------------------- */
+
+                const information =
+                    document.createElement(
+                        'div'
+                    );
+
+
+                information.style.cssText = `
+                    min-width:0;
+                    flex:1;
+                `;
+
+
+                const name =
+                    document.createElement(
+                        'div'
+                    );
+
+
+                name.textContent =
+                    displayName;
+
+
+                name.style.cssText = `
+                    font-size:13px;
+                    font-weight:600;
+                    color:#1f2927;
+                    white-space:nowrap;
+                    overflow:hidden;
+                    text-overflow:ellipsis;
+                `;
+
+
+                const preview =
+                    document.createElement(
+                        'div'
+                    );
+
+
+                preview.textContent =
+                    conversation
+                        .last_message_preview ||
+                    'No messages yet.';
+
+
+                preview.style.cssText = `
+                    margin-top:3px;
+                    font-size:11px;
+                    color:#78827f;
+                    white-space:nowrap;
+                    overflow:hidden;
+                    text-overflow:ellipsis;
+                `;
+
+
+                information.appendChild(
+                    name
+                );
+
+
+                information.appendChild(
+                    preview
+                );
+
+
+                row.appendChild(
+                    avatar
+                );
+
+
+                row.appendChild(
+                    information
+                );
+
+
+                /*
+                 * IMPORTANT:
+                 *
+                 * We deliberately do NOT load
+                 * /messages yet.
+                 *
+                 * First prove that the real
+                 * conversation list renders.
+                 */
+                row.addEventListener(
+    'click',
+
+    async () => {
+
+        console.log(
+            'Chat conversation selected:',
+            conversation
+        );
+
+
+        await openChatConversation(
+            conversation
+        );
+    }
+);
+
+                row.addEventListener(
+                    'mouseenter',
+
+                    () => {
+
+                        row.style.background =
+                            '#f5faf8';
+                    }
+                );
+
+
+                row.addEventListener(
+                    'mouseleave',
+
+                    () => {
+
+                        row.style.background =
+                            'white';
+                    }
+                );
+
+
+                chatConversationList.appendChild(
+                    row
+                );
+            }
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            'Unable to load ServiceCall conversations:',
+            error
+        );
+
+
+        chatConversationList.innerHTML = `
+            <div style="
+                padding:14px;
+                font-size:12px;
+                color:#a33f3f;
+            ">
+                Unable to load conversations.
+            </div>
+        `;
+    }
+}
+
+function resizeChatMessageInput() {
+
+    if (!chatMessageInput) {
+        return;
+    }
+
+    const MIN_HEIGHT = 44;
+    const MAX_HEIGHT = 140;
+
+
+    /*
+     * Reset height first.
+     * This is what allows the textarea
+     * to SHRINK after deleting text.
+     */
+    chatMessageInput.style.height = '0px';
+
+
+    const requiredHeight =
+        Math.max(
+            MIN_HEIGHT,
+            Math.min(
+                chatMessageInput.scrollHeight,
+                MAX_HEIGHT
+            )
+        );
+
+
+    chatMessageInput.style.height =
+        requiredHeight + 'px';
+
+
+    /*
+     * Scroll only after maximum
+     * height has been reached.
+     */
+    chatMessageInput.style.overflowY =
+        chatMessageInput.scrollHeight >
+        MAX_HEIGHT
+            ? 'auto'
+            : 'hidden';
+}
+
+/* =======================================================
+   SERVICECALL CHAT - PEOPLE SEARCH
+======================================================= */
+
+
+/* -------------------------------------------------
+   CHAT STATUS CLASS
+------------------------------------------------- */
+
+function getChatPresenceClass(
+    status
+) {
+
+    const normalizedStatus =
+        String(
+            status || ''
+        )
+            .toLowerCase()
+            .trim();
+
+
+    if (
+        normalizedStatus ===
+        'available'
+    ) {
+
+        return 'available';
+    }
+
+
+    if (
+        normalizedStatus ===
+        'busy'
+    ) {
+
+        return 'busy';
+    }
+
+
+    if (
+        normalizedStatus ===
+        'away'
+    ) {
+
+        return 'away';
+    }
+
+
+    if (
+        normalizedStatus ===
+        'out of office'
+    ) {
+
+        return 'out-of-office';
+    }
+
+
+    if (
+        normalizedStatus ===
+        'in another call' ||
+        normalizedStatus ===
+        'in call'
+    ) {
+
+        return 'in-call';
+    }
+
+
+    return 'offline';
+}
+
+
+/* -------------------------------------------------
+   OPEN TEMPORARY CHAT
+------------------------------------------------- */
+
+function openTemporaryChat(
+    user
+) {
+
+    if (
+        !user ||
+        !user.sys_id
+    ) {
+
+        return;
+    }
+
+
+    /*
+     * IMPORTANT:
+     *
+     * This does NOT create a conversation
+     * in ServiceNow.
+     *
+     * It only opens the selected person
+     * locally in the Chat UI.
+     */
+    activeChatUser =
+        user;
+
+
+    const displayName =
+        user.name ||
+        user.user_name ||
+        'Unknown User';
+
+
+    const displayStatus =
+        user.display_status ||
+        'Offline';
+
+
+    /* -------------------------
+       NAME
+    ------------------------- */
+
+    if (
+        chatUserName
+    ) {
+
+        chatUserName.textContent =
+            displayName;
+    }
+
+
+    /* -------------------------
+       AVATAR INITIALS
+    ------------------------- */
+
+    if (
+        chatUserAvatar
+    ) {
+
+        const nameParts =
+            displayName
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean);
+
+
+        let initials =
+            '';
+
+
+        if (
+            nameParts.length >= 2
+        ) {
+
+            initials =
+                (
+                    nameParts[0][0] +
+                    nameParts[
+                        nameParts.length - 1
+                    ][0]
+                )
+                    .toUpperCase();
+
+        } else if (
+            nameParts.length === 1
+        ) {
+
+            initials =
+                nameParts[0][0]
+                    .toUpperCase();
+
+        } else {
+
+            initials =
+                '?';
+        }
+
+
+        chatUserAvatar.textContent =
+            initials;
+    }
+
+
+    /* -------------------------
+       PRESENCE TEXT
+    ------------------------- */
+
+    if (
+        chatUserPresenceText
+    ) {
+
+        chatUserPresenceText.textContent =
+            displayStatus;
+    }
+
+
+    /* -------------------------
+       PRESENCE DOT
+    ------------------------- */
+
+    if (
+        chatUserPresenceDot
+    ) {
+
+        chatUserPresenceDot.className =
+            'chat-user-presence-dot ' +
+            getChatPresenceClass(
+                displayStatus
+            );
+    }
+
+
+    /* -------------------------
+       SHOW CHAT
+    ------------------------- */
+
+    if (
+        chatEmptyState
+    ) {
+
+        chatEmptyState.style.display =
+            'none';
+    }
+
+
+    if (
+        chatConversationPanel
+    ) {
+
+        chatConversationPanel.style.display =
+            'flex';
+    }
+
+
+    /* -------------------------
+       CLEAR SEARCH
+    ------------------------- */
+
+    if (
+        chatPeopleSearchInput
+    ) {
+
+        chatPeopleSearchInput.value =
+            '';
+    }
+
+
+    if (
+        chatPeopleSearchResults
+    ) {
+
+        chatPeopleSearchResults.innerHTML =
+            '';
+
+        chatPeopleSearchResults.style.display =
+            'none';
+    }
+
+
+    console.log(
+        'Temporary ServiceCall chat opened:',
+        {
+            sysId:
+                user.sys_id,
+
+            name:
+                displayName,
+
+            status:
+                displayStatus
+        }
+    );
+}
+
+
+/* -------------------------------------------------
+   CHAT PEOPLE SEARCH
+------------------------------------------------- */
+
+if (
+    chatPeopleSearchInput &&
+    chatPeopleSearchResults
+) {
+
+    chatPeopleSearchInput.addEventListener(
+        'input',
+
+        () => {
+
+            const searchText =
+                chatPeopleSearchInput
+                    .value
+                    .trim();
+
+
+            /* -------------------------
+               CANCEL PREVIOUS SEARCH
+            ------------------------- */
+
+            if (
+                chatPeopleSearchTimer
+            ) {
+
+                clearTimeout(
+                    chatPeopleSearchTimer
+                );
+
+                chatPeopleSearchTimer =
+                    null;
+            }
+
+
+            /* -------------------------
+               EMPTY / TOO SHORT
+            ------------------------- */
+
+            if (
+                searchText.length < 2
+            ) {
+
+                chatPeopleSearchResults.innerHTML =
+                    '';
+
+                chatPeopleSearchResults.style.display =
+                    'none';
+
+                return;
+            }
+
+
+            /* -------------------------
+               DEBOUNCE
+            ------------------------- */
+
+            chatPeopleSearchTimer =
+                setTimeout(
+
+                    async () => {
+
+                        try {
+
+                            const result =
+                                await window
+                                    .serviceCall
+                                    .searchUsers(
+                                        searchText
+                                    );
+
+
+                            /*
+                             * Ignore an old result if
+                             * the user changed the search
+                             * while the request was running.
+                             */
+                            if (
+                                chatPeopleSearchInput
+                                    .value
+                                    .trim() !==
+                                searchText
+                            ) {
+
+                                return;
+                            }
+
+
+                            if (
+                                !result ||
+                                result.success !==
+                                    true
+                            ) {
+
+                                throw new Error(
+                                    result &&
+                                    result.message
+                                        ? result.message
+                                        : 'Unable to search users.'
+                                );
+                            }
+
+
+                            const users =
+                                Array.isArray(
+                                    result.users
+                                )
+                                    ? result.users
+                                    : [];
+
+
+                            chatPeopleSearchResults.innerHTML =
+                                '';
+
+
+                            /* -------------------------
+                               NO USERS
+                            ------------------------- */
+
+                            if (
+                                users.length === 0
+                            ) {
+
+                                const emptyResult =
+                                    document.createElement(
+                                        'div'
+                                    );
+
+
+                                emptyResult.textContent =
+                                    'No users found.';
+
+
+                                emptyResult.style.padding =
+                                    '14px';
+
+
+                                emptyResult.style.color =
+                                    '#71827d';
+
+
+                                emptyResult.style.fontSize =
+                                    '12px';
+
+
+                                chatPeopleSearchResults.appendChild(
+                                    emptyResult
+                                );
+
+
+                                chatPeopleSearchResults.style.display =
+                                    'block';
+
+
+                                return;
+                            }
+
+
+                            /* -------------------------
+                               RESULTS
+                            ------------------------- */
+
+                            users.forEach(
+                                user => {
+
+                                    const row =
+                                        document.createElement(
+                                            'button'
+                                        );
+
+
+                                    row.type =
+                                        'button';
+
+
+                                    row.style.width =
+                                        '100%';
+
+
+                                    row.style.display =
+                                        'flex';
+
+
+                                    row.style.alignItems =
+                                        'center';
+
+
+                                    row.style.gap =
+                                        '11px';
+
+
+                                    row.style.padding =
+                                        '11px 12px';
+
+
+                                    row.style.border =
+                                        '0';
+
+
+                                    row.style.borderBottom =
+                                        '1px solid #edf1f0';
+
+
+                                    row.style.background =
+                                        'white';
+
+
+                                    row.style.textAlign =
+                                        'left';
+
+
+                                    row.style.cursor =
+                                        'pointer';
+
+
+                                    /* -------------------------
+                                       AVATAR
+                                    ------------------------- */
+
+                                    const avatar =
+                                        document.createElement(
+                                            'div'
+                                        );
+
+
+                                    avatar.style.width =
+                                        '36px';
+
+
+                                    avatar.style.height =
+                                        '36px';
+
+
+                                    avatar.style.flexShrink =
+                                        '0';
+
+
+                                    avatar.style.display =
+                                        'flex';
+
+
+                                    avatar.style.alignItems =
+                                        'center';
+
+
+                                    avatar.style.justifyContent =
+                                        'center';
+
+
+                                    avatar.style.borderRadius =
+                                        '50%';
+
+
+                                    avatar.style.background =
+                                        '#dff3ec';
+
+
+                                    avatar.style.color =
+                                        '#17634f';
+
+
+                                    avatar.style.fontSize =
+                                        '12px';
+
+
+                                    avatar.style.fontWeight =
+                                        '800';
+
+
+                                    const displayName =
+                                        user.name ||
+                                        user.user_name ||
+                                        'Unknown User';
+
+
+                                    const nameParts =
+                                        displayName
+                                            .trim()
+                                            .split(/\s+/)
+                                            .filter(Boolean);
+
+
+                                    if (
+                                        nameParts.length >=
+                                        2
+                                    ) {
+
+                                        avatar.textContent =
+                                            (
+                                                nameParts[0][0] +
+                                                nameParts[
+                                                    nameParts.length -
+                                                    1
+                                                ][0]
+                                            )
+                                                .toUpperCase();
+
+                                    } else {
+
+                                        avatar.textContent =
+                                            displayName
+                                                .charAt(0)
+                                                .toUpperCase() ||
+                                            '?';
+                                    }
+
+
+                                    /* -------------------------
+                                       INFORMATION
+                                    ------------------------- */
+
+                                    const information =
+                                        document.createElement(
+                                            'div'
+                                        );
+
+
+                                    information.style.minWidth =
+                                        '0';
+
+
+                                    information.style.flex =
+                                        '1';
+
+
+                                    const name =
+                                        document.createElement(
+                                            'div'
+                                        );
+
+
+                                    name.textContent =
+                                        displayName;
+
+
+                                    name.style.color =
+                                        '#29463f';
+
+
+                                    name.style.fontSize =
+                                        '13px';
+
+
+                                    name.style.fontWeight =
+                                        '700';
+
+
+                                    name.style.whiteSpace =
+                                        'nowrap';
+
+
+                                    name.style.overflow =
+                                        'hidden';
+
+
+                                    name.style.textOverflow =
+                                        'ellipsis';
+
+
+                                    const status =
+                                        document.createElement(
+                                            'div'
+                                        );
+
+
+                                    status.textContent =
+                                        user.display_status ||
+                                        'Offline';
+
+
+                                    status.style.marginTop =
+                                        '3px';
+
+
+                                    status.style.color =
+                                        '#71827d';
+
+
+                                    status.style.fontSize =
+                                        '11px';
+
+
+                                    information.appendChild(
+                                        name
+                                    );
+
+
+                                    information.appendChild(
+                                        status
+                                    );
+
+
+                                    row.appendChild(
+                                        avatar
+                                    );
+
+
+                                    row.appendChild(
+                                        information
+                                    );
+
+
+                                    /* -------------------------
+                                       OPEN USER
+                                    ------------------------- */
+
+                                    row.addEventListener(
+                                        'click',
+
+                                        () => {
+
+                                            openTemporaryChat(
+                                                user
+                                            );
+                                        }
+                                    );
+
+
+                                    /* -------------------------
+                                       HOVER
+                                    ------------------------- */
+
+                                    row.addEventListener(
+                                        'mouseenter',
+
+                                        () => {
+
+                                            row.style.background =
+                                                '#f1f7f4';
+                                        }
+                                    );
+
+
+                                    row.addEventListener(
+                                        'mouseleave',
+
+                                        () => {
+
+                                            row.style.background =
+                                                'white';
+                                        }
+                                    );
+
+
+                                    chatPeopleSearchResults.appendChild(
+                                        row
+                                    );
+                                }
+                            );
+
+
+                            chatPeopleSearchResults.style.display =
+                                'block';
+
+
+                        } catch (
+                            error
+                        ) {
+
+                            console.error(
+                                'Chat people search failed:',
+                                error
+                            );
+
+
+                            chatPeopleSearchResults.innerHTML =
+                                '';
+
+
+                            const errorResult =
+                                document.createElement(
+                                    'div'
+                                );
+
+
+                            errorResult.textContent =
+                                error &&
+                                error.message
+                                    ? error.message
+                                    : 'Unable to search users.';
+
+
+                            errorResult.style.padding =
+                                '14px';
+
+
+                            errorResult.style.color =
+                                '#a33f3f';
+
+
+                            errorResult.style.fontSize =
+                                '12px';
+
+
+                            chatPeopleSearchResults.appendChild(
+                                errorResult
+                            );
+
+
+                            chatPeopleSearchResults.style.display =
+                                'block';
+                        }
+
+                    },
+
+                    300
+                );
+        }
+    );
+}
+
+
+/* -------------------------------------------------
+   CLOSE SEARCH RESULTS WHEN CLICKING OUTSIDE
+------------------------------------------------- */
+
+document.addEventListener(
+    'click',
+
+    event => {
+
+        if (
+            !chatPeopleSearchInput ||
+            !chatPeopleSearchResults
+        ) {
+
+            return;
+        }
+
+
+        if (
+            event.target ===
+                chatPeopleSearchInput ||
+            chatPeopleSearchResults.contains(
+                event.target
+            )
+        ) {
+
+            return;
+        }
+
+
+        chatPeopleSearchResults.style.display =
+            'none';
+    }
+);
+
+/* =======================================================
+   SERVICECALL CHAT - DIRECT CALL
+======================================================= */
+
+if (
+    chatCallButton
+) {
+
+    chatCallButton.addEventListener(
+        'click',
+
+        async () => {
+
+            /*
+             * A user must currently be open
+             * in Chat.
+             */
+            if (
+                !activeChatUser ||
+                !activeChatUser.sys_id
+            ) {
+
+                console.warn(
+                    'No active Chat user selected.'
+                );
+
+                return;
+            }
+
+
+            /*
+             * Presence intentionally does NOT
+             * block the call.
+             *
+             * Available, Away, Offline,
+             * Out of Office, Busy or
+             * In another call may all still
+             * receive a call attempt.
+             *
+             * Server-side call rules remain
+             * authoritative.
+             */
+
+            const targetUser =
+                activeChatUser;
+
+
+            const targetName =
+                targetUser.name ||
+                targetUser.user_name ||
+                'user';
+
+
+            /*
+             * Prevent duplicate clicks while
+             * the call request is starting.
+             */
+            chatCallButton.disabled =
+                true;
+
+
+            const originalContent =
+                chatCallButton.innerHTML;
+
+
+            chatCallButton.textContent =
+                '...';
+
+
+            try {
+
+                console.log(
+                    'Starting ServiceCall from Chat:',
+                    {
+                        targetUserSysId:
+                            targetUser.sys_id,
+
+                        targetUserName:
+                            targetName,
+
+                        displayStatus:
+                            targetUser.display_status ||
+                            ''
+                    }
+                );
+
+
+                const result =
+                    await window
+                        .serviceCall
+                        .startCall(
+                            targetUser.sys_id
+                        );
+
+
+                console.log(
+                    'Chat start call result:',
+                    result
+                );
+
+
+                if (
+                    !result ||
+                    result.success !==
+                        true
+                ) {
+
+                    throw new Error(
+                        result &&
+                        result.message
+                            ? result.message
+                            : 'Unable to start call.'
+                    );
+                }
+
+
+                /*
+                 * IMPORTANT:
+                 *
+                 * Do NOT open another call
+                 * window here.
+                 *
+                 * The existing ServiceCall
+                 * outgoing-call architecture
+                 * detects the call and opens
+                 * the normal call window.
+                 */
+
+                console.log(
+                    'ServiceCall started from Chat:',
+                    result.call_number ||
+                    result.call_sys_id ||
+                    targetName
+                );
+
+
+            } catch (
+                error
+            ) {
+
+                console.error(
+                    'Unable to start ServiceCall from Chat:',
+                    error
+                );
+
+
+                /*
+                 * Only restore the button on
+                 * failure.
+                 */
+                chatCallButton.disabled =
+                    false;
+
+
+                chatCallButton.innerHTML =
+                    originalContent;
+
+
+                return;
+            }
+
+
+            /*
+             * Restore the Chat button shortly
+             * after the request succeeds.
+             *
+             * This lock is only preventing
+             * duplicate Start Call requests.
+             * The actual call lifecycle is
+             * controlled by main.js.
+             */
+            setTimeout(
+                () => {
+
+                    chatCallButton.disabled =
+                        false;
+
+
+                    chatCallButton.innerHTML =
+                        originalContent;
+
+                },
+
+                1200
+            );
         }
     );
 }
@@ -8396,6 +10642,68 @@ if (resetPresenceButton) {
                     false;
             }
         }
+    );
+}
+
+/* =====================================================
+   MEETING ACTION SOUNDS
+===================================================== */
+
+function playMeetingActionSound(
+    soundFile
+) {
+
+    try {
+
+        if (!soundFile) {
+            return;
+        }
+
+
+        const audio =
+            new Audio(
+                `assets/sounds/${soundFile}`
+            );
+
+
+        audio.volume =
+            0.70;
+
+
+        audio.play()
+            .catch(
+                error => {
+
+                    console.error(
+                        'Unable to play meeting action sound:',
+                        error
+                    );
+                }
+            );
+
+
+    } catch (error) {
+
+        console.error(
+            'Meeting action sound failed:',
+            error
+        );
+    }
+}
+
+
+function playMeetingJoinStartSound() {
+
+    playMeetingActionSound(
+        'joinorstart.mp3'
+    );
+}
+
+
+function playMeetingLeaveEndSound() {
+
+    playMeetingActionSound(
+        'end-meet.mp3'
     );
 }
 

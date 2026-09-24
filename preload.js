@@ -109,6 +109,39 @@ contextBridge.exposeInMainWorld(
                     callSysId
                 ),
 
+        /* -------------------------
+   CHAT
+------------------------- */
+
+getConversations:
+    () =>
+        ipcRenderer.invoke(
+            'servicecall-get-conversations'
+        ),
+
+        getMessages:
+    (conversationSysId) =>
+        ipcRenderer.invoke(
+            'servicecall-get-messages',
+            conversationSysId
+        ),
+
+        sendMessage:
+    (
+        recipientSysId,
+        message
+    ) =>
+        ipcRenderer.invoke(
+            'servicecall-send-message',
+            {
+                recipientSysId:
+                    recipientSysId,
+
+                message:
+                    message
+            }
+        ),
+
         leaveCall:
     (callSysId) =>
         ipcRenderer.invoke(

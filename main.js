@@ -6219,7 +6219,8 @@ if (
                     result.state === 'connected'
                         ? 'connected'
                         : 'calling',
- 
+
+                //console.warn('DEBUG: GENERIC OUTGOING ROLLER OPENING CALL WINDOW'),
                     {
                         callSysId:
                             result.call_sys_id,
@@ -6513,6 +6514,53 @@ ipcMain.handle(
                     'Unable to search users.',
 
                 users: []
+            };
+        }
+    }
+);
+
+/* =====================================================
+   SERVICECALL CHAT - GET CONVERSATIONS
+===================================================== */
+
+ipcMain.handle(
+    'servicecall-get-conversations',
+
+    async () => {
+
+        try {
+
+            const result =
+                await serviceCallApiRequest(
+                    '/conversations',
+                    'GET'
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to get ServiceCall conversations:',
+                error.message
+            );
+
+
+            return {
+
+                success: false,
+
+                code:
+                    error.code ||
+                    'GET_CONVERSATIONS_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to retrieve conversations.',
+
+                conversations: []
             };
         }
     }
@@ -8686,6 +8734,7 @@ intentionallyLeftCallIds.delete(
                  * call-window.js knows this is
                  * a ServiceCall Meeting.
                  */
+                //console.warn('DEBUG: GENERIC OUTGOING ROLLER OPENING CALL WINDOW'),
                 showCallWindow(
                     'connected',
                     {
@@ -10593,6 +10642,185 @@ ipcMain.handle(
                 accountKey || ''
             )
         );
+    }
+);
+
+/* =====================================================
+   SERVICECALL CHAT - GET MESSAGES
+===================================================== */
+
+ipcMain.handle(
+    'servicecall-get-messages',
+
+    async (
+        event,
+        conversationSysId
+    ) => {
+
+        const conversationId =
+            String(
+                conversationSysId || ''
+            ).trim();
+
+
+        if (!conversationId) {
+
+            return {
+                success: false,
+                code:
+                    'CONVERSATION_REQUIRED',
+                message:
+                    'Conversation is required.',
+                messages: []
+            };
+        }
+
+
+        try {
+
+            const result =
+                await serviceCallApiRequest(
+                    '/messages?conversation_id=' +
+                        encodeURIComponent(
+                            conversationId
+                        ),
+                    'GET'
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to get ServiceCall messages:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+
+                code:
+                    error.code ||
+                    'GET_MESSAGES_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to retrieve messages.',
+
+                messages: []
+            };
+        }
+    }
+);
+
+/* =====================================================
+   SERVICECALL CHAT - SEND MESSAGE
+===================================================== */
+
+ipcMain.handle(
+    'servicecall-send-message',
+
+    async (
+        event,
+        payload = {}
+    ) => {
+
+        const recipientSysId =
+            String(
+                payload.recipientSysId || ''
+            ).trim();
+
+
+        const message =
+            String(
+                payload.message || ''
+            ).trim();
+
+
+        /* -------------------------
+           VALIDATION
+        ------------------------- */
+
+        if (!recipientSysId) {
+
+            return {
+                success: false,
+                code:
+                    'RECIPIENT_REQUIRED',
+                message:
+                    'Recipient is required.'
+            };
+        }
+
+
+        if (!message) {
+
+            return {
+                success: false,
+                code:
+                    'MESSAGE_REQUIRED',
+                message:
+                    'Message cannot be empty.'
+            };
+        }
+
+
+        if (
+            message.length > 10000
+        ) {
+
+            return {
+                success: false,
+                code:
+                    'MESSAGE_TOO_LONG',
+                message:
+                    'Message cannot exceed 10000 characters.'
+            };
+        }
+
+
+        try {
+
+            const result =
+                await serviceCallApiRequest(
+                    '/send-message',
+                    'POST',
+                    {
+                        recipient_sys_id:
+                            recipientSysId,
+
+                        message:
+                            message
+                    }
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to send ServiceCall message:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+
+                code:
+                    error.code ||
+                    'SEND_MESSAGE_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to send message.'
+            };
+        }
     }
 );
 
