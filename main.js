@@ -10854,3 +10854,183 @@ ipcMain.handle(
     }
 );
 
+ipcMain.handle(
+    'servicecall-get-reaction-updates',
+
+    async (
+        event,
+        payload = {}
+    ) => {
+
+        const conversationId =
+            String(
+                payload.conversationSysId ||
+                ''
+            ).trim();
+
+
+        const afterCheckpoint =
+            String(
+                payload.afterCheckpoint ||
+                ''
+            ).trim();
+
+
+        if (!conversationId) {
+
+            return {
+                success: false,
+                code:
+                    'CONVERSATION_REQUIRED',
+                message:
+                    'Conversation is required.',
+                updates: []
+            };
+        }
+
+
+        try {
+
+            let endpoint =
+                '/reaction-updates?conversation_id=' +
+                encodeURIComponent(
+                    conversationId
+                );
+
+
+            /*
+             * If there is no checkpoint,
+             * ServiceNow establishes one.
+             *
+             * Otherwise only reaction changes
+             * after that checkpoint are returned.
+             */
+            if (afterCheckpoint) {
+
+                endpoint +=
+                    '&after=' +
+                    encodeURIComponent(
+                        afterCheckpoint
+                    );
+            }
+
+
+            const result =
+                await serviceCallApiRequest(
+                    endpoint,
+                    'GET'
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to get ServiceCall reaction updates:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'GET_REACTION_UPDATES_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to retrieve reaction updates.',
+
+                updates: []
+            };
+        }
+    }
+);
+
+ipcMain.handle(
+    'servicecall-set-message-reaction',
+
+    async (
+        event,
+        payload = {}
+    ) => {
+
+        const messageSysId =
+            String(
+                payload.messageSysId ||
+                ''
+            ).trim();
+
+
+        const reaction =
+            String(
+                payload.reaction ||
+                ''
+            ).trim();
+
+
+        if (!messageSysId) {
+
+            return {
+                success: false,
+                code: 'MESSAGE_REQUIRED',
+                message:
+                    'Message is required.'
+            };
+        }
+
+
+        if (!reaction) {
+
+            return {
+                success: false,
+                code: 'REACTION_REQUIRED',
+                message:
+                    'Reaction is required.'
+            };
+        }
+
+
+        try {
+
+            const result =
+                await serviceCallApiRequest(
+                    '/message-reaction',
+                    'POST',
+                    {
+                        message_sys_id:
+                            messageSysId,
+
+                        reaction:
+                            reaction
+                    }
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to update ServiceCall message reaction:',
+                error.message
+            );
+
+
+            return {
+                success: false,
+                code:
+                    error.code ||
+                    'MESSAGE_REACTION_FAILED',
+
+                message:
+                    error.message ||
+                    'Unable to update message reaction.'
+            };
+        }
+    }
+);
+

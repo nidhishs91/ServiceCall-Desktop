@@ -135,6 +135,54 @@ getConversations:
             }
         ),
 
+getReactionUpdates:
+    (
+        conversationSysId,
+        afterCheckpoint = ''
+    ) =>
+        ipcRenderer.invoke(
+            'servicecall-get-reaction-updates',
+            {
+                conversationSysId:
+                    conversationSysId,
+
+                afterCheckpoint:
+                    afterCheckpoint
+            }
+        ),
+
+setMessageReaction:
+    (
+        messageSysId,
+        reaction
+    ) =>
+        ipcRenderer.invoke(
+            'servicecall-set-message-reaction',
+            {
+                messageSysId:
+                    messageSysId,
+
+                reaction:
+                    reaction
+            }
+        ),
+
+setMessageReaction:
+    (
+        messageSysId,
+        reaction
+    ) =>
+        ipcRenderer.invoke(
+            'servicecall-set-message-reaction',
+            {
+                messageSysId:
+                    messageSysId,
+
+                reaction:
+                    reaction
+            }
+        ),
+
         sendMessage:
     (
         recipientSysId,

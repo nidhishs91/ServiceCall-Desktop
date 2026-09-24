@@ -72,6 +72,7 @@ const chatSendButton =
 let activeChatConversation =
     null;
 let lastChatMessageSysId = '';
+let lastChatReactionCheckpoint = '';
 
 /* -------------------------------------------------
    CHAT ELEMENTS
@@ -5262,6 +5263,48 @@ if (messages.length > 0) {
         '';
 }
 
+/* -----------------------------------------
+   REACTION SYNC CHECKPOINT
+----------------------------------------- */
+
+lastChatReactionCheckpoint = '';
+
+try {
+
+    const reactionSyncResult =
+        await window.serviceCall
+            .getReactionUpdates(
+                conversation.sys_id
+            );
+
+
+    if (
+        activeChatConversation &&
+        String(
+            activeChatConversation.sys_id
+        ) ===
+        String(
+            conversation.sys_id
+        ) &&
+        reactionSyncResult &&
+        reactionSyncResult.success &&
+        reactionSyncResult.checkpoint
+    ) {
+
+        lastChatReactionCheckpoint =
+            String(
+                reactionSyncResult.checkpoint
+            ).trim();
+    }
+
+} catch (error) {
+
+    console.error(
+        'Unable to establish chat reaction checkpoint:',
+        error
+    );
+}
+
         if (!chatMessages) {
             return;
         }
@@ -5291,90 +5334,18 @@ if (messages.length > 0) {
         }
 
 
-        /* -------------------------
-           RENDER MESSAGES
-        ------------------------- */
+       /* -------------------------
+   RENDER MESSAGES
+------------------------- */
 
-        messages.forEach(
-            message => {
+messages.forEach(
+    message => {
 
-                const messageRow =
-                    document.createElement(
-                        'div'
-                    );
-
-
-                messageRow.style.cssText = `
-                    display:flex;
-                    flex-direction:column;
-                    align-items:${
-                        message.is_mine
-                            ? 'flex-end'
-                            : 'flex-start'
-                    };
-                    margin:8px 14px;
-                `;
-
-
-                const bubble =
-                    document.createElement(
-                        'div'
-                    );
-
-
-                bubble.textContent =
-                    message.text || '';
-
-
-                bubble.style.cssText = `
-                    max-width:70%;
-                    padding:9px 12px;
-                    border-radius:12px;
-                    font-size:13px;
-                    line-height:1.4;
-                    white-space:pre-wrap;
-                    overflow-wrap:anywhere;
-                    background:${
-                        message.is_mine
-                            ? '#dff3ec'
-                            : '#f1f3f2'
-                    };
-                    color:#1f2927;
-                `;
-
-
-                const metadata =
-                    document.createElement(
-                        'div'
-                    );
-
-
-                metadata.textContent =
-                    message.sent_at || '';
-
-
-                metadata.style.cssText = `
-                    margin-top:3px;
-                    font-size:10px;
-                    color:#89918f;
-                `;
-
-
-                messageRow.appendChild(
-                    bubble
-                );
-
-
-                messageRow.appendChild(
-                    metadata
-                );
-
-
-                chatMessages.appendChild(
-                    messageRow
-                );
-            }
+        appendChatMessage(
+            message
         );
+    }
+);
 
 
         /*
@@ -5471,10 +5442,34 @@ function appendChatMessage(
     }
 
 
+    const messageSysId =
+        String(
+            message.sys_id || ''
+        ).trim();
+
+
     const messageRow =
         document.createElement(
             'div'
         );
+
+
+    messageRow.className =
+        'chat-message-row';
+
+
+    /*
+     * Store the REAL ServiceNow message
+     * sys_id on the DOM element.
+     *
+     * Reactions, edits, deletion, etc.
+     * can use this later.
+     */
+    if (messageSysId) {
+
+        messageRow.dataset.messageSysId =
+            messageSysId;
+    }
 
 
     messageRow.style.cssText = `
@@ -5486,7 +5481,41 @@ function appendChatMessage(
                 : 'flex-start'
         };
         margin:8px 14px;
+        position:relative;
     `;
+
+
+    /*
+     * Bubble + reaction button wrapper.
+     */
+    const bubbleWrapper =
+        document.createElement(
+            'div'
+        );
+
+
+    bubbleWrapper.style.cssText = `
+        display:flex;
+        align-items:center;
+        gap:6px;
+        max-width:78%;
+        position:relative;
+    `;
+
+
+    /*
+     * Incoming:
+     *
+     * [+] [message]
+     *
+     * Outgoing:
+     *
+     * [message] [+]
+     */
+    bubbleWrapper.style.flexDirection =
+        message.is_mine
+            ? 'row-reverse'
+            : 'row';
 
 
     const bubble =
@@ -5500,7 +5529,7 @@ function appendChatMessage(
 
 
     bubble.style.cssText = `
-        max-width:70%;
+        max-width:100%;
         padding:9px 12px;
         border-radius:12px;
         font-size:13px;
@@ -5514,6 +5543,634 @@ function appendChatMessage(
         };
         color:#1f2927;
     `;
+
+
+    /* =====================================================
+       REACTION BUTTON
+    ===================================================== */
+
+    const reactionButton =
+        document.createElement(
+            'button'
+        );
+
+
+    reactionButton.type =
+        'button';
+
+
+    reactionButton.textContent =
+        '+';
+
+
+    reactionButton.title =
+        'Add reaction';
+
+
+    reactionButton.style.cssText = `
+        width:24px;
+        height:24px;
+        min-width:24px;
+        border:none;
+        border-radius:50%;
+        background:#eef2f1;
+        color:#60706c;
+        font-size:16px;
+        line-height:24px;
+        padding:0;
+        cursor:pointer;
+        opacity:0;
+        transition:
+            opacity 0.15s ease,
+            background 0.15s ease,
+            transform 0.15s ease;
+    `;
+
+
+    /*
+ * Reactions are allowed only on
+ * another user's message.
+ *
+ * Own messages can still contain
+ * emojis as normal chat messages.
+ */
+if (
+    !messageSysId ||
+    message.is_mine
+) {
+
+    reactionButton.style.display =
+        'none';
+}
+
+
+    bubbleWrapper.addEventListener(
+        'mouseenter',
+        () => {
+
+            if (
+    messageSysId &&
+    !message.is_mine
+) {
+
+    reactionButton.style.opacity =
+        '1';
+}
+        }
+    );
+
+
+    bubbleWrapper.addEventListener(
+        'mouseleave',
+        () => {
+
+            reactionButton.style.opacity =
+                '0';
+        }
+    );
+
+
+    reactionButton.addEventListener(
+        'mouseenter',
+        () => {
+
+            reactionButton.style.background =
+                '#dfe8e5';
+
+            reactionButton.style.transform =
+                'scale(1.08)';
+        }
+    );
+
+
+    reactionButton.addEventListener(
+        'mouseleave',
+        () => {
+
+            reactionButton.style.background =
+                '#eef2f1';
+
+            reactionButton.style.transform =
+                'scale(1)';
+        }
+    );
+
+
+    /* =====================================================
+       REACTION SUMMARY
+    ===================================================== */
+
+    const reactionSummary =
+        document.createElement(
+            'div'
+        );
+
+
+    reactionSummary.className =
+        'chat-message-reactions';
+
+
+    reactionSummary.style.cssText = `
+        display:flex;
+        flex-wrap:wrap;
+        gap:4px;
+        margin-top:4px;
+        min-height:0;
+    `;
+
+
+    /*
+     * Render reaction summary returned
+     * by ServiceNow.
+     */
+    function renderReactions(
+        reactions,
+        myReaction
+    ) {
+
+        reactionSummary.innerHTML =
+            '';
+
+
+        const reactionList =
+            Array.isArray(
+                reactions
+            )
+                ? reactions
+                : [];
+
+
+        reactionList.forEach(
+            reactionItem => {
+
+                if (
+                    !reactionItem ||
+                    !reactionItem.reaction
+                ) {
+                    return;
+                }
+
+
+                const chip =
+                    document.createElement(
+                        'button'
+                    );
+
+
+                chip.type =
+                    'button';
+
+
+                const reactionEmoji =
+                    String(
+                        reactionItem.reaction
+                    );
+
+
+                const reactionCount =
+                    Number(
+                        reactionItem.count || 0
+                    );
+
+
+                chip.textContent =
+                    reactionEmoji +
+                    (
+                        reactionCount > 0
+                            ? ' ' +
+                              reactionCount
+                            : ''
+                    );
+
+
+                const isMine =
+                    reactionEmoji ===
+                    myReaction;
+
+
+                chip.style.cssText = `
+                    border:1px solid ${
+                        isMine
+                            ? '#67a995'
+                            : '#d9e0de'
+                    };
+                    background:${
+                        isMine
+                            ? '#e1f3ed'
+                            : '#f7f9f8'
+                    };
+                    border-radius:12px;
+                    padding:2px 7px;
+                    font-size:12px;
+                    line-height:18px;
+                    cursor:pointer;
+                    color:#31433e;
+                `;
+
+
+                /*
+                 * Clicking an existing reaction
+                 * uses the same backend toggle.
+                 */
+                chip.addEventListener(
+                    'click',
+                    async () => {
+
+                        await applyReaction(
+                            reactionEmoji
+                        );
+                    }
+                );
+
+
+                reactionSummary.appendChild(
+                    chip
+                );
+            }
+        );
+               reactionSummary.dataset.ready =
+    'true';
+    }
+
+    /*
+ * Allow silent reaction synchronization
+ * to update this exact message later.
+ */
+if (messageSysId) {
+
+    row._serviceCallRenderReactions =
+        (
+            reactions,
+            myReaction
+        ) => {
+
+            renderReactions(
+                reactions,
+                myReaction
+            );
+        };
+}
+
+    /* =====================================================
+       APPLY REACTION
+    ===================================================== */
+
+    let reactionRequestRunning =
+        false;
+
+
+    async function applyReaction(
+        reaction
+    ) {
+
+        if (
+            reactionRequestRunning ||
+            !messageSysId
+        ) {
+            return;
+        }
+
+
+        reactionRequestRunning =
+            true;
+
+
+        try {
+
+            const result =
+                await window
+                    .serviceCall
+                    .setMessageReaction(
+                        messageSysId,
+                        reaction
+                    );
+
+
+            if (
+                !result ||
+                result.success !== true
+            ) {
+
+                console.warn(
+                    'Unable to update reaction:',
+                    result
+                );
+
+                return;
+            }
+
+
+            renderReactions(
+                result.reactions,
+                result.my_reaction || ''
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to update message reaction:',
+                error
+            );
+
+        } finally {
+
+            reactionRequestRunning =
+                false;
+        }
+    }
+
+
+    /* =====================================================
+       EMOJI PICKER
+    ===================================================== */
+
+    reactionButton.addEventListener(
+        'click',
+        event => {
+
+            event.stopPropagation();
+
+
+            /*
+             * Close any picker already open
+             * elsewhere in Chat.
+             */
+            document
+                .querySelectorAll(
+                    '.chat-reaction-picker'
+                )
+                .forEach(
+                    picker => {
+
+                        picker.remove();
+                    }
+                );
+
+
+            const picker =
+                document.createElement(
+                    'div'
+                );
+
+
+            picker.className =
+                'chat-reaction-picker';
+
+
+            picker.style.cssText = `
+                position:absolute;
+                z-index:1000;
+                width:300px;
+                max-height:300px;
+                overflow-y:auto;
+                padding:10px;
+                border:1px solid #dfe6e4;
+                border-radius:14px;
+                background:#ffffff;
+                box-shadow:
+                    0 10px 30px
+                    rgba(0,0,0,0.14);
+                display:flex;
+                flex-direction:column;
+                gap:10px;
+            `;
+
+
+            /*
+             * Keep the picker toward the
+             * message side of the screen.
+             */
+            if (message.is_mine) {
+
+                picker.style.right =
+                    '30px';
+
+            } else {
+
+                picker.style.left =
+                    '30px';
+            }
+
+
+            picker.style.bottom =
+                '30px';
+
+
+            const emojiSections = [
+
+                {
+                    title:
+                        'Smileys',
+
+                    emojis: [
+                        '😀','😃','😄','😁',
+                        '😆','😅','😂','🤣',
+                        '😊','🙂','🙃','😉',
+                        '😍','🥰','😘','😎',
+                        '🤩','🥳','😋','😜',
+                        '🤪','🤗','🤭','🫢',
+                        '🤔','🫡','😐','😑',
+                        '🙄','😏','😒','😔',
+                        '😢','😭','😤','😡',
+                        '🤬','😱','😨','😴',
+                        '🤯','🥶'
+                    ]
+                },
+
+                {
+                    title:
+                        'Gestures',
+
+                    emojis: [
+                        '👍','👎','👌','🤌',
+                        '✌️','🤞','🤟','🤘',
+                        '🤙','👏','🙌','🫶',
+                        '🤝','🙏','💪','👊',
+                        '✊','🤜','🤛','👀'
+                    ]
+                },
+
+                {
+                    title:
+                        'Hearts',
+
+                    emojis: [
+                        '❤️','🩷','🧡','💛',
+                        '💚','💙','🩵','💜',
+                        '🤎','🖤','🤍','💔',
+                        '❤️‍🔥','❤️‍🩹','💕','💖',
+                        '💗','💓','💞','💘',
+                        '💝'
+                    ]
+                },
+
+                {
+                    title:
+                        'More',
+
+                    emojis: [
+                        '💯','🔥','✨','⭐',
+                        '🌟','💫','⚡','🎉',
+                        '🎊','🎈','🎁','🏆',
+                        '🥇','🚀','✅','❌',
+                        '⚠️','💡','📌','☕'
+                    ]
+                }
+            ];
+
+
+            emojiSections.forEach(
+                section => {
+
+                    const sectionElement =
+                        document.createElement(
+                            'div'
+                        );
+
+
+                    const title =
+                        document.createElement(
+                            'div'
+                        );
+
+
+                    title.textContent =
+                        section.title;
+
+
+                    title.style.cssText = `
+                        margin-bottom:5px;
+                        font-size:11px;
+                        font-weight:600;
+                        color:#788681;
+                    `;
+
+
+                    const emojiGrid =
+                        document.createElement(
+                            'div'
+                        );
+
+
+                    emojiGrid.style.cssText = `
+                        display:grid;
+                        grid-template-columns:
+                            repeat(8, 1fr);
+                        gap:3px;
+                    `;
+
+
+                    section.emojis.forEach(
+                        emoji => {
+
+                            const emojiButton =
+                                document.createElement(
+                                    'button'
+                                );
+
+
+                            emojiButton.type =
+                                'button';
+
+
+                            emojiButton.textContent =
+                                emoji;
+
+
+                            emojiButton.style.cssText = `
+                                width:30px;
+                                height:30px;
+                                border:none;
+                                border-radius:7px;
+                                background:transparent;
+                                font-size:19px;
+                                cursor:pointer;
+                                padding:0;
+                            `;
+
+
+                            emojiButton.addEventListener(
+                                'mouseenter',
+                                () => {
+
+                                    emojiButton
+                                        .style
+                                        .background =
+                                            '#eef4f2';
+                                }
+                            );
+
+
+                            emojiButton.addEventListener(
+                                'mouseleave',
+                                () => {
+
+                                    emojiButton
+                                        .style
+                                        .background =
+                                            'transparent';
+                                }
+                            );
+
+
+                            emojiButton.addEventListener(
+                                'click',
+                                async pickerEvent => {
+
+                                    pickerEvent
+                                        .stopPropagation();
+
+
+                                    picker.remove();
+
+
+                                    await applyReaction(
+                                        emoji
+                                    );
+                                }
+                            );
+
+
+                            emojiGrid.appendChild(
+                                emojiButton
+                            );
+                        }
+                    );
+
+
+                    sectionElement.appendChild(
+                        title
+                    );
+
+
+                    sectionElement.appendChild(
+                        emojiGrid
+                    );
+
+
+                    picker.appendChild(
+                        sectionElement
+                    );
+                }
+            );
+
+
+            bubbleWrapper.appendChild(
+                picker
+            );
+        }
+    );
+
+
+    bubbleWrapper.appendChild(
+        bubble
+    );
+
+
+    bubbleWrapper.appendChild(
+        reactionButton
+    );
 
 
     const metadata =
@@ -5534,7 +6191,12 @@ function appendChatMessage(
 
 
     messageRow.appendChild(
-        bubble
+        bubbleWrapper
+    );
+
+
+    messageRow.appendChild(
+        reactionSummary
     );
 
 
@@ -5549,10 +6211,87 @@ function appendChatMessage(
 
 
     /*
+     * If a future /messages response
+     * already contains reactions,
+     * this will render them immediately.
+     */
+    renderReactions(
+        message.reactions || [],
+        message.my_reaction || ''
+    );
+
+
+    /*
      * Keep newest message visible.
      */
     chatMessages.scrollTop =
         chatMessages.scrollHeight;
+}
+
+function updateChatMessageReactions(
+    messageSysId,
+    reactions,
+    myReaction
+) {
+
+    const targetSysId =
+        String(
+            messageSysId || ''
+        ).trim();
+
+
+    if (!targetSysId) {
+        return;
+    }
+
+
+    const rows =
+        document.querySelectorAll(
+            '.chat-message-row'
+        );
+
+
+    let targetRow =
+        null;
+
+
+    rows.forEach(
+        row => {
+
+            if (
+                String(
+                    row.dataset.messageSysId ||
+                    ''
+                ) === targetSysId
+            ) {
+
+                targetRow =
+                    row;
+            }
+        }
+    );
+
+
+    if (
+        !targetRow ||
+        typeof targetRow
+            ._serviceCallRenderReactions !==
+            'function'
+    ) {
+
+        return;
+    }
+
+
+    targetRow
+        ._serviceCallRenderReactions(
+            Array.isArray(reactions)
+                ? reactions
+                : [],
+            String(
+                myReaction || ''
+            )
+        );
 }
 
 async function checkForNewChatMessages() {
@@ -5642,6 +6381,22 @@ async function checkForNewChatMessages() {
                 ? result.messages
                 : [];
 
+        updates.forEach(
+    update => {
+
+        if (!update) {
+            return;
+        }
+
+
+        updateChatMessageReactions(
+            update.message_sys_id,
+            update.reactions || [],
+            update.my_reaction || ''
+        );
+    }
+);
+
 
         /*
          * Nothing new.
@@ -5707,6 +6462,103 @@ async function checkForNewChatMessages() {
     }
 }
 
+async function checkForChatReactionUpdates() {
+
+    if (
+        !activeChatConversation ||
+        !activeChatConversation.sys_id ||
+        !lastChatReactionCheckpoint
+    ) {
+
+        return;
+    }
+
+
+    const conversationSysId =
+        String(
+            activeChatConversation.sys_id
+        );
+
+
+    const checkpoint =
+        String(
+            lastChatReactionCheckpoint
+        );
+
+
+    try {
+
+        const result =
+            await window.serviceCall
+                .getReactionUpdates(
+                    conversationSysId,
+                    checkpoint
+                );
+
+
+        /*
+         * Conversation may have changed
+         * while the request was running.
+         */
+        if (
+            !activeChatConversation ||
+            String(
+                activeChatConversation.sys_id
+            ) !==
+            conversationSysId
+        ) {
+
+            return;
+        }
+
+
+        if (
+            !result ||
+            !result.success
+        ) {
+
+            return;
+        }
+
+
+        const updates =
+            Array.isArray(
+                result.updates
+            )
+                ? result.updates
+                : [];
+
+
+        updates.forEach(
+            update => {
+
+                updateChatMessageReactions(
+                    update.message_sys_id,
+                    update.reactions || [],
+                    update.my_reaction || ''
+                );
+            }
+        );
+
+
+        if (result.checkpoint) {
+
+            lastChatReactionCheckpoint =
+                String(
+                    result.checkpoint
+                ).trim();
+        }
+
+
+    } catch (error) {
+
+        console.error(
+            'Unable to silently sync chat reactions:',
+            error
+        );
+    }
+}
+
 function stopChatMessageSync() {
 
     if (chatMessageSyncTimer) {
@@ -5743,10 +6595,16 @@ function startChatMessageSync() {
                 }
 
 
+                /*
+                 * We only need an active
+                 * conversation here.
+                 *
+                 * Message sync and reaction sync
+                 * manage their own checkpoints.
+                 */
                 if (
                     !activeChatConversation ||
-                    !activeChatConversation.sys_id ||
-                    !lastChatMessageSysId
+                    !activeChatConversation.sys_id
                 ) {
                     return;
                 }
@@ -5758,7 +6616,25 @@ function startChatMessageSync() {
 
                 try {
 
+                    /*
+                     * New messages
+                     */
                     await checkForNewChatMessages();
+
+
+                    /*
+                     * Reaction changes
+                     */
+                    await checkForChatReactionUpdates();
+
+
+                } catch (error) {
+
+                    console.error(
+                        'Chat sync failed:',
+                        error
+                    );
+
 
                 } finally {
 
