@@ -11034,3 +11034,69 @@ ipcMain.handle(
     }
 );
 
+ipcMain.handle(
+    'servicecall-mark-conversation-read',
+    async (
+        event,
+        conversationSysId
+    ) => {
+
+        try {
+
+            conversationSysId =
+                String(
+                    conversationSysId || ''
+                ).trim();
+
+
+            if (!conversationSysId) {
+
+                return {
+                    success: false,
+                    code:
+                        'CONVERSATION_REQUIRED',
+                    message:
+                        'Conversation is required.'
+                };
+            }
+
+
+            const result =
+                await serviceCallApiRequest(
+                    '/mark-conversation-read',
+                    {
+                        method: 'POST',
+
+                        body: {
+                            conversation_id:
+                                conversationSysId
+                        }
+                    }
+                );
+
+
+            return result;
+
+
+        } catch (error) {
+
+            console.error(
+                'Unable to mark conversation as read:',
+                error
+            );
+
+
+            return {
+                success: false,
+                code:
+                    'MARK_CONVERSATION_READ_FAILED',
+                message:
+                    error &&
+                    error.message ?
+                    error.message :
+                    'Unable to mark conversation as read.'
+            };
+        }
+    }
+);
+

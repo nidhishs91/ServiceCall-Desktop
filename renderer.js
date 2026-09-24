@@ -5199,7 +5199,12 @@ async function openChatConversation(
         `;
     }
 
+
     try {
+
+        /* =========================================
+           LOAD MESSAGES
+        ========================================= */
 
         const result =
             await window
@@ -5229,6 +5234,73 @@ async function openChatConversation(
         }
 
 
+        /*
+         * The user successfully opened
+         * the conversation.
+         *
+         * Mark THEIR membership as read.
+         */
+        try {
+
+            const readResult =
+                await window
+                    .serviceCall
+                    .markConversationRead(
+                        conversation.sys_id
+                    );
+
+
+            if (
+                readResult &&
+                readResult.success
+            ) {
+
+                /*
+                 * Keep the local conversation
+                 * object synchronized.
+                 */
+                conversation.unread_count =
+                    0;
+
+
+                if (
+                    readResult.last_read_at
+                ) {
+
+                    conversation.last_read_at =
+                        String(
+                            readResult.last_read_at
+                        );
+                }
+
+
+                console.log(
+                    'Conversation marked as read:',
+                    readResult
+                );
+
+            } else {
+
+                console.warn(
+                    'Unable to mark conversation as read:',
+                    readResult
+                );
+            }
+
+        } catch (readError) {
+
+            /*
+             * Failure to update read state
+             * must NOT prevent the user from
+             * reading the conversation.
+             */
+            console.error(
+                'Unable to mark conversation as read:',
+                readError
+            );
+        }
+
+
         const messages =
             Array.isArray(
                 result.messages
@@ -5236,74 +5308,91 @@ async function openChatConversation(
                 ? result.messages
                 : [];
 
+
+        /* =========================================
+           MESSAGE SYNC CHECKPOINT
+        ========================================= */
+
         /*
- * Remember the newest message returned
- * by ServiceNow.
- *
- * This becomes the checkpoint for
- * silent incremental synchronization.
- */
-if (messages.length > 0) {
+         * Remember the newest message returned
+         * by ServiceNow.
+         *
+         * This becomes the checkpoint for
+         * silent incremental synchronization.
+         */
+        if (messages.length > 0) {
 
-    const newestMessage =
-        messages[
-            messages.length - 1
-        ];
-
-
-    lastChatMessageSysId =
-        String(
-            newestMessage.sys_id ||
-            ''
-        ).trim();
-
-} else {
-
-    lastChatMessageSysId =
-        '';
-}
-
-/* -----------------------------------------
-   REACTION SYNC CHECKPOINT
------------------------------------------ */
-
-lastChatReactionCheckpoint = '';
-
-try {
-
-    const reactionSyncResult =
-        await window.serviceCall
-            .getReactionUpdates(
-                conversation.sys_id
-            );
+            const newestMessage =
+                messages[
+                    messages.length - 1
+                ];
 
 
-    if (
-        activeChatConversation &&
-        String(
-            activeChatConversation.sys_id
-        ) ===
-        String(
-            conversation.sys_id
-        ) &&
-        reactionSyncResult &&
-        reactionSyncResult.success &&
-        reactionSyncResult.checkpoint
-    ) {
+            lastChatMessageSysId =
+                String(
+                    newestMessage.sys_id ||
+                    ''
+                ).trim();
+
+        } else {
+
+            lastChatMessageSysId =
+                '';
+        }
+
+
+        /* =========================================
+           REACTION SYNC CHECKPOINT
+        ========================================= */
 
         lastChatReactionCheckpoint =
-            String(
+            '';
+
+
+        try {
+
+            const reactionSyncResult =
+                await window
+                    .serviceCall
+                    .getReactionUpdates(
+                        conversation.sys_id
+                    );
+
+
+            /*
+             * Make sure the user has not switched
+             * to another conversation while the
+             * request was running.
+             */
+            if (
+                activeChatConversation &&
+                String(
+                    activeChatConversation
+                        .sys_id
+                ) ===
+                String(
+                    conversation.sys_id
+                ) &&
+                reactionSyncResult &&
+                reactionSyncResult.success &&
                 reactionSyncResult.checkpoint
-            ).trim();
-    }
+            ) {
 
-} catch (error) {
+                lastChatReactionCheckpoint =
+                    String(
+                        reactionSyncResult
+                            .checkpoint
+                    ).trim();
+            }
 
-    console.error(
-        'Unable to establish chat reaction checkpoint:',
-        error
-    );
-}
+        } catch (error) {
+
+            console.error(
+                'Unable to establish chat reaction checkpoint:',
+                error
+            );
+        }
+
 
         if (!chatMessages) {
             return;
@@ -5314,9 +5403,9 @@ try {
             '';
 
 
-        /* -------------------------
+        /* =========================================
            NO MESSAGES
-        ------------------------- */
+        ========================================= */
 
         if (
             messages.length === 0
@@ -5330,22 +5419,58 @@ try {
                 </div>
             `;
 
+
+            /*
+             * Enable composer even when
+             * the direct conversation has
+             * no messages yet.
+             */
+            if (
+                conversation.type ===
+                    'direct' &&
+                conversation
+                    .other_user_sys_id
+            ) {
+
+                if (chatMessageInput) {
+
+                    chatMessageInput.disabled =
+                        false;
+
+                    chatMessageInput.placeholder =
+                        'Type a message...';
+                }
+
+
+                if (chatSendButton) {
+
+                    chatSendButton.disabled =
+                        !String(
+                            chatMessageInput
+                                ? chatMessageInput
+                                    .value
+                                : ''
+                        ).trim();
+                }
+            }
+
+
             return;
         }
 
 
-       /* -------------------------
-   RENDER MESSAGES
-------------------------- */
+        /* =========================================
+           RENDER MESSAGES
+        ========================================= */
 
-messages.forEach(
-    message => {
+        messages.forEach(
+            message => {
 
-        appendChatMessage(
-            message
+                appendChatMessage(
+                    message
+                );
+            }
         );
-    }
-);
 
 
         /*
@@ -5354,34 +5479,39 @@ messages.forEach(
         chatMessages.scrollTop =
             chatMessages.scrollHeight;
 
-        /*
- * Enable composer for direct chat.
- */
-if (
-    conversation.type === 'direct' &&
-    conversation.other_user_sys_id
-) {
 
-    if (chatMessageInput) {
+        /* =========================================
+           ENABLE COMPOSER
+        ========================================= */
 
-        chatMessageInput.disabled =
-            false;
+        if (
+            conversation.type ===
+                'direct' &&
+            conversation
+                .other_user_sys_id
+        ) {
 
-        chatMessageInput.placeholder =
-            'Type a message...';
-    }
+            if (chatMessageInput) {
+
+                chatMessageInput.disabled =
+                    false;
+
+                chatMessageInput.placeholder =
+                    'Type a message...';
+            }
 
 
-    if (chatSendButton) {
+            if (chatSendButton) {
 
-        chatSendButton.disabled =
-            !String(
-                chatMessageInput
-                    ? chatMessageInput.value
-                    : ''
-            ).trim();
-    }
-}
+                chatSendButton.disabled =
+                    !String(
+                        chatMessageInput
+                            ? chatMessageInput
+                                .value
+                            : ''
+                    ).trim();
+            }
+        }
 
 
     } catch (error) {
@@ -7237,6 +7367,19 @@ async function loadChatConversations() {
                     'button';
 
 
+                /*
+                 * Keep the conversation sys_id
+                 * on the row.
+                 *
+                 * This will also help us later
+                 * with silent sidebar updates.
+                 */
+                row.dataset.conversationSysId =
+                    String(
+                        conversation.sys_id || ''
+                    );
+
+
                 row.style.cssText = `
                     width:100%;
                     display:flex;
@@ -7391,6 +7534,84 @@ async function loadChatConversations() {
                 );
 
 
+                /* -------------------------
+                   UNREAD COUNT
+                ------------------------- */
+
+                const unreadCount =
+                    Math.max(
+                        0,
+                        parseInt(
+                            conversation
+                                .unread_count,
+                            10
+                        ) || 0
+                    );
+
+
+                let unreadBadge =
+                    null;
+
+
+                if (unreadCount > 0) {
+
+                    unreadBadge =
+                        document.createElement(
+                            'div'
+                        );
+
+
+                    unreadBadge.className =
+                        'chat-unread-badge';
+
+
+                    /*
+                     * Keep the count sensible
+                     * if a conversation has a
+                     * very large unread total.
+                     */
+                    unreadBadge.textContent =
+                        unreadCount > 99
+                            ? '99+'
+                            : String(
+                                unreadCount
+                            );
+
+
+                    unreadBadge.style.cssText = `
+                        min-width:20px;
+                        height:20px;
+                        padding:0 6px;
+                        border-radius:10px;
+                        display:flex;
+                        align-items:center;
+                        justify-content:center;
+                        flex-shrink:0;
+                        background:#17634f;
+                        color:white;
+                        font-size:10px;
+                        font-weight:700;
+                        line-height:1;
+                    `;
+
+
+                    /*
+                     * Useful later for silent
+                     * sidebar synchronization.
+                     */
+                    unreadBadge.dataset
+                        .conversationSysId =
+                        String(
+                            conversation.sys_id ||
+                            ''
+                        );
+                }
+
+
+                /* -------------------------
+                   BUILD ROW
+                ------------------------- */
+
                 row.appendChild(
                     avatar
                 );
@@ -7401,31 +7622,65 @@ async function loadChatConversations() {
                 );
 
 
-                /*
-                 * IMPORTANT:
-                 *
-                 * We deliberately do NOT load
-                 * /messages yet.
-                 *
-                 * First prove that the real
-                 * conversation list renders.
-                 */
+                if (unreadBadge) {
+
+                    row.appendChild(
+                        unreadBadge
+                    );
+                }
+
+
+                /* -------------------------
+                   OPEN CONVERSATION
+                ------------------------- */
+
                 row.addEventListener(
-    'click',
+                    'click',
 
-    async () => {
+                    async () => {
 
-        console.log(
-            'Chat conversation selected:',
-            conversation
-        );
+                        console.log(
+                            'Chat conversation selected:',
+                            conversation
+                        );
 
 
-        await openChatConversation(
-            conversation
-        );
-    }
-);
+                        await openChatConversation(
+                            conversation
+                        );
+
+
+                        /*
+                         * openChatConversation()
+                         * marks this conversation
+                         * as read through ServiceNow.
+                         *
+                         * Update the local sidebar
+                         * immediately as well.
+                         */
+                        if (
+                            conversation
+                                .unread_count === 0
+                        ) {
+
+                            const currentBadge =
+                                row.querySelector(
+                                    '.chat-unread-badge'
+                                );
+
+
+                            if (currentBadge) {
+
+                                currentBadge.remove();
+                            }
+                        }
+                    }
+                );
+
+
+                /* -------------------------
+                   HOVER
+                ------------------------- */
 
                 row.addEventListener(
                     'mouseenter',
@@ -7449,9 +7704,10 @@ async function loadChatConversations() {
                 );
 
 
-                chatConversationList.appendChild(
-                    row
-                );
+                chatConversationList
+                    .appendChild(
+                        row
+                    );
             }
         );
 

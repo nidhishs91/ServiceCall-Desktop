@@ -167,6 +167,13 @@ setMessageReaction:
             }
         ),
 
+markConversationRead:
+    (conversationSysId) =>
+        ipcRenderer.invoke(
+            'servicecall-mark-conversation-read',
+            conversationSysId
+        ),
+
 setMessageReaction:
     (
         messageSysId,
