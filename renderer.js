@@ -6579,6 +6579,50 @@ async function checkForNewChatMessages() {
             }
         );
 
+        /*
+ * The user is actively viewing this
+ * conversation.
+ *
+ * Any message that arrived through
+ * silent synchronization has therefore
+ * been seen and should immediately be
+ * marked as read.
+ */
+try {
+
+    const readResult =
+        await window
+            .serviceCall
+            .markConversationRead(
+                conversationSysId
+            );
+
+
+    if (
+        readResult &&
+        readResult.success &&
+        activeChatConversation &&
+        String(
+            activeChatConversation.sys_id
+        ) ===
+        String(
+            conversationSysId
+        )
+    ) {
+
+        activeChatConversation
+            .unread_count =
+            0;
+    }
+
+} catch (readError) {
+
+    console.error(
+        'Unable to mark silently received messages as read:',
+        readError
+    );
+}
+
 
         /*
          * Move checkpoint to the newest
@@ -6751,21 +6795,6 @@ function startChatMessageSync() {
                 }
 
 
-                /*
-                 * We only need an active
-                 * conversation here.
-                 *
-                 * Message sync and reaction sync
-                 * manage their own checkpoints.
-                 */
-                if (
-                    !activeChatConversation ||
-                    !activeChatConversation.sys_id
-                ) {
-                    return;
-                }
-
-
                 chatMessageSyncRunning =
                     true;
 
@@ -6773,15 +6802,46 @@ function startChatMessageSync() {
                 try {
 
                     /*
-                     * New messages
+                     * =================================================
+                     * SIDEBAR CONVERSATION SYNC
+                     * =================================================
+                     *
+                     * This must run even when no conversation
+                     * is currently open.
+                     *
+                     * It allows:
+                     *
+                     * - unread counts
+                     * - latest previews
+                     * - conversation ordering
+                     *
+                     * to update automatically.
                      */
-                    await checkForNewChatMessages();
+                    await syncChatConversationList();
 
 
                     /*
-                     * Reaction changes
+                     * =================================================
+                     * ACTIVE CONVERSATION SYNC
+                     * =================================================
                      */
-                    await checkForChatReactionUpdates();
+
+                    if (
+                        activeChatConversation &&
+                        activeChatConversation.sys_id
+                    ) {
+
+                        /*
+                         * New messages
+                         */
+                        await checkForNewChatMessages();
+
+
+                        /*
+                         * Reaction changes
+                         */
+                        await checkForChatReactionUpdates();
+                    }
 
 
                 } catch (error) {
@@ -6802,6 +6862,245 @@ function startChatMessageSync() {
 
             2000
         );
+}
+
+async function syncChatConversationList() {
+
+    try {
+
+        const result =
+            await window
+                .serviceCall
+                .getConversations();
+
+
+        if (
+            !result ||
+            result.success !== true
+        ) {
+
+            console.warn(
+                'Silent conversation list sync failed:',
+                result
+            );
+
+            return;
+        }
+
+
+        const conversations =
+            Array.isArray(
+                result.conversations
+            )
+                ? result.conversations
+                : [];
+
+
+        conversations.forEach(
+            conversation => {
+
+                const conversationSysId =
+                    String(
+                        conversation.sys_id ||
+                        ''
+                    ).trim();
+
+
+                if (!conversationSysId) {
+                    return;
+                }
+
+
+                /*
+                 * Find the existing sidebar row.
+                 */
+                const row =
+                    Array.from(
+                        chatConversationList
+                            .querySelectorAll(
+                                'button[data-conversation-sys-id]'
+                            )
+                    ).find(
+                        existingRow =>
+                            String(
+                                existingRow.dataset
+                                    .conversationSysId ||
+                                ''
+                            ) ===
+                            conversationSysId
+                    );
+
+
+                /*
+                 * Conversation does not exist in
+                 * the current sidebar yet.
+                 *
+                 * For now reload the list so a
+                 * newly-created conversation can
+                 * appear.
+                 */
+                if (!row) {
+
+                    loadChatConversations();
+
+                    return;
+                }
+
+
+                /* =========================================
+                   UPDATE PREVIEW
+                ========================================= */
+
+                const information =
+                    row.children[1];
+
+
+                if (information) {
+
+                    const preview =
+                        information.children[1];
+
+
+                    if (preview) {
+
+                        preview.textContent =
+                            conversation
+                                .last_message_preview ||
+                            'No messages yet.';
+                    }
+                }
+
+
+                /* =========================================
+                   UNREAD COUNT
+                ========================================= */
+
+                let unreadCount =
+                    Math.max(
+                        0,
+                        parseInt(
+                            conversation
+                                .unread_count,
+                            10
+                        ) || 0
+                    );
+
+
+                /*
+                 * If this exact conversation is
+                 * currently open, we do NOT want
+                 * to show an unread badge for it.
+                 *
+                 * The user is actively looking at
+                 * this conversation.
+                 */
+                const isActiveConversation =
+                    activeChatConversation &&
+                    String(
+                        activeChatConversation
+                            .sys_id
+                    ) ===
+                    conversationSysId;
+
+
+                if (isActiveConversation) {
+
+                    unreadCount =
+                        0;
+                }
+
+
+                let badge =
+                    row.querySelector(
+                        '.chat-unread-badge'
+                    );
+
+
+                /*
+                 * SHOW / UPDATE BADGE
+                 */
+                if (unreadCount > 0) {
+
+                    if (!badge) {
+
+                        badge =
+                            document.createElement(
+                                'div'
+                            );
+
+
+                        badge.className =
+                            'chat-unread-badge';
+
+
+                        badge.dataset
+                            .conversationSysId =
+                            conversationSysId;
+
+
+                        badge.style.cssText = `
+                            min-width:20px;
+                            height:20px;
+                            padding:0 6px;
+                            border-radius:10px;
+                            display:flex;
+                            align-items:center;
+                            justify-content:center;
+                            flex-shrink:0;
+                            background:#17634f;
+                            color:white;
+                            font-size:10px;
+                            font-weight:700;
+                            line-height:1;
+                        `;
+
+
+                        row.appendChild(
+                            badge
+                        );
+                    }
+
+
+                    badge.textContent =
+                        unreadCount > 99
+                            ? '99+'
+                            : String(
+                                unreadCount
+                            );
+                }
+
+
+                /*
+                 * REMOVE BADGE
+                 */
+                else if (badge) {
+
+                    badge.remove();
+                }
+
+
+                /*
+                 * Keep our existing conversation
+                 * object synchronized when this
+                 * is the active conversation.
+                 */
+                if (isActiveConversation) {
+
+                    activeChatConversation
+                        .unread_count =
+                        0;
+                }
+            }
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            'Silent conversation list synchronization error:',
+            error
+        );
+    }
 }
 
 window.testChatSync =
