@@ -5898,20 +5898,76 @@ async function sendActiveChatMessage() {
  *
  * Do NOT reload the conversation.
  */
+/*
+ * Append the authoritative message
+ * returned by ServiceNow.
+ */
+const savedMessage =
+    result.message || {};
+
+
 appendChatMessage({
+
+    sys_id:
+        String(
+            savedMessage.sys_id ||
+            ''
+        ),
+
+    sender_sys_id:
+        String(
+            savedMessage.sender_sys_id ||
+            ''
+        ),
+
+    sender_name:
+        String(
+            savedMessage.sender_name ||
+            ''
+        ),
+
+    type:
+        String(
+            savedMessage.type ||
+            'text'
+        ),
+
     text:
-        result.message_text ||
-        result.text ||
-        message,
+        String(
+            savedMessage.text ||
+            message
+        ),
 
     sent_at:
-        result.sent_at ||
-        '',
+        String(
+            savedMessage.sent_at ||
+            ''
+        ),
 
     is_mine:
         true
 });
 
+
+/*
+ * CRITICAL:
+ *
+ * The message has already been rendered
+ * locally, so advance the silent-sync
+ * checkpoint immediately.
+ *
+ * Otherwise the polling loop asks
+ * ServiceNow for messages after the
+ * previous message and receives this
+ * same outgoing message again.
+ */
+if (savedMessage.sys_id) {
+
+    lastChatMessageSysId =
+        String(
+            savedMessage.sys_id
+        ).trim();
+}
 
 /*
  * Update our in-memory conversation.
