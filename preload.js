@@ -200,16 +200,20 @@ setMessageReaction:
             }
         ),
 
-        sendMessage:
+    sendMessage:
     (
         recipientSysId,
+        conversationSysId,
         message
     ) =>
         ipcRenderer.invoke(
             'servicecall-send-message',
             {
                 recipientSysId:
-                    recipientSysId,
+                    recipientSysId || '',
+
+                conversationSysId:
+                    conversationSysId || '',
 
                 message:
                     message

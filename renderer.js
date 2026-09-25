@@ -5054,29 +5054,42 @@ async function openChatConversation(
         !conversation ||
         !conversation.sys_id
     ) {
+
         return;
     }
 
 
+    /* =========================================
+       ACTIVE CONVERSATION
+    ========================================= */
+
     activeChatConversation =
         conversation;
 
-        const openingConversationSysId =
-    String(
-        conversation.sys_id
-    );
 
-    /*
-     * Direct conversations already contain
-     * the other ServiceCall user's sys_id.
-     *
-     * This preserves the existing Chat
-     * direct-call architecture.
-     */
+    const openingConversationSysId =
+        String(
+            conversation.sys_id
+        );
+
+
+    /* =========================================
+       ACTIVE DIRECT-CHAT USER
+    ========================================= */
+
     if (
-        conversation.type === 'direct' &&
-        conversation.other_user_sys_id
-    ) {
+    (
+        conversation.type ===
+            'direct' &&
+        conversation
+            .other_user_sys_id
+    ) ||
+    (
+        conversation.type ===
+            'group' &&
+        conversation.sys_id
+    )
+) {
 
         activeChatUser = {
 
@@ -5092,13 +5105,6 @@ async function openChatConversation(
                 conversation.other_user_user_name ||
                 '',
 
-            /*
-             * /conversations does not yet return
-             * live presence.
-             *
-             * Presence can be refreshed separately
-             * later.
-             */
             display_status:
                 'Offline'
         };
@@ -5116,9 +5122,9 @@ async function openChatConversation(
         'Conversation';
 
 
-    /* -------------------------
-       HEADER NAME
-    ------------------------- */
+    /* =========================================
+       HEADER
+    ========================================= */
 
     if (chatUserName) {
 
@@ -5127,9 +5133,9 @@ async function openChatConversation(
     }
 
 
-    /* -------------------------
+    /* =========================================
        AVATAR
-    ------------------------- */
+    ========================================= */
 
     if (chatUserAvatar) {
 
@@ -5171,14 +5177,16 @@ async function openChatConversation(
     }
 
 
-    /* -------------------------
-       TEMPORARY PRESENCE
-    ------------------------- */
+    /* =========================================
+       PRESENCE
+    ========================================= */
 
     if (chatUserPresenceText) {
 
         chatUserPresenceText.textContent =
-            'Offline';
+            conversation.type === 'group'
+                ? ''
+                : 'Offline';
     }
 
 
@@ -5189,9 +5197,9 @@ async function openChatConversation(
     }
 
 
-    /* -------------------------
-       SHOW CONVERSATION PANEL
-    ------------------------- */
+    /* =========================================
+       SHOW CONVERSATION
+    ========================================= */
 
     if (chatEmptyState) {
 
@@ -5207,28 +5215,44 @@ async function openChatConversation(
     }
 
 
-    /* -------------------------
-   INSTANT CONVERSATION SWITCH
-------------------------- */
+    /*
+     * Remove the previous conversation
+     * immediately.
+     *
+     * No "Loading messages..." flash.
+     */
+    if (chatMessages) {
 
-if (
-    chatMessages
-) {
+        chatMessages.innerHTML =
+            '';
+    }
+
 
     /*
-     * Immediately remove messages from
-     * the previously-open conversation.
+     * Disable composer while the actual
+     * conversation is being established.
      *
-     * The new messages load silently.
+     * This prevents sending into the wrong
+     * conversation during a very fast switch.
      */
-    chatMessages.innerHTML =
-        '';
-}
+    if (chatMessageInput) {
+
+        chatMessageInput.disabled =
+            true;
+    }
+
+
+    if (chatSendButton) {
+
+        chatSendButton.disabled =
+            true;
+    }
 
 
     try {
 
         /* =========================================
+           ONLY BLOCKING REQUEST:
            LOAD MESSAGES
         ========================================= */
 
@@ -5239,23 +5263,24 @@ if (
                     conversation.sys_id
                 );
 
-        /*
- * The user may have switched to another
- * conversation while ServiceNow was
- * returning these messages.
- *
- * Never render stale conversation data.
- */
-if (
-    !activeChatConversation ||
-    String(
-        activeChatConversation.sys_id
-    ) !==
-    openingConversationSysId
-) {
 
-    return;
-}
+        /*
+         * User switched conversations while
+         * ServiceNow was responding.
+         *
+         * Ignore this old response.
+         */
+        if (
+            !activeChatConversation ||
+            String(
+                activeChatConversation.sys_id
+            ) !==
+            openingConversationSysId
+        ) {
+
+            return;
+        }
+
 
         console.log(
             'ServiceCall conversation messages:',
@@ -5277,73 +5302,6 @@ if (
         }
 
 
-        /*
-         * The user successfully opened
-         * the conversation.
-         *
-         * Mark THEIR membership as read.
-         */
-        try {
-
-            const readResult =
-                await window
-                    .serviceCall
-                    .markConversationRead(
-                        conversation.sys_id
-                    );
-
-
-            if (
-                readResult &&
-                readResult.success
-            ) {
-
-                /*
-                 * Keep the local conversation
-                 * object synchronized.
-                 */
-                conversation.unread_count =
-                    0;
-
-
-                if (
-                    readResult.last_read_at
-                ) {
-
-                    conversation.last_read_at =
-                        String(
-                            readResult.last_read_at
-                        );
-                }
-
-
-                console.log(
-                    'Conversation marked as read:',
-                    readResult
-                );
-
-            } else {
-
-                console.warn(
-                    'Unable to mark conversation as read:',
-                    readResult
-                );
-            }
-
-        } catch (readError) {
-
-            /*
-             * Failure to update read state
-             * must NOT prevent the user from
-             * reading the conversation.
-             */
-            console.error(
-                'Unable to mark conversation as read:',
-                readError
-            );
-        }
-
-
         const messages =
             Array.isArray(
                 result.messages
@@ -5356,14 +5314,9 @@ if (
            MESSAGE SYNC CHECKPOINT
         ========================================= */
 
-        /*
-         * Remember the newest message returned
-         * by ServiceNow.
-         *
-         * This becomes the checkpoint for
-         * silent incremental synchronization.
-         */
-        if (messages.length > 0) {
+        if (
+            messages.length > 0
+        ) {
 
             const newestMessage =
                 messages[
@@ -5385,59 +5338,11 @@ if (
 
 
         /* =========================================
-           REACTION SYNC CHECKPOINT
+           RENDER IMMEDIATELY
         ========================================= */
 
-        lastChatReactionCheckpoint =
-            '';
-
-
-        try {
-
-            const reactionSyncResult =
-                await window
-                    .serviceCall
-                    .getReactionUpdates(
-                        conversation.sys_id
-                    );
-
-
-            /*
-             * Make sure the user has not switched
-             * to another conversation while the
-             * request was running.
-             */
-            if (
-                activeChatConversation &&
-                String(
-                    activeChatConversation
-                        .sys_id
-                ) ===
-                String(
-                    conversation.sys_id
-                ) &&
-                reactionSyncResult &&
-                reactionSyncResult.success &&
-                reactionSyncResult.checkpoint
-            ) {
-
-                lastChatReactionCheckpoint =
-                    String(
-                        reactionSyncResult
-                            .checkpoint
-                    ).trim();
-            }
-
-        } catch (error) {
-
-            console.error(
-                'Unable to establish chat reaction checkpoint:',
-                error
-            );
-        }
-
-
         if (!chatMessages) {
+
             return;
         }
 
@@ -5445,10 +5350,6 @@ if (
         chatMessages.innerHTML =
             '';
 
-
-        /* =========================================
-           NO MESSAGES
-        ========================================= */
 
         if (
             messages.length === 0
@@ -5462,102 +5363,229 @@ if (
                 </div>
             `;
 
+        } else {
 
-            /*
-             * Enable composer even when
-             * the direct conversation has
-             * no messages yet.
-             */
-            if (
-                conversation.type ===
-                    'direct' &&
-                conversation
-                    .other_user_sys_id
-            ) {
+            messages.forEach(
+                message => {
 
-                if (chatMessageInput) {
-
-                    chatMessageInput.disabled =
-                        false;
-
-                    chatMessageInput.placeholder =
-                        'Type a message...';
+                    appendChatMessage(
+                        message
+                    );
                 }
+            );
 
 
-                if (chatSendButton) {
+            chatMessages.scrollTop =
+                chatMessages.scrollHeight;
+        }
 
-                    chatSendButton.disabled =
-                        !String(
-                            chatMessageInput
-                                ? chatMessageInput
-                                    .value
-                                : ''
-                        ).trim();
+
+        /* =========================================
+   ENABLE COMPOSER
+========================================= */
+
+const canSendToConversation =
+    (
+        conversation.type ===
+            'direct' &&
+        conversation
+            .other_user_sys_id
+    ) ||
+    (
+        conversation.type ===
+            'group' &&
+        conversation.sys_id
+    );
+
+
+if (canSendToConversation) {
+
+    if (chatMessageInput) {
+
+        chatMessageInput.disabled =
+            false;
+
+        chatMessageInput.placeholder =
+            conversation.type ===
+                'group'
+                ? 'Message group...'
+                : 'Type a message...';
+    }
+
+
+    if (chatSendButton) {
+
+        chatSendButton.disabled =
+            !String(
+                chatMessageInput
+                    ? chatMessageInput.value
+                    : ''
+            ).trim();
+    }
+}
+
+
+        /*
+         * IMPORTANT:
+         *
+         * Everything the user needs to SEE
+         * has now been rendered.
+         *
+         * The operations below must not delay
+         * conversation rendering.
+         */
+
+
+        /* =========================================
+           BACKGROUND:
+           MARK CONVERSATION READ
+        ========================================= */
+
+        window
+            .serviceCall
+            .markConversationRead(
+                conversation.sys_id
+            )
+            .then(
+                readResult => {
+
+                    /*
+                     * Don't modify the currently
+                     * displayed conversation if
+                     * the user has already moved.
+                     */
+                    if (
+                        !activeChatConversation ||
+                        String(
+                            activeChatConversation
+                                .sys_id
+                        ) !==
+                        openingConversationSysId
+                    ) {
+
+                        return;
+                    }
+
+
+                    if (
+                        readResult &&
+                        readResult.success
+                    ) {
+
+                        conversation.unread_count =
+                            0;
+
+
+                        if (
+                            readResult.last_read_at
+                        ) {
+
+                            conversation.last_read_at =
+                                String(
+                                    readResult
+                                        .last_read_at
+                                );
+                        }
+
+
+                        console.log(
+                            'Conversation marked as read:',
+                            readResult
+                        );
+
+                    } else {
+
+                        console.warn(
+                            'Unable to mark conversation as read:',
+                            readResult
+                        );
+                    }
                 }
-            }
+            )
+            .catch(
+                readError => {
 
+                    console.error(
+                        'Unable to mark conversation as read:',
+                        readError
+                    );
+                }
+            );
+
+
+        /* =========================================
+           BACKGROUND:
+           REACTION CHECKPOINT
+        ========================================= */
+
+        lastChatReactionCheckpoint =
+            '';
+
+
+        window
+            .serviceCall
+            .getReactionUpdates(
+                conversation.sys_id
+            )
+            .then(
+                reactionSyncResult => {
+
+                    if (
+                        !activeChatConversation ||
+                        String(
+                            activeChatConversation
+                                .sys_id
+                        ) !==
+                        openingConversationSysId
+                    ) {
+
+                        return;
+                    }
+
+
+                    if (
+                        reactionSyncResult &&
+                        reactionSyncResult.success &&
+                        reactionSyncResult.checkpoint
+                    ) {
+
+                        lastChatReactionCheckpoint =
+                            String(
+                                reactionSyncResult
+                                    .checkpoint
+                            ).trim();
+                    }
+                }
+            )
+            .catch(
+                error => {
+
+                    console.error(
+                        'Unable to establish chat reaction checkpoint:',
+                        error
+                    );
+                }
+            );
+
+
+    } catch (error) {
+
+        /*
+         * Don't show an error from an old
+         * conversation after the user has
+         * already switched elsewhere.
+         */
+        if (
+            !activeChatConversation ||
+            String(
+                activeChatConversation.sys_id
+            ) !==
+            openingConversationSysId
+        ) {
 
             return;
         }
 
-
-        /* =========================================
-           RENDER MESSAGES
-        ========================================= */
-
-        messages.forEach(
-            message => {
-
-                appendChatMessage(
-                    message
-                );
-            }
-        );
-
-
-        /*
-         * Start at the newest message.
-         */
-        chatMessages.scrollTop =
-            chatMessages.scrollHeight;
-
-
-        /* =========================================
-           ENABLE COMPOSER
-        ========================================= */
-
-        if (
-            conversation.type ===
-                'direct' &&
-            conversation
-                .other_user_sys_id
-        ) {
-
-            if (chatMessageInput) {
-
-                chatMessageInput.disabled =
-                    false;
-
-                chatMessageInput.placeholder =
-                    'Type a message...';
-            }
-
-
-            if (chatSendButton) {
-
-                chatSendButton.disabled =
-                    !String(
-                        chatMessageInput
-                            ? chatMessageInput
-                                .value
-                            : ''
-                    ).trim();
-            }
-        }
-
-
-    } catch (error) {
 
         console.error(
             'Unable to open ServiceCall conversation:',
@@ -7158,16 +7186,84 @@ async function sendActiveChatMessage() {
     }
 
 
+    /* =========================================
+       VALIDATE ACTIVE CONVERSATION
+    ========================================= */
+
     if (
         !activeChatConversation ||
-        activeChatConversation.type !==
-            'direct' ||
+        !activeChatConversation.sys_id
+    ) {
+
+        console.warn(
+            'No active conversation.'
+        );
+
+        return;
+    }
+
+
+    const conversationType =
+        String(
+            activeChatConversation.type || ''
+        ).trim();
+
+
+    const isDirectConversation =
+        conversationType ===
+        'direct';
+
+
+    const isGroupConversation =
+        conversationType ===
+        'group';
+
+
+    if (
+        !isDirectConversation &&
+        !isGroupConversation
+    ) {
+
+        console.warn(
+            'Unsupported conversation type:',
+            conversationType
+        );
+
+        return;
+    }
+
+
+    /*
+     * Direct conversations require the
+     * other ServiceCall user's sys_id.
+     */
+    if (
+        isDirectConversation &&
         !activeChatConversation
             .other_user_sys_id
     ) {
 
         console.warn(
-            'No active direct conversation.'
+            'Direct conversation has no recipient.'
+        );
+
+        return;
+    }
+
+
+    /*
+     * Group conversations already exist.
+     *
+     * Their conversation sys_id becomes
+     * the message target.
+     */
+    if (
+        isGroupConversation &&
+        !activeChatConversation.sys_id
+    ) {
+
+        console.warn(
+            'Group conversation has no sys_id.'
         );
 
         return;
@@ -7178,6 +7274,10 @@ async function sendActiveChatMessage() {
         return;
     }
 
+
+    /* =========================================
+       MESSAGE
+    ========================================= */
 
     const message =
         String(
@@ -7190,7 +7290,10 @@ async function sendActiveChatMessage() {
     }
 
 
-    if (message.length > 10000) {
+    if (
+        message.length >
+        10000
+    ) {
 
         console.error(
             'Message exceeds 10000 characters.'
@@ -7200,15 +7303,45 @@ async function sendActiveChatMessage() {
     }
 
 
+    /*
+     * Capture the conversation being sent
+     * to BEFORE the asynchronous request.
+     *
+     * If the user changes conversations
+     * while ServiceNow is processing the
+     * message, we must not accidentally
+     * modify the new conversation UI.
+     */
+    const sendingConversationSysId =
+        String(
+            activeChatConversation.sys_id
+        );
+
+
+    const recipientSysId =
+        isDirectConversation
+            ? String(
+                activeChatConversation
+                    .other_user_sys_id ||
+                ''
+            ).trim()
+            : '';
+
+
+    const conversationSysId =
+        isGroupConversation
+            ? sendingConversationSysId
+            : '';
+
+
+    /* =========================================
+       LOCK SEND
+    ========================================= */
+
     chatMessageSending =
         true;
 
 
-    /*
-     * Lock immediately.
-     *
-     * Prevents double-click / duplicate send.
-     */
     chatMessageInput.disabled =
         true;
 
@@ -7225,13 +7358,22 @@ async function sendActiveChatMessage() {
 
     try {
 
+        /* =========================================
+           SEND
+
+           DIRECT:
+           recipientSysId + empty conversation
+
+           GROUP:
+           empty recipient + conversationSysId
+        ========================================= */
+
         const result =
             await window
                 .serviceCall
                 .sendMessage(
-                    activeChatConversation
-                        .other_user_sys_id,
-
+                    recipientSysId,
+                    conversationSysId,
                     message
                 );
 
@@ -7257,176 +7399,197 @@ async function sendActiveChatMessage() {
 
 
         /*
-         * IMPORTANT:
-         * Only clear after server success.
+         * The user may have changed to another
+         * conversation while the message was
+         * being stored.
+         *
+         * The message was successfully sent,
+         * but we must NOT append it into the
+         * wrong conversation.
          */
-        chatMessageInput.value =
-            '';
+        const stillViewingSentConversation =
+            activeChatConversation &&
+            String(
+                activeChatConversation.sys_id
+            ) ===
+            sendingConversationSysId;
 
-        resizeChatMessageInput();
-
-
-       /*
- * Append only the successfully
- * stored message.
- *
- * Do NOT reload the conversation.
- */
-/*
- * Append the authoritative message
- * returned by ServiceNow.
- */
-const savedMessage =
-    result.message || {};
-
-
-appendChatMessage({
-
-    sys_id:
-        String(
-            savedMessage.sys_id ||
-            ''
-        ),
-
-    sender_sys_id:
-        String(
-            savedMessage.sender_sys_id ||
-            ''
-        ),
-
-    sender_name:
-        String(
-            savedMessage.sender_name ||
-            ''
-        ),
-
-    type:
-        String(
-            savedMessage.type ||
-            'text'
-        ),
-
-    text:
-        String(
-            savedMessage.text ||
-            message
-        ),
-
-    sent_at:
-        String(
-            savedMessage.sent_at ||
-            ''
-        ),
-
-    is_mine:
-        true
-});
-
-
-/*
- * CRITICAL:
- *
- * The message has already been rendered
- * locally, so advance the silent-sync
- * checkpoint immediately.
- *
- * Otherwise the polling loop asks
- * ServiceNow for messages after the
- * previous message and receives this
- * same outgoing message again.
- */
-if (savedMessage.sys_id) {
-
-    lastChatMessageSysId =
-        String(
-            savedMessage.sys_id
-        ).trim();
-}
-
-/*
- * Update our in-memory conversation.
- */
-activeChatConversation
-    .last_message_preview =
-        message;
-
-activeChatConversation
-    .last_message_at =
-        result.sent_at ||
-        activeChatConversation
-            .last_message_at ||
-        '';
-
-
-/*
- * Update ONLY this conversation's
- * preview in the sidebar.
- *
- * We are deliberately not calling
- * loadChatConversations().
- */
-const conversationRows =
-    chatConversationList
-        ? chatConversationList
-            .querySelectorAll(
-                'button'
-            )
-        : [];
-
-
-conversationRows.forEach(
-    row => {
 
         /*
-         * The currently active direct
-         * conversation can be matched by
-         * its displayed user name for now.
-         *
-         * We will give rows explicit
-         * conversation IDs when we build
-         * silent synchronization next.
+         * Only clear the composer when the user
+         * is still viewing the conversation from
+         * which this message was sent.
          */
-        const rowName =
-            row.querySelector(
-                'div > div:first-child'
-            );
-
-
         if (
-            !rowName ||
-            rowName.textContent !==
-                (
-                    activeChatConversation
-                        .display_name ||
-                    activeChatConversation
-                        .title ||
-                    'Conversation'
-                )
+            stillViewingSentConversation
         ) {
-            return;
+
+            chatMessageInput.value =
+                '';
+
+            resizeChatMessageInput();
         }
 
 
-        const information =
-            row.children[1];
+        /* =========================================
+           AUTHORITATIVE SAVED MESSAGE
+        ========================================= */
+
+        const savedMessage =
+            result.message || {};
 
 
-        if (!information) {
-            return;
+        /*
+         * Only render locally when this is still
+         * the conversation currently displayed.
+         */
+        if (
+            stillViewingSentConversation
+        ) {
+
+            appendChatMessage({
+
+                sys_id:
+                    String(
+                        savedMessage.sys_id ||
+                        ''
+                    ),
+
+                sender_sys_id:
+                    String(
+                        savedMessage.sender_sys_id ||
+                        ''
+                    ),
+
+                sender_name:
+                    String(
+                        savedMessage.sender_name ||
+                        ''
+                    ),
+
+                type:
+                    String(
+                        savedMessage.type ||
+                        'text'
+                    ),
+
+                text:
+                    String(
+                        savedMessage.text ||
+                        message
+                    ),
+
+                sent_at:
+                    String(
+                        savedMessage.sent_at ||
+                        ''
+                    ),
+
+                is_mine:
+                    true
+            });
+
+
+            /*
+             * Prevent the silent polling loop
+             * from fetching our locally-rendered
+             * message again.
+             */
+            if (
+                savedMessage.sys_id
+            ) {
+
+                lastChatMessageSysId =
+                    String(
+                        savedMessage.sys_id
+                    ).trim();
+            }
+
+
+            /* =====================================
+               UPDATE ACTIVE CONVERSATION MEMORY
+            ===================================== */
+
+            activeChatConversation
+                .last_message_preview =
+                    message;
+
+
+            activeChatConversation
+                .last_message_at =
+                    result.conversation &&
+                    result.conversation
+                        .last_message_at
+                        ? String(
+                            result.conversation
+                                .last_message_at
+                        )
+                        : (
+                            activeChatConversation
+                                .last_message_at ||
+                            ''
+                        );
+
+
+            /* =====================================
+               UPDATE SIDEBAR PREVIEW
+            ===================================== */
+
+            const conversationRows =
+                chatConversationList
+                    ? chatConversationList
+                        .querySelectorAll(
+                            'button'
+                        )
+                    : [];
+
+
+            conversationRows.forEach(
+                row => {
+
+                    const rowName =
+                        row.querySelector(
+                            'div > div:first-child'
+                        );
+
+
+                    if (
+                        !rowName ||
+                        rowName.textContent !==
+                            (
+                                activeChatConversation
+                                    .display_name ||
+                                activeChatConversation
+                                    .title ||
+                                'Conversation'
+                            )
+                    ) {
+
+                        return;
+                    }
+
+
+                    const information =
+                        row.children[1];
+
+
+                    if (!information) {
+                        return;
+                    }
+
+
+                    const preview =
+                        information.children[1];
+
+
+                    if (preview) {
+
+                        preview.textContent =
+                            message;
+                    }
+                }
+            );
         }
-
-
-        const preview =
-            information.children[1];
-
-
-        if (preview) {
-
-            preview.textContent =
-                message;
-        }
-    }
-);
 
 
     } catch (error) {
@@ -7438,12 +7601,13 @@ conversationRows.forEach(
 
 
         /*
-         * Do NOT clear the text.
-         *
-         * The user can retry.
+         * Keep the text so the user can retry.
          */
-        chatMessageInput.disabled =
-            false;
+        if (chatMessageInput) {
+
+            chatMessageInput.disabled =
+                false;
+        }
 
 
         if (chatSendButton) {
@@ -7451,6 +7615,7 @@ conversationRows.forEach(
             chatSendButton.disabled =
                 false;
         }
+
 
     } finally {
 
@@ -7465,7 +7630,19 @@ conversationRows.forEach(
         }
 
 
-        if (chatMessageInput) {
+        /*
+         * Only restore/focus the composer when
+         * the user is still in the conversation
+         * where this send began.
+         */
+        if (
+            chatMessageInput &&
+            activeChatConversation &&
+            String(
+                activeChatConversation.sys_id
+            ) ===
+            sendingConversationSysId
+        ) {
 
             chatMessageInput.disabled =
                 false;

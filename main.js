@@ -10764,6 +10764,12 @@ ipcMain.handle(
             ).trim();
 
 
+        const conversationSysId =
+            String(
+                payload.conversationSysId || ''
+            ).trim();
+
+
         const message =
             String(
                 payload.message || ''
@@ -10774,14 +10780,17 @@ ipcMain.handle(
            VALIDATION
         ------------------------- */
 
-        if (!recipientSysId) {
+        if (
+            !recipientSysId &&
+            !conversationSysId
+        ) {
 
             return {
                 success: false,
                 code:
-                    'RECIPIENT_REQUIRED',
+                    'MESSAGE_TARGET_REQUIRED',
                 message:
-                    'Recipient is required.'
+                    'A message recipient or conversation is required.'
             };
         }
 
@@ -10814,17 +10823,37 @@ ipcMain.handle(
 
         try {
 
+            const requestBody = {
+                message:
+                    message
+            };
+
+
+            /*
+             * Existing direct-chat path.
+             */
+            if (recipientSysId) {
+
+                requestBody.recipient_sys_id =
+                    recipientSysId;
+            }
+
+
+            /*
+             * Existing group-conversation path.
+             */
+            if (conversationSysId) {
+
+                requestBody.conversation_id =
+                    conversationSysId;
+            }
+
+
             const result =
                 await serviceCallApiRequest(
                     '/send-message',
                     'POST',
-                    {
-                        recipient_sys_id:
-                            recipientSysId,
-
-                        message:
-                            message
-                    }
+                    requestBody
                 );
 
 
