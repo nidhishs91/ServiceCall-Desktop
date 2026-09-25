@@ -5061,6 +5061,10 @@ async function openChatConversation(
     activeChatConversation =
         conversation;
 
+        const openingConversationSysId =
+    String(
+        conversation.sys_id
+    );
 
     /*
      * Direct conversations already contain
@@ -5204,19 +5208,22 @@ async function openChatConversation(
 
 
     /* -------------------------
-       LOADING STATE
-    ------------------------- */
+   INSTANT CONVERSATION SWITCH
+------------------------- */
 
-    if (chatMessages) {
+if (
+    chatMessages
+) {
 
-        chatMessages.innerHTML = `
-            <div class="chat-message-placeholder">
-                <div>
-                    Loading messages...
-                </div>
-            </div>
-        `;
-    }
+    /*
+     * Immediately remove messages from
+     * the previously-open conversation.
+     *
+     * The new messages load silently.
+     */
+    chatMessages.innerHTML =
+        '';
+}
 
 
     try {
@@ -5232,6 +5239,23 @@ async function openChatConversation(
                     conversation.sys_id
                 );
 
+        /*
+ * The user may have switched to another
+ * conversation while ServiceNow was
+ * returning these messages.
+ *
+ * Never render stale conversation data.
+ */
+if (
+    !activeChatConversation ||
+    String(
+        activeChatConversation.sys_id
+    ) !==
+    openingConversationSysId
+) {
+
+    return;
+}
 
         console.log(
             'ServiceCall conversation messages:',
@@ -8225,16 +8249,29 @@ function openTemporaryChat(
 
 
     /*
-     * IMPORTANT:
+     * This is a NEW / TEMPORARY chat.
      *
-     * This does NOT create a conversation
-     * in ServiceNow.
-     *
-     * It only opens the selected person
-     * locally in the Chat UI.
+     * No ServiceNow conversation exists
+     * merely because the user opened it.
      */
+    activeChatConversation =
+        null;
+
+
     activeChatUser =
         user;
+
+
+    /*
+     * Clear synchronization checkpoints
+     * from the previously-open conversation.
+     */
+    lastChatMessageSysId =
+        '';
+
+
+    lastChatReactionCheckpoint =
+        '';
 
 
     const displayName =
@@ -8277,7 +8314,7 @@ function openTemporaryChat(
 
 
         let initials =
-            '';
+            '?';
 
 
         if (
@@ -8300,11 +8337,6 @@ function openTemporaryChat(
             initials =
                 nameParts[0][0]
                     .toUpperCase();
-
-        } else {
-
-            initials =
-                '?';
         }
 
 
@@ -8314,7 +8346,7 @@ function openTemporaryChat(
 
 
     /* -------------------------
-       PRESENCE TEXT
+       PRESENCE
     ------------------------- */
 
     if (
@@ -8325,10 +8357,6 @@ function openTemporaryChat(
             displayStatus;
     }
 
-
-    /* -------------------------
-       PRESENCE DOT
-    ------------------------- */
 
     if (
         chatUserPresenceDot
@@ -8361,6 +8389,49 @@ function openTemporaryChat(
 
         chatConversationPanel.style.display =
             'flex';
+    }
+
+
+    /* =========================================
+       IMPORTANT:
+       REMOVE PREVIOUS USER'S MESSAGES
+    ========================================= */
+
+    if (
+        chatMessages
+    ) {
+
+        chatMessages.innerHTML =
+            '';
+    }
+
+
+    /* -------------------------
+       ENABLE COMPOSER
+    ------------------------- */
+
+    if (
+        chatMessageInput
+    ) {
+
+        chatMessageInput.disabled =
+            false;
+
+        chatMessageInput.placeholder =
+            'Type a message...';
+    }
+
+
+    if (
+        chatSendButton
+    ) {
+
+        chatSendButton.disabled =
+            !String(
+                chatMessageInput
+                    ? chatMessageInput.value
+                    : ''
+            ).trim();
     }
 
 
