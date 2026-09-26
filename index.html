@@ -2436,11 +2436,29 @@
 
         .chat-page-heading {
             margin-bottom: 18px;
+            flex-shrink: 0;
+        }
+
+
+        /*
+ * Keep the Chat view inside the available
+ * content area instead of allowing it to
+ * grow with the conversation list/messages.
+ */
+        #chatView.active {
+            height: 100%;
+            min-height: 0;
+
+            display: flex;
+            flex-direction: column;
+
+            overflow: hidden;
         }
 
 
         .chat-workspace {
-            height: calc(100vh - 165px);
+            flex: 1;
+            min-height: 0;
 
             display: grid;
             grid-template-columns:
@@ -2466,6 +2484,7 @@
 
         .chat-sidebar {
             min-width: 0;
+            min-height: 0;
 
             display: flex;
             flex-direction: column;
@@ -4783,19 +4802,35 @@
 
                                         <button id="chatCalendarButton" class="chat-header-action" type="button"
                                             title="View availability" aria-label="View availability">
+
                                             <span aria-hidden="true">
                                                 📅
                                             </span>
+
                                         </button>
 
 
-                                        <!-- Direct call -->
+                                        <!-- Group details -->
+
+                                        <button id="chatGroupDetailsButton" class="chat-header-action" type="button"
+                                            title="Group details" aria-label="Group details" style="display: none;">
+
+                                            <span aria-hidden="true">
+                                                ⋮
+                                            </span>
+
+                                        </button>
+
+
+                                        <!-- Call -->
 
                                         <button id="chatCallButton" class="chat-header-action chat-call-action"
                                             type="button" title="Call" aria-label="Call">
+
                                             <span aria-hidden="true">
                                                 ☎
                                             </span>
+
                                         </button>
 
                                     </div>
@@ -4837,10 +4872,25 @@
 
                                     </div>
 
+                                    <div style="
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+">
 
-                                    <textarea id="chatMessageInput" class="chat-message-input" rows="1"
-                                        placeholder="Type a message..." disabled></textarea>
+                                        <div id="chatMembershipMessage" style="
+            display: none;
+            margin: 0 0 6px 2px;
+            font-size: 12px;
+            color: #b42318;
+        ">
+                                        </div>
 
+                                        <textarea id="chatMessageInput" class="chat-message-input"
+                                            style="width:100%; box-sizing:border-box;" rows="1"
+                                            placeholder="Type a message..." disabled></textarea>
+                                    </div>
 
                                     <button id="chatSendButton" class="chat-send-button" type="button" disabled>
                                         Send
@@ -5700,8 +5750,253 @@
 
     </div>
 
-    <script src="renderer.js"></script>
+    <div id="chatGroupDetailsModal" class="meeting-details-modal" aria-hidden="true" style="display: none;">
 
+        <div id="chatGroupDetailsBackdrop" class="meeting-details-backdrop">
+        </div>
+
+
+        <div class="meeting-details-dialog">
+
+            <!-- =====================================
+             HEADER
+        ====================================== -->
+
+            <div class="meeting-details-header">
+
+                <div>
+
+                    <div style="
+                    font-size: 18px;
+                    font-weight: 700;
+                ">
+                        Group Details
+                    </div>
+
+                    <div id="chatGroupDetailsName" style="
+                        margin-top: 4px;
+                        font-size: 13px;
+                        color: #687a76;
+                    ">
+                        Group
+                    </div>
+
+                </div>
+
+
+                <!-- =================================
+                 GROUP ACTIONS
+            ================================== -->
+
+                <div style="
+                margin-top: 8px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            ">
+
+                    <button id="chatGroupAddPeopleButton" type="button" style="
+                        display: none;
+                        padding: 5px 10px;
+                        border: 1px solid rgba(0,0,0,0.12);
+                        border-radius: 8px;
+                        background: transparent;
+                        cursor: pointer;
+                        font-size: 12px;
+                    ">
+                        Add People
+                    </button>
+
+
+                    <button id="chatGroupRenameButton" type="button" style="
+                        padding: 5px 10px;
+                        border: 1px solid rgba(0,0,0,0.12);
+                        border-radius: 8px;
+                        background: transparent;
+                        cursor: pointer;
+                        font-size: 12px;
+                    ">
+                        Rename group
+                    </button>
+
+
+                    <!-- =============================
+                     RENAME EDITOR
+                ============================== -->
+
+                    <div id="chatGroupRenameEditor" style="
+                        display: none;
+                        align-items: center;
+                        gap: 6px;
+                    ">
+
+                        <input id="chatGroupRenameInput" type="text" maxlength="200" autocomplete="off"
+                            placeholder="Group name" style="
+                            width: 180px;
+                            padding: 6px 8px;
+                            border: 1px solid rgba(0,0,0,0.14);
+                            border-radius: 8px;
+                            outline: none;
+                            font-size: 12px;
+                        ">
+
+                        <button id="chatGroupRenameSaveButton" type="button">
+                            Save
+                        </button>
+
+                        <button id="chatGroupRenameCancelButton" type="button">
+                            Cancel
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+                <button id="chatGroupDetailsCloseButton" type="button" class="secondary-button"
+                    aria-label="Close group details">
+                    ✕
+                </button>
+
+            </div>
+
+
+            <!-- =====================================
+             BODY
+        ====================================== -->
+
+            <div style="padding: 20px;">
+
+                <!--
+                IMPORTANT:
+
+                We removed the old static
+                "Members" heading.
+
+                renderer.js already generates:
+
+                    Members (3)
+
+                so we do not want both.
+            -->
+
+                <div id="chatGroupDetailsMembers">
+
+                    <div style="
+                    color: #71827d;
+                    font-size: 13px;
+                ">
+                        Group members will appear here.
+                    </div>
+
+                </div>
+
+
+                <!-- =================================
+                 ADD PEOPLE PANEL
+            ================================== -->
+
+                <div id="chatGroupAddPeoplePanel" style="
+                    display: none;
+                    margin-top: 18px;
+                    padding-top: 16px;
+                    border-top: 1px solid rgba(0,0,0,0.08);
+                ">
+
+                    <div style="
+                    font-size: 13px;
+                    font-weight: 700;
+                    margin-bottom: 10px;
+                ">
+                        Add People
+                    </div>
+
+
+                    <input id="chatGroupAddPeopleSearch" type="text" autocomplete="off"
+                        placeholder="Search ServiceCall users..." style="
+                        width: 100%;
+                        box-sizing: border-box;
+                        padding: 9px 11px;
+                        border: 1px solid rgba(0,0,0,0.12);
+                        border-radius: 9px;
+                        outline: none;
+                        font-size: 13px;
+                    ">
+
+
+                    <div id="chatGroupAddPeopleMessage" style="
+                        min-height: 18px;
+                        margin-top: 7px;
+                        font-size: 12px;
+                        color: #71827d;
+                    ">
+                    </div>
+
+
+                    <div id="chatGroupAddPeopleResults" style="
+                        max-height: 220px;
+                        overflow-y: auto;
+                        margin-top: 4px;
+                    ">
+                    </div>
+
+
+                    <div style="
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 8px;
+                    margin-top: 12px;
+                ">
+
+                        <button id="chatGroupAddPeopleCancelButton" type="button" class="secondary-button">
+                            Cancel
+                        </button>
+
+                        <button id="chatGroupAddPeopleSaveButton" type="button" class="primary-button" disabled>
+                            Add Selected
+                        </button>
+
+                    </div>
+
+                </div>
+
+                <div style="
+    margin-top:18px;
+    padding-top:14px;
+    border-top:1px solid rgba(0,0,0,0.08);
+  ">
+                    <button id="chatGroupLeaveButton" type="button" style="
+      width:100%;
+      padding:10px 14px;
+      border:1px solid #d9a7a7;
+      border-radius:8px;
+      background:#fff7f7;
+      color:#a33;
+      font-size:13px;
+      font-weight:600;
+      cursor:pointer;
+    ">
+                        Leave Group
+                    </button>
+
+                    <div id="chatGroupLeaveMessage" style="
+      display:none;
+      margin-top:8px;
+      font-size:12px;
+      color:#a33;
+      text-align:center;
+    "></div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <script src="renderer.js"></script>
 
 </body>
 

@@ -38,23 +38,13 @@
     return null;
   }
   function connectTrack(agoraTrack) {
-    const nativeTrack = getNativeAudioTrack(
-      agoraTrack
-    );
+    const nativeTrack = getNativeAudioTrack(agoraTrack);
     if (!nativeTrack) {
-      throw new Error(
-        "Unable to access an Agora audio MediaStreamTrack."
-      );
+      throw new Error("Unable to access an Agora audio MediaStreamTrack.");
     }
-    const stream = new MediaStream([
-      nativeTrack
-    ]);
-    const source = audioContext.createMediaStreamSource(
-      stream
-    );
-    source.connect(
-      destination
-    );
+    const stream = new MediaStream([nativeTrack]);
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(destination);
     return source;
   }
   function syncRemoteTracks() {
@@ -63,90 +53,51 @@
     }
     const remoteTracks = window.ServiceCallAgora.getRemoteAudioTracks();
     const activeTracks = /* @__PURE__ */ new Set();
-    remoteTracks.forEach(
-      (agoraTrack, index) => {
-        const nativeTrack = getNativeAudioTrack(
-          agoraTrack
-        );
-        if (!nativeTrack) {
-          return;
-        }
-        const trackId = nativeTrack.id || String(index);
-        activeTracks.add(
-          trackId
-        );
-        if (remoteSources.has(
-          trackId
-        )) {
-          return;
-        }
-        try {
-          const source = connectTrack(
-            agoraTrack
-          );
-          remoteSources.set(
-            trackId,
-            source
-          );
-          console.log(
-            "ServiceCall recorder added remote audio track:",
-            trackId
-          );
-        } catch (error) {
-          console.error(
-            "Unable to add remote participant to recording:",
-            error
-          );
-        }
+    remoteTracks.forEach((agoraTrack, index) => {
+      const nativeTrack = getNativeAudioTrack(agoraTrack);
+      if (!nativeTrack) {
+        return;
       }
-    );
-    for (const [
-      trackId,
-      source
-    ] of remoteSources) {
-      if (activeTracks.has(
-        trackId
-      )) {
+      const trackId = nativeTrack.id || String(index);
+      activeTracks.add(trackId);
+      if (remoteSources.has(trackId)) {
+        return;
+      }
+      try {
+        const source = connectTrack(agoraTrack);
+        remoteSources.set(trackId, source);
+        console.log("ServiceCall recorder added remote audio track:", trackId);
+      } catch (error) {
+        console.error("Unable to add remote participant to recording:", error);
+      }
+    });
+    for (const [trackId, source] of remoteSources) {
+      if (activeTracks.has(trackId)) {
         continue;
       }
       try {
         source.disconnect();
-      } catch (error) {
-      }
-      remoteSources.delete(
-        trackId
-      );
-      console.log(
-        "ServiceCall recorder removed remote audio track:",
-        trackId
-      );
+      } catch (error) {}
+      remoteSources.delete(trackId);
+      console.log("ServiceCall recorder removed remote audio track:", trackId);
     }
   }
   function createRecordingCanvas() {
-    recordingCanvas = document.createElement(
-      "canvas"
-    );
+    recordingCanvas = document.createElement("canvas");
     recordingCanvas.width = RECORDING_VIDEO_WIDTH;
     recordingCanvas.height = RECORDING_VIDEO_HEIGHT;
-    recordingCanvasContext = recordingCanvas.getContext(
-      "2d",
-      {
-        alpha: false
-      }
-    );
+    recordingCanvasContext = recordingCanvas.getContext("2d", {
+      alpha: false,
+    });
     if (!recordingCanvasContext) {
-      throw new Error(
-        "Unable to create the ServiceCall recording canvas."
-      );
+      throw new Error("Unable to create the ServiceCall recording canvas.");
     }
     drawBlankRecordingFrame();
-    recordingCanvasStream = recordingCanvas.captureStream(
-      RECORDING_VIDEO_FPS
-    );
+    recordingCanvasStream = recordingCanvas.captureStream(RECORDING_VIDEO_FPS);
     const videoTracks = recordingCanvasStream.getVideoTracks();
     if (videoTracks.length === 0) {
       throw new Error(
-        "Unable to create the ServiceCall recording video track."
+        "Unable to create the ServiceCall recording video track.",
       );
     }
     recordingVideoTrack = videoTracks[0];
@@ -160,14 +111,19 @@
       0,
       0,
       RECORDING_VIDEO_WIDTH,
-      RECORDING_VIDEO_HEIGHT
+      RECORDING_VIDEO_HEIGHT,
     );
   }
   function drawScreenFrame() {
     if (!recording || !recordingCanvasContext) {
       return;
     }
-    if (!screenPreviewVideo || !activeScreenNativeTrack || activeScreenNativeTrack.readyState === "ended" || screenPreviewVideo.readyState < 2) {
+    if (
+      !screenPreviewVideo ||
+      !activeScreenNativeTrack ||
+      activeScreenNativeTrack.readyState === "ended" ||
+      screenPreviewVideo.readyState < 2
+    ) {
       drawBlankRecordingFrame();
       return;
     }
@@ -179,20 +135,12 @@
     }
     const scale = Math.min(
       RECORDING_VIDEO_WIDTH / sourceWidth,
-      RECORDING_VIDEO_HEIGHT / sourceHeight
+      RECORDING_VIDEO_HEIGHT / sourceHeight,
     );
-    const drawWidth = Math.round(
-      sourceWidth * scale
-    );
-    const drawHeight = Math.round(
-      sourceHeight * scale
-    );
-    const x = Math.round(
-      (RECORDING_VIDEO_WIDTH - drawWidth) / 2
-    );
-    const y = Math.round(
-      (RECORDING_VIDEO_HEIGHT - drawHeight) / 2
-    );
+    const drawWidth = Math.round(sourceWidth * scale);
+    const drawHeight = Math.round(sourceHeight * scale);
+    const x = Math.round((RECORDING_VIDEO_WIDTH - drawWidth) / 2);
+    const y = Math.round((RECORDING_VIDEO_HEIGHT - drawHeight) / 2);
     drawBlankRecordingFrame();
     try {
       recordingCanvasContext.drawImage(
@@ -200,7 +148,7 @@
         x,
         y,
         drawWidth,
-        drawHeight
+        drawHeight,
       );
     } catch (error) {
       drawBlankRecordingFrame();
@@ -210,16 +158,12 @@
     stopScreenRenderLoop();
     screenRenderTimer = setInterval(
       drawScreenFrame,
-      Math.round(
-        1e3 / RECORDING_VIDEO_FPS
-      )
+      Math.round(1e3 / RECORDING_VIDEO_FPS),
     );
   }
   function stopScreenRenderLoop() {
     if (screenRenderTimer) {
-      clearInterval(
-        screenRenderTimer
-      );
+      clearInterval(screenRenderTimer);
       screenRenderTimer = null;
     }
   }
@@ -228,8 +172,7 @@
     if (screenPreviewVideo) {
       try {
         screenPreviewVideo.pause();
-      } catch (error) {
-      }
+      } catch (error) {}
       screenPreviewVideo.srcObject = null;
       screenPreviewVideo = null;
     }
@@ -239,45 +182,32 @@
     if (!recording) {
       return {
         success: false,
-        message: "Recording is not active."
+        message: "Recording is not active.",
       };
     }
-    const nativeTrack = getNativeVideoTrack(
-      agoraScreenTrack
-    );
+    const nativeTrack = getNativeVideoTrack(agoraScreenTrack);
     if (!nativeTrack) {
-      throw new Error(
-        "Unable to access the shared screen MediaStreamTrack."
-      );
+      throw new Error("Unable to access the shared screen MediaStreamTrack.");
     }
     screenUsedDuringRecording = true;
     detachScreenTrack();
     activeScreenNativeTrack = nativeTrack;
-    const video = document.createElement(
-      "video"
-    );
+    const video = document.createElement("video");
     video.muted = true;
     video.autoplay = true;
     video.playsInline = true;
-    video.srcObject = new MediaStream([
-      nativeTrack
-    ]);
+    video.srcObject = new MediaStream([nativeTrack]);
     screenPreviewVideo = video;
     try {
       await video.play();
     } catch (error) {
-      console.warn(
-        "ServiceCall recorder screen preview play warning:",
-        error
-      );
+      console.warn("ServiceCall recorder screen preview play warning:", error);
     }
     drawScreenFrame();
-    console.log(
-      "ServiceCall recorder attached shared screen."
-    );
+    console.log("ServiceCall recorder attached shared screen.");
     return {
       success: true,
-      screenUsed: true
+      screenUsed: true,
     };
   }
   function detachScreen() {
@@ -285,49 +215,36 @@
       return;
     }
     detachScreenTrack();
-    console.log(
-      "ServiceCall recorder detached shared screen."
-    );
+    console.log("ServiceCall recorder detached shared screen.");
   }
   function createRecorderStream() {
     if (!destination) {
       throw new Error(
-        "ServiceCall audio recording destination is unavailable."
+        "ServiceCall audio recording destination is unavailable.",
       );
     }
     const mixedAudioTracks = destination.stream.getAudioTracks();
     if (mixedAudioTracks.length === 0) {
-      throw new Error(
-        "ServiceCall mixed audio track is unavailable."
-      );
+      throw new Error("ServiceCall mixed audio track is unavailable.");
     }
     if (!recordingVideoTrack) {
-      throw new Error(
-        "ServiceCall recording video track is unavailable."
-      );
+      throw new Error("ServiceCall recording video track is unavailable.");
     }
-    return new MediaStream([
-      mixedAudioTracks[0],
-      recordingVideoTrack
-    ]);
+    return new MediaStream([mixedAudioTracks[0], recordingVideoTrack]);
   }
   async function startRecording() {
     if (recording) {
       return {
         success: false,
-        message: "Recording is already active."
+        message: "Recording is already active.",
       };
     }
     if (!window.ServiceCallAgora || !window.ServiceCallAgora.isJoined()) {
-      throw new Error(
-        "ServiceCall audio must be connected before recording."
-      );
+      throw new Error("ServiceCall audio must be connected before recording.");
     }
     const localAgoraTrack = window.ServiceCallAgora.getLocalAudioTrack();
     if (!localAgoraTrack) {
-      throw new Error(
-        "Local ServiceCall microphone track is unavailable."
-      );
+      throw new Error("Local ServiceCall microphone track is unavailable.");
     }
     screenUsedDuringRecording = false;
     activeScreenNativeTrack = null;
@@ -337,9 +254,7 @@
       await audioContext.resume();
     }
     destination = audioContext.createMediaStreamDestination();
-    localSource = connectTrack(
-      localAgoraTrack
-    );
+    localSource = connectTrack(localAgoraTrack);
     createRecordingCanvas();
     recording = true;
     syncRemoteTracks();
@@ -347,57 +262,44 @@
     const recorderStream = createRecorderStream();
     const preferredMimeType = "video/webm;codecs=vp8,opus";
     const fallbackMimeType = "video/webm";
-    const mimeType = MediaRecorder.isTypeSupported(
-      preferredMimeType
-    ) ? preferredMimeType : fallbackMimeType;
-    mediaRecorder = new MediaRecorder(
-      recorderStream,
-      {
-        mimeType,
-        audioBitsPerSecond: 128e3,
-        videoBitsPerSecond: 25e5
+    const mimeType = MediaRecorder.isTypeSupported(preferredMimeType)
+      ? preferredMimeType
+      : fallbackMimeType;
+    mediaRecorder = new MediaRecorder(recorderStream, {
+      mimeType,
+      audioBitsPerSecond: 128e3,
+      videoBitsPerSecond: 25e5,
+    });
+    mediaRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunks.push(event.data);
       }
-    );
-    mediaRecorder.addEventListener(
-      "dataavailable",
-      (event) => {
-        if (event.data && event.data.size > 0) {
-          recordedChunks.push(
-            event.data
-          );
-        }
-      }
-    );
-    mediaRecorder.start(
-      1e3
-    );
-    remoteSyncTimer = setInterval(
-      syncRemoteTracks,
-      1e3
-    );
+    });
+    mediaRecorder.start(1e3);
+    remoteSyncTimer = setInterval(syncRemoteTracks, 1e3);
     startScreenRenderLoop();
-    if (window.ServiceCallAgora && typeof window.ServiceCallAgora.isScreenSharing === "function" && window.ServiceCallAgora.isScreenSharing() && typeof window.ServiceCallAgora.getLocalScreenVideoTrack === "function") {
-      const currentScreenTrack = window.ServiceCallAgora.getLocalScreenVideoTrack();
+    if (
+      window.ServiceCallAgora &&
+      typeof window.ServiceCallAgora.isScreenSharing === "function" &&
+      window.ServiceCallAgora.isScreenSharing() &&
+      typeof window.ServiceCallAgora.getLocalScreenVideoTrack === "function"
+    ) {
+      const currentScreenTrack =
+        window.ServiceCallAgora.getLocalScreenVideoTrack();
       if (currentScreenTrack) {
-        await attachScreenTrack(
-          currentScreenTrack
-        );
+        await attachScreenTrack(currentScreenTrack);
       }
     }
-    console.log(
-      "ServiceCall mixed recording started."
-    );
+    console.log("ServiceCall mixed recording started.");
     return {
       success: true,
       mimeType,
-      screenUsed: screenUsedDuringRecording
+      screenUsed: screenUsedDuringRecording,
     };
   }
   async function cleanupMixer() {
     if (remoteSyncTimer) {
-      clearInterval(
-        remoteSyncTimer
-      );
+      clearInterval(remoteSyncTimer);
       remoteSyncTimer = null;
     }
     stopScreenRenderLoop();
@@ -405,26 +307,21 @@
     if (localSource) {
       try {
         localSource.disconnect();
-      } catch (error) {
-      }
+      } catch (error) {}
       localSource = null;
     }
     for (const source of remoteSources.values()) {
       try {
         source.disconnect();
-      } catch (error) {
-      }
+      } catch (error) {}
     }
     remoteSources.clear();
     if (recordingCanvasStream) {
-      recordingCanvasStream.getTracks().forEach(
-        (track) => {
-          try {
-            track.stop();
-          } catch (error) {
-          }
-        }
-      );
+      recordingCanvasStream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (error) {}
+      });
     }
     recordingVideoTrack = null;
     recordingCanvasStream = null;
@@ -434,8 +331,7 @@
     if (audioContext) {
       try {
         await audioContext.close();
-      } catch (error) {
-      }
+      } catch (error) {}
       audioContext = null;
     }
   }
@@ -443,68 +339,59 @@
     if (!recording || !mediaRecorder) {
       return {
         success: false,
-        message: "Recording is not active."
+        message: "Recording is not active.",
       };
     }
     const finalScreenUsed = screenUsedDuringRecording;
-    return new Promise(
-      (resolve, reject) => {
-        mediaRecorder.addEventListener(
-          "stop",
-          async () => {
-            try {
-              const mimeType = mediaRecorder.mimeType || "video/webm";
-              const blob = new Blob(
-                recordedChunks,
-                {
-                  type: mimeType
-                }
-              );
-              mediaRecorder = null;
-              recordedChunks = [];
-              recording = false;
-              await cleanupMixer();
-              screenUsedDuringRecording = false;
-              console.log(
-                "ServiceCall mixed recording stopped.",
-                "Size:",
-                blob.size,
-                "Screen used:",
-                finalScreenUsed
-              );
-              resolve({
-                success: true,
-                blob,
-                mimeType,
-                size: blob.size,
-                hadScreenShare: finalScreenUsed,
-                finalFormat: finalScreenUsed ? "mp4" : "mp3"
-              });
-            } catch (error) {
-              recording = false;
-              await cleanupMixer();
-              screenUsedDuringRecording = false;
-              reject(
-                error
-              );
-            }
-          },
-          {
-            once: true
+    return new Promise((resolve, reject) => {
+      mediaRecorder.addEventListener(
+        "stop",
+        async () => {
+          try {
+            const mimeType = mediaRecorder.mimeType || "video/webm";
+            const blob = new Blob(recordedChunks, {
+              type: mimeType,
+            });
+            mediaRecorder = null;
+            recordedChunks = [];
+            recording = false;
+            await cleanupMixer();
+            screenUsedDuringRecording = false;
+            console.log(
+              "ServiceCall mixed recording stopped.",
+              "Size:",
+              blob.size,
+              "Screen used:",
+              finalScreenUsed,
+            );
+            resolve({
+              success: true,
+              blob,
+              mimeType,
+              size: blob.size,
+              hadScreenShare: finalScreenUsed,
+              finalFormat: finalScreenUsed ? "mp4" : "mp3",
+            });
+          } catch (error) {
+            recording = false;
+            await cleanupMixer();
+            screenUsedDuringRecording = false;
+            reject(error);
           }
-        );
-        try {
-          mediaRecorder.stop();
-        } catch (error) {
-          recording = false;
-          cleanupMixer();
-          screenUsedDuringRecording = false;
-          reject(
-            error
-          );
-        }
+        },
+        {
+          once: true,
+        },
+      );
+      try {
+        mediaRecorder.stop();
+      } catch (error) {
+        recording = false;
+        cleanupMixer();
+        screenUsedDuringRecording = false;
+        reject(error);
       }
-    );
+    });
   }
   function isRecording() {
     return recording;
@@ -518,6 +405,6 @@
     isRecording,
     hasUsedScreen,
     attachScreen: attachScreenTrack,
-    detachScreen
+    detachScreen,
   };
 })();

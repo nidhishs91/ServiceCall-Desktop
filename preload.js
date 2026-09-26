@@ -1,702 +1,351 @@
-const {
-    contextBridge,
-    ipcRenderer
-} = require('electron');
+const { contextBridge, ipcRenderer } = require("electron");
 
-
-contextBridge.exposeInMainWorld(
-    'serviceCall',
-    {
-
-        /* -------------------------
+contextBridge.exposeInMainWorld("serviceCall", {
+  /* -------------------------
            INSTANCE / CONNECTION
         ------------------------- */
 
-        saveInstance:
-            (instanceUrl) =>
-                ipcRenderer.invoke(
-                    'servicecall-save-instance',
-                    instanceUrl
-                ),
+  saveInstance: (instanceUrl) =>
+    ipcRenderer.invoke("servicecall-save-instance", instanceUrl),
 
+  getInstance: () => ipcRenderer.invoke("servicecall-get-instance"),
 
-        getInstance:
-            () =>
-                ipcRenderer.invoke(
-                    'servicecall-get-instance'
-                ),
+  getConnectionStatus: () =>
+    ipcRenderer.invoke("servicecall-get-connection-status"),
 
-
-        getConnectionStatus:
-            () =>
-                ipcRenderer.invoke(
-                    'servicecall-get-connection-status'
-                ),
-
-
-        /* -------------------------
+  /* -------------------------
            AUTHENTICATION
         ------------------------- */
 
-        startLogin:
-            () =>
-                ipcRenderer.invoke(
-                    'servicecall-start-login'
-                ),
+  startLogin: () => ipcRenderer.invoke("servicecall-start-login"),
 
+  getGroupDetails: (conversationSysId) =>
+    ipcRenderer.invoke("servicecall-get-group-details", conversationSysId),
 
-        onAuthStatus:
-            (callback) => {
+  renameGroup: (conversationSysId, title) =>
+    ipcRenderer.invoke("servicecall-rename-group", {
+      conversationSysId,
+      title,
+    }),
 
-                ipcRenderer.on(
-                    'servicecall-auth-status',
-                    (
-                        event,
-                        data
-                    ) => {
+  addGroupMembers: (conversationSysId, participantSysIds) =>
+    ipcRenderer.invoke("servicecall-add-group-members", {
+      conversationSysId,
+      participantSysIds,
+    }),
 
-                        callback(
-                            data
-                        );
-                    }
-                );
-            },
+  setGroupMemberRole: (conversationSysId, memberUserSysId, role) =>
+    ipcRenderer.invoke("servicecall-set-group-member-role", {
+      conversationSysId,
+      memberUserSysId,
+      role,
+    }),
 
+  removeGroupMember: (conversationSysId, memberUserSysId) =>
+    ipcRenderer.invoke("servicecall-remove-group-member", {
+      conversationSysId,
+      memberUserSysId,
+    }),
 
-        /* -------------------------
+  leaveGroup: (conversationSysId) =>
+    ipcRenderer.invoke("servicecall-leave-group", {
+      conversationSysId,
+    }),
+
+  onAuthStatus: (callback) => {
+    ipcRenderer.on("servicecall-auth-status", (event, data) => {
+      callback(data);
+    });
+  },
+
+  /* -------------------------
            ACTIVE CALL
         ------------------------- */
 
-        openActiveCall:
-            () =>
-                ipcRenderer.invoke(
-                    'servicecall-open-active-call'
-                ),
+  openActiveCall: () => ipcRenderer.invoke("servicecall-open-active-call"),
 
-
-        /* -------------------------
+  /* -------------------------
            CALL ACTIONS
         ------------------------- */
 
-        acceptCall:
-            (callSysId) =>
-                ipcRenderer.invoke(
-                    'servicecall-accept-call',
-                    callSysId
-                ),
+  acceptCall: (callSysId) =>
+    ipcRenderer.invoke("servicecall-accept-call", callSysId),
 
+  declineCall: (callSysId) =>
+    ipcRenderer.invoke("servicecall-decline-call", callSysId),
 
-        declineCall:
-            (callSysId) =>
-                ipcRenderer.invoke(
-                    'servicecall-decline-call',
-                    callSysId
-                ),
+  cancelCall: (callSysId) =>
+    ipcRenderer.invoke("servicecall-cancel-call", callSysId),
 
+  endCall: (callSysId) => ipcRenderer.invoke("servicecall-end-call", callSysId),
 
-        cancelCall:
-            (callSysId) =>
-                ipcRenderer.invoke(
-                    'servicecall-cancel-call',
-                    callSysId
-                ),
-
-
-        endCall:
-            (callSysId) =>
-                ipcRenderer.invoke(
-                    'servicecall-end-call',
-                    callSysId
-                ),
-
-        /* -------------------------
+  /* -------------------------
    CHAT
 ------------------------- */
 
-getConversations:
-    () =>
-        ipcRenderer.invoke(
-            'servicecall-get-conversations'
-        ),
+  getConversations: () => ipcRenderer.invoke("servicecall-get-conversations"),
 
-        getMessages:
-    (
-        conversationSysId,
-        afterMessageSysId = ''
-    ) =>
-        ipcRenderer.invoke(
-            'servicecall-get-messages',
-            {
-                conversationSysId:
-                    conversationSysId,
+  getMessages: (conversationSysId, afterMessageSysId = "") =>
+    ipcRenderer.invoke("servicecall-get-messages", {
+      conversationSysId: conversationSysId,
 
-                afterMessageSysId:
-                    afterMessageSysId
-            }
-        ),
+      afterMessageSysId: afterMessageSysId,
+    }),
 
-getReactionUpdates:
-    (
-        conversationSysId,
-        afterCheckpoint = ''
-    ) =>
-        ipcRenderer.invoke(
-            'servicecall-get-reaction-updates',
-            {
-                conversationSysId:
-                    conversationSysId,
+  getReactionUpdates: (conversationSysId, afterCheckpoint = "") =>
+    ipcRenderer.invoke("servicecall-get-reaction-updates", {
+      conversationSysId: conversationSysId,
 
-                afterCheckpoint:
-                    afterCheckpoint
-            }
-        ),
+      afterCheckpoint: afterCheckpoint,
+    }),
 
-setMessageReaction:
-    (
-        messageSysId,
-        reaction
-    ) =>
-        ipcRenderer.invoke(
-            'servicecall-set-message-reaction',
-            {
-                messageSysId:
-                    messageSysId,
+  setMessageReaction: (messageSysId, reaction) =>
+    ipcRenderer.invoke("servicecall-set-message-reaction", {
+      messageSysId: messageSysId,
 
-                reaction:
-                    reaction
-            }
-        ),
+      reaction: reaction,
+    }),
 
-markConversationRead:
-    (conversationSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-mark-conversation-read',
-            conversationSysId
-        ),
+  markConversationRead: (conversationSysId) =>
+    ipcRenderer.invoke("servicecall-mark-conversation-read", conversationSysId),
 
-createGroup:
-    (title, participantSysIds) =>
-        ipcRenderer.invoke(
-            'servicecall-create-group',
-            {
-                title,
-                participantSysIds
-            }
-        ),
+  createGroup: (title, participantSysIds) =>
+    ipcRenderer.invoke("servicecall-create-group", {
+      title,
+      participantSysIds,
+    }),
 
-setMessageReaction:
-    (
-        messageSysId,
-        reaction
-    ) =>
-        ipcRenderer.invoke(
-            'servicecall-set-message-reaction',
-            {
-                messageSysId:
-                    messageSysId,
+  setMessageReaction: (messageSysId, reaction) =>
+    ipcRenderer.invoke("servicecall-set-message-reaction", {
+      messageSysId: messageSysId,
 
-                reaction:
-                    reaction
-            }
-        ),
+      reaction: reaction,
+    }),
 
-    sendMessage:
-    (
-        recipientSysId,
-        conversationSysId,
-        message
-    ) =>
-        ipcRenderer.invoke(
-            'servicecall-send-message',
-            {
-                recipientSysId:
-                    recipientSysId || '',
+  sendMessage: (recipientSysId, conversationSysId, message) =>
+    ipcRenderer.invoke("servicecall-send-message", {
+      recipientSysId: recipientSysId || "",
 
-                conversationSysId:
-                    conversationSysId || '',
+      conversationSysId: conversationSysId || "",
 
-                message:
-                    message
-            }
-        ),
+      message: message,
+    }),
 
-        leaveCall:
-    (callSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-leave-call',
-            callSysId
-        ),
+  leaveCall: (callSysId) =>
+    ipcRenderer.invoke("servicecall-leave-call", callSysId),
 
+  getCallStatus: (callSysId) =>
+    ipcRenderer.invoke("servicecall-get-call-status", callSysId),
 
-        getCallStatus:
-            (callSysId) =>
-                ipcRenderer.invoke(
-                    'servicecall-get-call-status',
-                    callSysId
-                ),
+  checkAccess: () => ipcRenderer.invoke("servicecall-check-access"),
 
-        checkAccess: () =>
-    ipcRenderer.invoke(
-        'servicecall-check-access'
-    ),
-
-
-        /* -------------------------
+  /* -------------------------
            PARTICIPANTS
         ------------------------- */
 
-        searchUsers:
-            (searchText) =>
-                ipcRenderer.invoke(
-                    'servicecall-search-users',
-                    searchText
-                ),
+  searchUsers: (searchText) =>
+    ipcRenderer.invoke("servicecall-search-users", searchText),
 
+  inviteParticipant: (callSysId, userSysId) =>
+    ipcRenderer.invoke("servicecall-invite-participant", callSysId, userSysId),
 
-        inviteParticipant:
-            (
-                callSysId,
-                userSysId
-            ) =>
-                ipcRenderer.invoke(
-                    'servicecall-invite-participant',
-                    callSysId,
-                    userSysId
-                ),
-
-
-        /* -------------------------
+  /* -------------------------
            DYNAMIC MEDIA CREDENTIALS
         ------------------------- */
 
-        getMediaCredentials:
-    (callSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-get-media-credentials',
-            callSysId
-        ),
+  getMediaCredentials: (callSysId) =>
+    ipcRenderer.invoke("servicecall-get-media-credentials", callSysId),
 
-
-/* -------------------------
+  /* -------------------------
    SCREEN SHARING
 ------------------------- */
 
-getScreenSources:
-    () =>
-        ipcRenderer.invoke(
-            'servicecall-get-screen-sources'
-        ),
+  getScreenSources: () => ipcRenderer.invoke("servicecall-get-screen-sources"),
 
-        setCallWindowLayout:
-    (layout) =>
-        ipcRenderer.invoke(
-            'servicecall-set-call-window-layout',
-            layout
-        ),
+  setCallWindowLayout: (layout) =>
+    ipcRenderer.invoke("servicecall-set-call-window-layout", layout),
 
-
-/* -------------------------
+  /* -------------------------
    RECORDING
 ------------------------- */
 
-startRecording:
-    (callSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-start-recording',
-            callSysId
-        ),
+  startRecording: (callSysId) =>
+    ipcRenderer.invoke("servicecall-start-recording", callSysId),
 
-startCall: (
-    targetUserSysId
-) => {
+  startCall: (targetUserSysId) => {
+    return ipcRenderer.invoke("servicecall-start-call", targetUserSysId);
+  },
 
-    return ipcRenderer.invoke(
-        'servicecall-start-call',
-        targetUserSysId
-    );
-},
+  updatePresence: (status, oofReason = "") => {
+    return ipcRenderer.invoke("servicecall-update-presence", {
+      status: status,
+      oofReason: oofReason,
+    });
+  },
 
-updatePresence: (
-    status,
-    oofReason = ''
-) => {
+  checkAccess: () => ipcRenderer.invoke("servicecall-check-access"),
 
-    return ipcRenderer.invoke(
-        'servicecall-update-presence',
-        {
-            status: status,
-            oofReason: oofReason
-        }
-    );
-},
+  onAuthorizationStatus: (callback) => {
+    const handler = (event, data) => {
+      callback(data);
+    };
 
-checkAccess: () =>
+    ipcRenderer.on("servicecall-authorization-status", handler);
+
+    return () => {
+      ipcRenderer.removeListener("servicecall-authorization-status", handler);
+    };
+  },
+
+  getMyPresence: () => {
+    return ipcRenderer.invoke("servicecall-get-my-presence");
+  },
+
+  signOut: () => ipcRenderer.invoke("servicecall-sign-out"),
+
+  getSavedAccounts: () => ipcRenderer.invoke("servicecall-get-saved-accounts"),
+
+  getCurrentAccount: () =>
+    ipcRenderer.invoke("servicecall-get-current-account"),
+
+  activateSavedAccount: (accountKey) =>
+    ipcRenderer.invoke("servicecall-activate-saved-account", accountKey),
+
+  removeSavedAccount: (accountKey) =>
+    ipcRenderer.invoke("servicecall-remove-saved-account", accountKey),
+
+  finishRecording: (recordingSysId) =>
+    ipcRenderer.invoke("servicecall-finish-recording", recordingSysId),
+
+  uploadRecording: (recordingSysId, fileData, fileName, format) =>
     ipcRenderer.invoke(
-        'servicecall-check-access'
+      "servicecall-upload-recording",
+      recordingSysId,
+      fileData,
+      fileName,
+      format,
     ),
 
-onAuthorizationStatus:
-    (callback) => {
+  finalizeVoiceRecording: (recordingSysId, webmData) =>
+    ipcRenderer.invoke(
+      "servicecall-finalize-voice-recording",
+      recordingSysId,
+      webmData,
+    ),
 
-        const handler =
-            (
-                event,
-                data
-            ) => {
+  finalizeScreenRecording: (recordingSysId, webmData) =>
+    ipcRenderer.invoke(
+      "servicecall-finalize-screen-recording",
+      recordingSysId,
+      webmData,
+    ),
 
-                callback(
-                    data
-                );
-            };
+  getRecordingHistory: () =>
+    ipcRenderer.invoke("servicecall-get-recording-history"),
 
+  downloadRecording: (recordingSysId) =>
+    ipcRenderer.invoke("servicecall-download-recording", recordingSysId),
 
-        ipcRenderer.on(
-            'servicecall-authorization-status',
-            handler
-        );
+  completeRecording: (recordingSysId, attachmentSysId, format) =>
+    ipcRenderer.invoke(
+      "servicecall-complete-recording",
+      recordingSysId,
+      attachmentSysId,
+      format,
+    ),
 
+  getMyMeetings: (page = 1, search = "", status = "") =>
+    ipcRenderer.invoke("servicecall-get-my-meetings", {
+      page: page,
+      search: search,
+      status: status,
+    }),
 
-        return () => {
+  getMeetingDetails: (meetingSysId) =>
+    ipcRenderer.invoke("servicecall-get-meeting-details", meetingSysId),
 
-            ipcRenderer.removeListener(
-                'servicecall-authorization-status',
-                handler
-            );
-        };
-    },
+  createMeeting: (meetingData) =>
+    ipcRenderer.invoke("servicecall-create-meeting", meetingData),
 
-getMyPresence: () => {
+  onDeepLink: (callback) => {
+    ipcRenderer.on("servicecall-deep-link", (event, data) => {
+      callback(data);
+    });
+  },
 
+  onDeepLink: (callback) => {
+    const handler = (event, data) => {
+      callback(data);
+    };
+
+    ipcRenderer.on("servicecall-deep-link", handler);
+
+    return () => {
+      ipcRenderer.removeListener("servicecall-deep-link", handler);
+    };
+  },
+
+  rendererReady: () => {
+    ipcRenderer.send("servicecall-renderer-ready");
+  },
+
+  getNotifications: (page = 1, pageSize = 20, search = "") => {
+    return ipcRenderer.invoke("servicecall-get-notifications", {
+      page: page,
+      pageSize: pageSize,
+      search: search,
+    });
+  },
+
+  markNotificationRead: (notificationSysId) => {
     return ipcRenderer.invoke(
-        'servicecall-get-my-presence'
+      "servicecall-mark-notification-read",
+      notificationSysId,
     );
-},
+  },
 
-signOut: () =>
-    ipcRenderer.invoke(
-        'servicecall-sign-out'
-    ),
+  testNotificationPopup: () => {
+    return ipcRenderer.invoke("servicecall-test-notification-popup");
+  },
 
-getSavedAccounts: () =>
-    ipcRenderer.invoke(
-        'servicecall-get-saved-accounts'
-    ),
+  dismissNotificationPopup: () => {
+    ipcRenderer.send("servicecall-dismiss-notification-popup");
+  },
 
-getCurrentAccount: () =>
-    ipcRenderer.invoke(
-        'servicecall-get-current-account'
-    ),
+  openNotification: (notificationData) => {
+    ipcRenderer.send("servicecall-open-notification", notificationData);
+  },
 
-activateSavedAccount: (
-    accountKey
-) =>
-    ipcRenderer.invoke(
-        'servicecall-activate-saved-account',
-        accountKey
-    ),
+  onNotificationMeetingOpen: (callback) => {
+    ipcRenderer.on("servicecall-open-notification-meeting", (event, data) => {
+      callback(data);
+    });
+  },
 
-removeSavedAccount: (
-    accountKey
-) =>
-    ipcRenderer.invoke(
-        'servicecall-remove-saved-account',
-        accountKey
-    ),
+  updateMeeting: (meetingSysId, meetingData) =>
+    ipcRenderer.invoke("servicecall-update-meeting", meetingSysId, meetingData),
 
-finishRecording:
-    (recordingSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-finish-recording',
-            recordingSysId
-        ),
+  startMeeting: (meetingSysId) =>
+    ipcRenderer.invoke("servicecall-start-meeting", meetingSysId),
 
-uploadRecording:
-    (
-        recordingSysId,
-        fileData,
-        fileName,
-        format
-    ) =>
-        ipcRenderer.invoke(
-            'servicecall-upload-recording',
-            recordingSysId,
-            fileData,
-            fileName,
-            format
-        ),
+  joinMeeting: (meetingSysId) =>
+    ipcRenderer.invoke("servicecall-join-meeting", meetingSysId),
 
-finalizeVoiceRecording:
-    (
-        recordingSysId,
-        webmData
-    ) =>
-        ipcRenderer.invoke(
-            'servicecall-finalize-voice-recording',
-            recordingSysId,
-            webmData
-        ),
+  leaveMeeting: (meetingSysId) =>
+    ipcRenderer.invoke("servicecall-leave-meeting", meetingSysId),
 
-        finalizeScreenRecording:
-    (
-        recordingSysId,
-        webmData
-    ) =>
-        ipcRenderer.invoke(
-            'servicecall-finalize-screen-recording',
-            recordingSysId,
-            webmData
-        ),
+  endMeeting: (meetingSysId) =>
+    ipcRenderer.invoke("servicecall-end-meeting", meetingSysId),
 
-    getRecordingHistory:
-    () =>
-        ipcRenderer.invoke(
-            'servicecall-get-recording-history'
-        ),
- 
- 
-downloadRecording:
-    (recordingSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-download-recording',
-            recordingSysId
-        ),
- 
+  cancelMeeting: (meetingSysId) =>
+    ipcRenderer.invoke("servicecall-cancel-meeting", meetingSysId),
 
+  notifyMeetingChanged: (meetingSysId) =>
+    ipcRenderer.send("servicecall-meeting-changed", meetingSysId),
 
-completeRecording:
-    (
-        recordingSysId,
-        attachmentSysId,
-        format
-    ) =>
-        ipcRenderer.invoke(
-            'servicecall-complete-recording',
-            recordingSysId,
-            attachmentSysId,
-            format
-        ),
-
-    getMyMeetings:
-    (
-        page = 1,
-        search = '',
-        status = ''
-    ) =>
-        ipcRenderer.invoke(
-            'servicecall-get-my-meetings',
-            {
-                page: page,
-                search: search,
-                status: status
-            }
-        ),
-
-    getMeetingDetails:
-    (meetingSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-get-meeting-details',
-            meetingSysId
-        ),
-        
-    createMeeting:
-    (meetingData) =>
-        ipcRenderer.invoke(
-            'servicecall-create-meeting',
-            meetingData
-        ),
-
-    onDeepLink:
-    (callback) => {
-
-        ipcRenderer.on(
-            'servicecall-deep-link',
-            (
-                event,
-                data
-            ) => {
-
-                callback(data);
-            }
-        );
-    },
-
-    onDeepLink:
-    (callback) => {
-
-        const handler =
-            (
-                event,
-                data
-            ) => {
-
-                callback(
-                    data
-                );
-            };
-
-
-        ipcRenderer.on(
-            'servicecall-deep-link',
-            handler
-        );
-
-
-        return () => {
-
-            ipcRenderer.removeListener(
-                'servicecall-deep-link',
-                handler
-            );
-        };
-    },
-
-    rendererReady:
-    () => {
-
-        ipcRenderer.send(
-            'servicecall-renderer-ready'
-        );
-    },
-
-    getNotifications: (
-    page = 1,
-    pageSize = 20,
-    search = ''
-) => {
-
-    return ipcRenderer.invoke(
-        'servicecall-get-notifications',
-        {
-            page: page,
-            pageSize: pageSize,
-            search: search
-        }
-    );
-},
-
-markNotificationRead: (
-    notificationSysId
-) => {
-
-    return ipcRenderer.invoke(
-        'servicecall-mark-notification-read',
-        notificationSysId
-    );
-},
-
-testNotificationPopup: () => {
-
-    return ipcRenderer.invoke(
-        'servicecall-test-notification-popup'
-    );
-},
-
-dismissNotificationPopup: () => {
-
-    ipcRenderer.send(
-        'servicecall-dismiss-notification-popup'
-    );
-},
-
-openNotification: (
-    notificationData
-) => {
- 
-    ipcRenderer.send(
-        'servicecall-open-notification',
-        notificationData
-    );
- 
-},
-
-onNotificationMeetingOpen: (
-    callback
-) => {
- 
-    ipcRenderer.on(
-        'servicecall-open-notification-meeting',
-        (
-            event,
-            data
-        ) => {
- 
-            callback(
-                data
-            );
-        }
-    );
-},
-
-    updateMeeting:
-    (
-        meetingSysId,
-        meetingData
-    ) =>
-        ipcRenderer.invoke(
-            'servicecall-update-meeting',
-            meetingSysId,
-            meetingData
-        ),
-
-    startMeeting:
-    (meetingSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-start-meeting',
-            meetingSysId
-        ),
-
-    joinMeeting:
-    (meetingSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-join-meeting',
-            meetingSysId
-        ),
-
-    leaveMeeting:
-    (meetingSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-leave-meeting',
-            meetingSysId
-        ),
-
-    endMeeting:
-    (meetingSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-end-meeting',
-            meetingSysId
-        ),
-
-    cancelMeeting:
-    (meetingSysId) =>
-        ipcRenderer.invoke(
-            'servicecall-cancel-meeting',
-            meetingSysId
-        ),
-
-    notifyMeetingChanged:
-    (meetingSysId) =>
-        ipcRenderer.send(
-            'servicecall-meeting-changed',
-            meetingSysId
-        ),
-
-onMeetingChanged:
-    (callback) => {
-
-        ipcRenderer.on(
-            'servicecall-meeting-changed',
-            (
-                event,
-                data
-            ) => {
-
-                callback(
-                    data
-                );
-            }
-        );
-    }
-
-    }
-);
-
+  onMeetingChanged: (callback) => {
+    ipcRenderer.on("servicecall-meeting-changed", (event, data) => {
+      callback(data);
+    });
+  },
+});
