@@ -6271,6 +6271,32 @@ document.addEventListener("DOMContentLoaded", async () => {
           activeChatConversation.unread_count = 0;
         }
       });
+
+      /*
+       * Keep sidebar order synchronized with
+       * ServiceNow's authoritative conversation order.
+       *
+       * The /conversations response is ordered by
+       * latest activity, so newer conversations
+       * naturally rise to the top.
+       */
+      if (chatConversationList) {
+        conversations.forEach((conversation) => {
+          const conversationSysId = String(conversation.sys_id || "").trim();
+
+          if (!conversationSysId) {
+            return;
+          }
+
+          const row = chatConversationList.querySelector(
+            `button[data-conversation-sys-id="${conversationSysId}"]`,
+          );
+
+          if (row) {
+            chatConversationList.appendChild(row);
+          }
+        });
+      }
     } catch (error) {
       console.error("Silent conversation list synchronization error:", error);
     }
@@ -6620,6 +6646,31 @@ document.addEventListener("DOMContentLoaded", async () => {
 
           if (preview) {
             preview.textContent = message;
+          }
+
+          /*
+           * This conversation now has the newest activity.
+           * Move its existing sidebar row to the top.
+           */
+          if (
+            chatConversationList &&
+            row.parentElement === chatConversationList &&
+            chatConversationList.firstElementChild !== row
+          ) {
+            /*
+             * Move the active conversation
+             * to the top of the sidebar.
+             */
+            chatConversationList.prepend(row);
+
+            /*
+             * Bring the refreshed top of the
+             * conversation list into view.
+             */
+            chatConversationList.scrollTo({
+              top: 0,
+              behavior: "smooth",
+            });
           }
         });
       }
