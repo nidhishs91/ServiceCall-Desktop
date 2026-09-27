@@ -6225,8 +6225,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         let badge = row.querySelector(".chat-unread-badge");
 
         /*
-         * SHOW / UPDATE BADGE
+         * Visually distinguish conversations
+         * containing unread messages.
          */
+        if (unreadCount > 0) {
+          row.classList.add("chat-conversation-unread");
+        } else {
+          row.classList.remove("chat-conversation-unread");
+        }
+
         if (unreadCount > 0) {
           if (!badge) {
             badge = document.createElement("div");
