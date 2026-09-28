@@ -86,6 +86,32 @@ document.addEventListener("DOMContentLoaded", async () => {
    * =========================================
    */
 
+  /*
+   * =========================================
+   * NEW MESSAGE INDICATOR
+   * =========================================
+   */
+
+  function updateChatNewMessagesButton() {
+    if (!chatNewMessagesButton) {
+      return;
+    }
+
+    if (chatNewMessageCount <= 0) {
+      chatNewMessagesButton.style.display = "none";
+
+      chatNewMessagesButton.textContent = "";
+
+      return;
+    }
+
+    const label = chatNewMessageCount === 1 ? "new message" : "new messages";
+
+    chatNewMessagesButton.textContent = `↓ ${chatNewMessageCount} ${label}`;
+
+    chatNewMessagesButton.style.display = "block";
+  }
+
   function isChatNearBottom() {
     if (!chatMessages) {
       return true;
@@ -120,6 +146,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   );
 
   const chatConversationList = document.getElementById("chatConversationList");
+
+  const chatNewMessagesButton = document.getElementById(
+    "chatNewMessagesButton",
+  );
 
   const chatEmptyState = document.getElementById("chatEmptyState");
 
@@ -6432,18 +6462,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         chatNewMessageCount = 0;
 
+        updateChatNewMessagesButton();
+
         if (chatMessages) {
           chatMessages.scrollTop = chatMessages.scrollHeight;
         }
       } else {
-
-      /*
-       * User was reading older content.
-       *
-       * appendChatMessage() temporarily moved
-       * the container downward, so restore the
-       * exact previous position.
-       */
         chatUserWasNearBottom = false;
 
         chatNewMessageCount += newMessages.length;
@@ -6451,6 +6475,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (chatMessages) {
           chatMessages.scrollTop = previousScrollTop;
         }
+
+        updateChatNewMessagesButton();
       }
 
       /*
