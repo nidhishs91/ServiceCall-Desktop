@@ -172,9 +172,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       chatMessages.querySelectorAll(".chat-message-row").forEach((row) => {
         const messageSysId = String(row.dataset.messageSysId || "").trim();
 
-        row.style.cursor =
-          chatMessageSelectionMode && messageSysId ? "pointer" : "";
-
         const indicator = row.querySelector(
           ".chat-message-selection-indicator",
         );
@@ -182,6 +179,29 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!indicator) {
           return;
         }
+
+        /*
+         * Deleted-for-everyone tombstones are
+         * never selectable.
+         *
+         * Their selection indicator must stay
+         * completely hidden even while selection
+         * mode is active.
+         */
+        if (row.dataset.messageDeleted === "true") {
+          indicator.style.display = "none";
+          indicator.style.opacity = "0";
+          indicator.style.pointerEvents = "none";
+
+          row.style.cursor = "";
+
+          return;
+        }
+
+        indicator.style.display = "";
+
+        row.style.cursor =
+          chatMessageSelectionMode && messageSysId ? "pointer" : "";
 
         const isSelected = selectedChatMessages.has(messageSysId);
 
@@ -323,16 +343,408 @@ document.addEventListener("DOMContentLoaded", async () => {
     `;
 
       /*
-       * Backend action comes next.
-       * For now this proves the bar
-       * and selected message state.
+       * SELECTION ACTION
+       *
+       * Delete mode:
+       *   - All selected messages are mine:
+       *       Delete for everyone
+       *       Delete for me
+       *       Cancel
+       *
+       *   - At least one selected message
+       *     belongs to somebody else:
+       *       Delete for me
+       *       Cancel
+       *
+       * Forward mode will be wired later.
        */
-      actionButton.addEventListener("click", () => {
-        console.log(
-          "Selection action:",
-          chatMessageSelectionMode,
-          Array.from(selectedChatMessages.values()),
+      actionButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (selectedChatMessages.size === 0) {
+          return;
+        }
+
+        /*
+         * Forward will use this same
+         * action button later.
+         */
+        if (chatMessageSelectionMode !== "delete") {
+          console.log(
+            "Forward selected messages:",
+            Array.from(selectedChatMessages.values()),
+          );
+
+          return;
+        }
+
+        /*
+         * Historical group conversations
+         * remain read-only.
+         */
+        if (isActiveChatReadOnly()) {
+          clearChatMessageSelection();
+
+          updateChatMessageSelectionUI();
+
+          showChatMembershipError();
+
+          return;
+        }
+
+        /*
+         * Close any previous Delete
+         * choice popup.
+         */
+        document
+          .querySelectorAll(".chat-selection-delete-menu")
+          .forEach((existingMenu) => {
+            existingMenu.remove();
+          });
+
+        const selectedMessages = Array.from(selectedChatMessages.values());
+
+        /*
+         * Delete for everyone is available
+         * ONLY when every selected message
+         * belongs to the current user.
+         */
+        const allMessagesAreMine =
+          selectedMessages.length > 0 &&
+          selectedMessages.every(
+            (selectedMessage) => selectedMessage.is_mine === true,
+          );
+
+        /* =========================================
+       DELETE CHOICE MENU
+    ========================================= */
+
+        const deleteMenu = document.createElement("div");
+
+        deleteMenu.className = "chat-selection-delete-menu";
+
+        deleteMenu.style.cssText = `
+      position:absolute;
+      right:12px;
+      bottom:58px;
+
+      z-index:1600;
+
+      min-width:190px;
+
+      padding:6px;
+
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+
+      box-sizing:border-box;
+
+      border:
+        1px solid #dfe6e4;
+
+      border-radius:12px;
+
+      background:#ffffff;
+
+      box-shadow:
+        0 10px 30px
+        rgba(0,0,0,0.16);
+    `;
+
+        /*
+         * Small helper so all menu
+         * buttons behave consistently.
+         */
+        function createDeleteChoiceButton(label, destructive = false) {
+          const button = document.createElement("button");
+
+          button.type = "button";
+
+          button.textContent = label;
+
+          button.style.cssText = `
+        width:100%;
+
+        border:none;
+        border-radius:8px;
+
+        background:transparent;
+
+        padding:9px 11px;
+
+        text-align:left;
+
+        font-size:12px;
+
+        color:${destructive ? "#b42318" : "#60706c"};
+
+        cursor:pointer;
+      `;
+
+          button.addEventListener("mouseenter", () => {
+            button.style.background = destructive ? "#fff1f0" : "#eef4f2";
+          });
+
+          button.addEventListener("mouseleave", () => {
+            button.style.background = "transparent";
+          });
+
+          return button;
+        }
+
+        /* =========================================
+       DELETE FOR EVERYONE
+    ========================================= */
+
+        if (allMessagesAreMine) {
+          const deleteEveryoneButton = createDeleteChoiceButton(
+            "Delete for everyone",
+            true,
+          );
+
+          deleteEveryoneButton.addEventListener(
+            "click",
+            async (deleteEvent) => {
+              deleteEvent.preventDefault();
+              deleteEvent.stopPropagation();
+
+              /*
+               * Backend execution comes
+               * in the NEXT step.
+               */
+              const selectedMessageSysIds = selectedMessages
+                .map((selectedMessage) =>
+                  String(selectedMessage.sys_id || "").trim(),
+                )
+                .filter(Boolean);
+
+              if (selectedMessageSysIds.length === 0) {
+                return;
+              }
+
+              deleteEveryoneButton.disabled = true;
+              deleteEveryoneButton.textContent = "Deleting...";
+
+              try {
+                const conversationSysId = String(
+                  activeChatConversation?.sys_id || "",
+                ).trim();
+
+                const result = await window.serviceCall.deleteMessages(
+                  conversationSysId,
+                  selectedMessageSysIds,
+                  "everyone",
+                );
+
+                if (!result || result.success !== true) {
+                  console.warn("Multi Delete for everyone failed:", result);
+
+                  deleteEveryoneButton.disabled = false;
+
+                  deleteEveryoneButton.textContent = "Delete for everyone";
+
+                  return;
+                }
+
+                /*
+                 * Convert every affected rendered
+                 * message into a deleted tombstone.
+                 */
+                selectedMessageSysIds.forEach((deletedMessageSysId) => {
+                  const row = Array.from(
+                    chatMessages.querySelectorAll(".chat-message-row"),
+                  ).find(
+                    (candidateRow) =>
+                      String(candidateRow.dataset.messageSysId || "") ===
+                      deletedMessageSysId,
+                  );
+
+                  if (!row) {
+                    return;
+                  }
+
+                  const selectedMessage =
+                    selectedChatMessages.get(deletedMessageSysId);
+
+                  if (selectedMessage) {
+                    /*
+                     * IMPORTANT:
+                     * Keep the tombstone in the EXACT SAME
+                     * position as the original message.
+                     *
+                     * appendChatMessage() normally adds to the
+                     * bottom, so remember the next row first.
+                     */
+                    const nextRow = row.nextSibling;
+
+                    row.remove();
+
+                    appendChatMessage({
+                      ...selectedMessage,
+                      sys_id: deletedMessageSysId,
+                      text: "",
+                      deleted: true,
+                      reactions: [],
+                      my_reaction: "",
+                    });
+
+                    /*
+                     * appendChatMessage() created the tombstone
+                     * at the bottom. Find it and move it back
+                     * into the original position.
+                     */
+                    const tombstoneRow = Array.from(
+                      chatMessages.querySelectorAll(".chat-message-row"),
+                    ).find(
+                      (candidateRow) =>
+                        String(candidateRow.dataset.messageSysId || "") ===
+                        deletedMessageSysId,
+                    );
+
+                    if (tombstoneRow) {
+                      /*
+                       * Explicitly mark it as deleted so
+                       * selection UI never shows a checkbox.
+                       */
+                      tombstoneRow.dataset.messageDeleted = "true";
+
+                      if (nextRow && nextRow.parentElement === chatMessages) {
+                        chatMessages.insertBefore(tombstoneRow, nextRow);
+                      } else {
+                        chatMessages.appendChild(tombstoneRow);
+                      }
+
+                      const deletedIndicator = tombstoneRow.querySelector(
+                        ".chat-message-selection-indicator",
+                      );
+
+                      if (deletedIndicator) {
+                        deletedIndicator.style.display = "none";
+
+                        deletedIndicator.style.opacity = "0";
+
+                        deletedIndicator.style.pointerEvents = "none";
+                      }
+
+                      tombstoneRow.style.cursor = "";
+                    }
+                  }
+                });
+
+                /*
+                 * Cached history must not resurrect
+                 * the old versions.
+                 */
+                if (activeChatConversation && activeChatConversation.sys_id) {
+                  chatMessageCache.delete(
+                    String(activeChatConversation.sys_id),
+                  );
+                }
+
+                deleteMenu.remove();
+
+                clearChatMessageSelection();
+
+                updateChatMessageSelectionUI();
+
+                /*
+                 * Refresh sidebar so its preview
+                 * immediately reflects the deletion.
+                 */
+                try {
+                  await loadChatConversations();
+                } catch (refreshError) {
+                  console.error(
+                    "Unable to refresh conversations after multi-delete:",
+                    refreshError,
+                  );
+                }
+              } catch (error) {
+                console.error(
+                  "Unable to delete selected messages for everyone:",
+                  error,
+                );
+
+                deleteEveryoneButton.disabled = false;
+
+                deleteEveryoneButton.textContent = "Delete for everyone";
+              }
+            },
+          );
+
+          deleteMenu.appendChild(deleteEveryoneButton);
+        }
+
+        /* =========================================
+       DELETE FOR ME
+    ========================================= */
+
+        const deleteForMeButton = createDeleteChoiceButton(
+          "Delete for me",
+          true,
         );
+
+        deleteForMeButton.addEventListener("click", (deleteEvent) => {
+          deleteEvent.preventDefault();
+          deleteEvent.stopPropagation();
+
+          /*
+           * Backend execution comes
+           * in the NEXT step.
+           */
+          console.log(
+            "MULTI DELETE FOR ME:",
+            selectedMessages.map((selectedMessage) => selectedMessage.sys_id),
+          );
+        });
+
+        deleteMenu.appendChild(deleteForMeButton);
+
+        /* =========================================
+       CANCEL
+    ========================================= */
+
+        const cancelButton = createDeleteChoiceButton("Cancel", false);
+
+        cancelButton.addEventListener("click", (cancelEvent) => {
+          cancelEvent.preventDefault();
+          cancelEvent.stopPropagation();
+
+          deleteMenu.remove();
+        });
+
+        deleteMenu.appendChild(cancelButton);
+
+        /*
+         * Attach popup to our existing
+         * selection bar.
+         */
+        selectionBar.appendChild(deleteMenu);
+
+        /*
+         * Click anywhere outside the popup
+         * to close ONLY the popup.
+         *
+         * Message selection itself remains.
+         */
+        setTimeout(() => {
+          function closeDeleteMenu(outsideEvent) {
+            if (
+              deleteMenu.contains(outsideEvent.target) ||
+              actionButton.contains(outsideEvent.target)
+            ) {
+              return;
+            }
+
+            deleteMenu.remove();
+
+            document.removeEventListener("click", closeDeleteMenu, true);
+          }
+
+          document.addEventListener("click", closeDeleteMenu, true);
+        }, 0);
       });
 
       selectionBar.appendChild(closeButton);
@@ -5862,6 +6274,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       if (messageSysId) {
         systemRow.dataset.messageSysId = messageSysId;
+      }
+
+      if (message.deleted === true) {
+        messageRow.dataset.messageDeleted = "true";
       }
 
       systemRow.style.cssText = `
