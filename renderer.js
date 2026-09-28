@@ -6413,9 +6413,87 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       async () => {
         /*
-         * A small threshold feels better than
-         * requiring exactly scrollTop === 0.
+         * =========================================
+         * REACHED NEWEST MESSAGES
+         * =========================================
+         *
+         * If new messages arrived while the user
+         * was reading older content, manually
+         * reaching the bottom means those messages
+         * have now been viewed.
          */
+        if (
+          chatNewMessageCount > 0 &&
+          isChatNearBottom() &&
+          activeChatConversation &&
+          activeChatConversation.sys_id
+        ) {
+          const conversationSysId = String(
+            activeChatConversation.sys_id,
+          ).trim();
+
+          /*
+           * Clear local indicator immediately.
+           */
+          chatUserWasNearBottom = true;
+
+          chatNewMessageCount = 0;
+
+          updateChatNewMessagesButton();
+
+          try {
+            /*
+             * Persist the read state in ServiceNow.
+             */
+            const readResult =
+              await window.serviceCall.markConversationRead(conversationSysId);
+
+            /*
+             * The user may have switched chats
+             * while ServiceNow was responding.
+             */
+            if (
+              !activeChatConversation ||
+              String(activeChatConversation.sys_id || "") !== conversationSysId
+            ) {
+              return;
+            }
+
+            if (readResult && readResult.success === true) {
+              activeChatConversation.unread_count = 0;
+
+              if (readResult.last_read_at) {
+                activeChatConversation.last_read_at = String(
+                  readResult.last_read_at,
+                );
+              }
+
+              /*
+               * Reconcile the sidebar immediately.
+               */
+              await syncChatConversationList();
+            } else {
+              console.warn(
+                "Unable to mark manually viewed chat as read:",
+                readResult,
+              );
+            }
+          } catch (error) {
+            console.error(
+              "Unable to mark manually viewed chat as read:",
+              error,
+            );
+          }
+
+          return;
+        }
+
+        /*
+         * =========================================
+         * LOAD OLDER HISTORY
+         * =========================================
+         */
+
         if (chatMessages.scrollTop > 40) {
           return;
         }
@@ -7794,15 +7872,41 @@ document.addEventListener("DOMContentLoaded", async () => {
           async () => {
             console.log("Chat conversation selected:", conversation);
 
+            const selectedConversationSysId = String(
+              conversation.sys_id || "",
+            ).trim();
+
+            const activeConversationSysId = activeChatConversation
+              ? String(activeChatConversation.sys_id || "").trim()
+              : "";
+
+            /*
+             * =========================================
+             * ALREADY-OPEN CONVERSATION
+             * =========================================
+             *
+             * Do NOT reopen it.
+             *
+             * Reopening would rerender the message list
+             * and move the user to the newest message,
+             * destroying their current reading position.
+             */
+            if (
+              selectedConversationSysId &&
+              activeConversationSysId === selectedConversationSysId
+            ) {
+              return;
+            }
+
+            /*
+             * Different conversation:
+             * open normally.
+             */
             await openChatConversation(conversation);
 
             /*
-             * openChatConversation()
-             * marks this conversation
-             * as read through ServiceNow.
-             *
-             * Update the local sidebar
-             * immediately as well.
+             * Update local badge after the newly
+             * selected conversation has been opened.
              */
             if (conversation.unread_count === 0) {
               const currentBadge = row.querySelector(".chat-unread-badge");
