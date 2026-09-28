@@ -112,6 +112,88 @@ document.addEventListener("DOMContentLoaded", async () => {
     chatNewMessagesButton.style.display = "block";
   }
 
+  /*
+   * =========================================
+   * NEW MESSAGE BUTTON CLICK
+   * =========================================
+   */
+
+  if (chatNewMessagesButton) {
+    chatNewMessagesButton.addEventListener("click", async () => {
+      if (
+        !chatMessages ||
+        !activeChatConversation ||
+        !activeChatConversation.sys_id
+      ) {
+        return;
+      }
+
+      const conversationSysId = String(activeChatConversation.sys_id).trim();
+
+      /*
+       * Move the user to the newest messages.
+       */
+      chatMessages.scrollTo({
+        top: chatMessages.scrollHeight,
+        behavior: "smooth",
+      });
+
+      /*
+       * The user intentionally asked to view
+       * the newest messages.
+       */
+      chatUserWasNearBottom = true;
+
+      chatNewMessageCount = 0;
+
+      updateChatNewMessagesButton();
+
+      /*
+       * Mark the conversation read
+       * authoritatively in ServiceNow.
+       */
+      try {
+        const readResult =
+          await window.serviceCall.markConversationRead(conversationSysId);
+
+        /*
+         * User may have switched conversations
+         * while ServiceNow was responding.
+         */
+        if (
+          !activeChatConversation ||
+          String(activeChatConversation.sys_id || "") !== conversationSysId
+        ) {
+          return;
+        }
+
+        if (!readResult || readResult.success !== true) {
+          console.warn("Unable to mark conversation read:", readResult);
+
+          return;
+        }
+
+        activeChatConversation.unread_count = 0;
+
+        if (readResult.last_read_at) {
+          activeChatConversation.last_read_at = String(readResult.last_read_at);
+        }
+
+        /*
+         * Immediately reconcile the sidebar
+         * instead of waiting for its next
+         * background synchronization cycle.
+         */
+        await syncChatConversationList();
+      } catch (error) {
+        console.error(
+          "Unable to mark conversation read from new-message button:",
+          error,
+        );
+      }
+    });
+  }
+
   function isChatNearBottom() {
     if (!chatMessages) {
       return true;
@@ -6480,31 +6562,50 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       /*
-       * The user is actively viewing this
-       * conversation.
+       * =========================================
+       * MARK LIVE MESSAGES READ
+       * =========================================
        *
-       * Any message that arrived through
-       * silent synchronization has therefore
-       * been seen and should immediately be
-       * marked as read.
+       * An open conversation is no longer enough
+       * to consider incoming messages "seen".
+       *
+       * If the user was already near the bottom
+       * before these messages arrived, they are
+       * effectively viewing the newest content.
+       *
+       * If the user was scrolled upward, leave
+       * the messages unread in ServiceNow.
        */
-      try {
-        const readResult =
-          await window.serviceCall.markConversationRead(conversationSysId);
+      if (wasNearBottom) {
+        try {
+          const readResult =
+            await window.serviceCall.markConversationRead(conversationSysId);
 
-        if (
-          readResult &&
-          readResult.success &&
-          activeChatConversation &&
-          String(activeChatConversation.sys_id) === String(conversationSysId)
-        ) {
-          activeChatConversation.unread_count = 0;
+          /*
+           * The user may have switched chats while
+           * ServiceNow was processing the request.
+           */
+          if (
+            readResult &&
+            readResult.success &&
+            activeChatConversation &&
+            String(activeChatConversation.sys_id || "") ===
+              String(conversationSysId)
+          ) {
+            activeChatConversation.unread_count = 0;
+
+            if (readResult.last_read_at) {
+              activeChatConversation.last_read_at = String(
+                readResult.last_read_at,
+              );
+            }
+          }
+        } catch (readError) {
+          console.error(
+            "Unable to mark visible live messages as read:",
+            readError,
+          );
         }
-      } catch (readError) {
-        console.error(
-          "Unable to mark silently received messages as read:",
-          readError,
-        );
       }
 
       /*
@@ -6746,7 +6847,28 @@ document.addEventListener("DOMContentLoaded", async () => {
           activeChatConversation &&
           String(activeChatConversation.sys_id) === conversationSysId;
 
-        if (isActiveConversation) {
+        /*
+         * =========================================
+         * ACTIVE CHAT READ STATE
+         * =========================================
+         *
+         * An open conversation is NOT automatically
+         * considered read anymore.
+         *
+         * If the user is reading older messages and
+         * new messages have arrived below them,
+         * preserve the authoritative unread count so
+         * the sidebar can highlight the conversation.
+         *
+         * Only suppress the unread badge when the
+         * active conversation is actually at the
+         * newest messages.
+         */
+        if (
+          isActiveConversation &&
+          chatNewMessageCount <= 0 &&
+          isChatNearBottom()
+        ) {
           unreadCount = 0;
         }
 
