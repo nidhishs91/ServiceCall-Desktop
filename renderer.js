@@ -151,6 +151,87 @@ document.addEventListener("DOMContentLoaded", async () => {
     "chatNewMessagesButton",
   );
 
+  /*
+   * =========================================
+   * NEW MESSAGE BUTTON CLICK
+   * =========================================
+   */
+
+  if (chatNewMessagesButton) {
+    chatNewMessagesButton.addEventListener("click", async () => {
+      if (
+        !chatMessages ||
+        !activeChatConversation ||
+        !activeChatConversation.sys_id
+      ) {
+        return;
+      }
+
+      const conversationSysId = String(activeChatConversation.sys_id).trim();
+
+      /*
+       * Move to the newest messages.
+       */
+      chatMessages.scrollTo({
+        top: chatMessages.scrollHeight,
+        behavior: "smooth",
+      });
+
+      /*
+       * New messages are now intentionally
+       * being viewed by the user.
+       */
+      chatUserWasNearBottom = true;
+
+      chatNewMessageCount = 0;
+
+      updateChatNewMessagesButton();
+
+      try {
+        /*
+         * Persist the read state in
+         * ServiceNow.
+         */
+        const readResult =
+          await window.serviceCall.markConversationRead(conversationSysId);
+
+        /*
+         * The user may have switched chats
+         * while the request was running.
+         */
+        if (
+          !activeChatConversation ||
+          String(activeChatConversation.sys_id || "") !== conversationSysId
+        ) {
+          return;
+        }
+
+        if (!readResult || readResult.success !== true) {
+          console.warn("Unable to mark conversation read:", readResult);
+
+          return;
+        }
+
+        activeChatConversation.unread_count = 0;
+
+        if (readResult.last_read_at) {
+          activeChatConversation.last_read_at = String(readResult.last_read_at);
+        }
+
+        /*
+         * Refresh sidebar immediately so its
+         * unread state disappears too.
+         */
+        await syncChatConversationList();
+      } catch (error) {
+        console.error(
+          "Unable to mark conversation read from new-message button:",
+          error,
+        );
+      }
+    });
+  }
+
   const chatEmptyState = document.getElementById("chatEmptyState");
 
   const chatConversationPanel = document.getElementById(
