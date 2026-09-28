@@ -80,6 +80,376 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   let chatUserWasNearBottom = true;
 
+  function clearChatMessageSelection() {
+    chatMessageSelectionMode = "";
+
+    selectedChatMessages.clear();
+
+    if (!chatMessages) {
+      return;
+    }
+
+    chatMessages
+      .querySelectorAll(".chat-message-row[data-message-selected='true']")
+      .forEach((row) => {
+        row.dataset.messageSelected = "false";
+
+        row.style.background = "";
+        row.style.borderRadius = "";
+        row.style.boxShadow = "";
+        row.style.paddingTop = "";
+        row.style.paddingBottom = "";
+      });
+
+    const selectionBar = document.getElementById("chatMessageSelectionBar");
+
+    if (selectionBar) {
+      selectionBar.remove();
+    }
+  }
+
+  function selectChatMessage(messageRow, message) {
+    if (!messageRow || !message || !message.sys_id) {
+      return;
+    }
+
+    const messageSysId = String(message.sys_id).trim();
+
+    if (!messageSysId) {
+      return;
+    }
+
+    /*
+     * System messages and globally deleted
+     * tombstones cannot be selected.
+     */
+    if (
+      String(message.type || "").toLowerCase() === "system" ||
+      message.deleted === true
+    ) {
+      return;
+    }
+
+    selectedChatMessages.set(messageSysId, {
+      sys_id: messageSysId,
+
+      is_mine: message.is_mine === true,
+
+      type: String(message.type || "text"),
+
+      text: String(message.text || ""),
+    });
+
+    messageRow.dataset.messageSelected = "true";
+
+    /*
+     * Temporary functional selection styling.
+     * Final styling/animation comes during
+     * the final UI phase.
+     */
+    messageRow.style.background = "rgba(79, 143, 125, 0.10)";
+
+    messageRow.style.borderRadius = "10px";
+
+    messageRow.style.boxShadow = message.is_mine
+      ? "inset 3px 0 0 rgba(79, 143, 125, 0.65)"
+      : "inset -3px 0 0 rgba(79, 143, 125, 0.65)";
+
+    messageRow.style.paddingTop = "10px";
+    messageRow.style.paddingBottom = "10px";
+
+    updateChatMessageSelectionUI();
+  }
+
+  function updateChatMessageSelectionUI() {
+    const selectedCount = selectedChatMessages.size;
+
+    /*
+     * Update every rendered message's
+     * selection indicator.
+     */
+    if (chatMessages) {
+      chatMessages.querySelectorAll(".chat-message-row").forEach((row) => {
+        const messageSysId = String(row.dataset.messageSysId || "").trim();
+
+        row.style.cursor =
+          chatMessageSelectionMode && messageSysId ? "pointer" : "";
+
+        const indicator = row.querySelector(
+          ".chat-message-selection-indicator",
+        );
+
+        if (!indicator) {
+          return;
+        }
+
+        const isSelected = selectedChatMessages.has(messageSysId);
+
+        indicator.textContent = isSelected ? "✓" : "";
+
+        indicator.style.background = isSelected ? "#32c7a0" : "#ffffff";
+
+        indicator.style.borderColor = isSelected ? "#32c7a0" : "#aab8b4";
+
+        indicator.style.color = isSelected ? "#ffffff" : "transparent";
+
+        indicator.style.opacity = chatMessageSelectionMode ? "1" : "0";
+
+        indicator.style.pointerEvents = chatMessageSelectionMode
+          ? "auto"
+          : "none";
+      });
+    }
+
+    /*
+     * Selection bar.
+     */
+    const existingBar = document.getElementById("chatMessageSelectionBar");
+
+    if (!chatMessageSelectionMode || selectedCount === 0) {
+      if (existingBar) {
+        existingBar.remove();
+      }
+
+      return;
+    }
+
+    let selectionBar = existingBar;
+
+    if (!selectionBar) {
+      selectionBar = document.createElement("div");
+
+      selectionBar.id = "chatMessageSelectionBar";
+
+      selectionBar.style.cssText = `
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      z-index:1500;
+
+      min-height:54px;
+      padding:8px 16px;
+
+      display:flex;
+      align-items:center;
+      gap:12px;
+
+      box-sizing:border-box;
+
+      background:#ffffff;
+
+      border-top:
+        1px solid #dfe6e4;
+
+      box-shadow:
+        0 -6px 20px
+        rgba(0,0,0,0.08);
+    `;
+
+      /*
+       * CLOSE / CANCEL SELECTION
+       */
+      const closeButton = document.createElement("button");
+
+      closeButton.type = "button";
+      closeButton.textContent = "✕";
+      closeButton.title = "Cancel selection";
+
+      closeButton.style.cssText = `
+      width:36px;
+      height:36px;
+      min-width:36px;
+
+      border:none;
+      border-radius:50%;
+
+      background:transparent;
+      color:#45534f;
+
+      font-size:18px;
+
+      cursor:pointer;
+    `;
+
+      closeButton.addEventListener("click", () => {
+        clearChatMessageSelection();
+
+        updateChatMessageSelectionUI();
+      });
+
+      /*
+       * SELECTED COUNT
+       */
+      const countText = document.createElement("div");
+
+      countText.className = "chat-message-selection-count";
+
+      countText.style.cssText = `
+      flex:1;
+
+      font-size:13px;
+      font-weight:600;
+
+      color:#263632;
+    `;
+
+      /*
+       * ACTION BUTTON
+       *
+       * Delete mode -> trash
+       * Forward mode -> arrow
+       */
+      const actionButton = document.createElement("button");
+
+      actionButton.type = "button";
+
+      actionButton.className = "chat-message-selection-action";
+
+      actionButton.style.cssText = `
+      width:38px;
+      height:38px;
+      min-width:38px;
+
+      border:none;
+      border-radius:50%;
+
+      background:transparent;
+      color:#45534f;
+
+      font-size:20px;
+
+      cursor:pointer;
+    `;
+
+      /*
+       * Backend action comes next.
+       * For now this proves the bar
+       * and selected message state.
+       */
+      actionButton.addEventListener("click", () => {
+        console.log(
+          "Selection action:",
+          chatMessageSelectionMode,
+          Array.from(selectedChatMessages.values()),
+        );
+      });
+
+      selectionBar.appendChild(closeButton);
+
+      selectionBar.appendChild(countText);
+
+      selectionBar.appendChild(actionButton);
+
+      /*
+       * Put the bar over the bottom of
+       * the chat conversation area.
+       */
+      const conversationPanel = chatMessages.parentElement;
+
+      if (conversationPanel) {
+        const panelPosition =
+          window.getComputedStyle(conversationPanel).position;
+
+        if (!panelPosition || panelPosition === "static") {
+          conversationPanel.style.position = "relative";
+        }
+
+        conversationPanel.appendChild(selectionBar);
+      }
+    }
+
+    const countText = selectionBar.querySelector(
+      ".chat-message-selection-count",
+    );
+
+    if (countText) {
+      countText.textContent =
+        selectedCount === 1 ? "1 selected" : `${selectedCount} selected`;
+    }
+
+    const actionButton = selectionBar.querySelector(
+      ".chat-message-selection-action",
+    );
+
+    if (actionButton) {
+      if (chatMessageSelectionMode === "delete") {
+        actionButton.textContent = "🗑";
+        actionButton.title = "Delete selected messages";
+      } else {
+        actionButton.textContent = "➜";
+        actionButton.title = "Forward selected messages";
+      }
+    }
+  }
+
+  function toggleChatMessageSelection(messageRow, message) {
+    if (!messageRow || !message || !message.sys_id) {
+      return;
+    }
+
+    const messageSysId = String(message.sys_id).trim();
+
+    if (!messageSysId) {
+      return;
+    }
+
+    /*
+     * System messages and deleted tombstones
+     * cannot be selected.
+     */
+    if (
+      String(message.type || "").toLowerCase() === "system" ||
+      message.deleted === true
+    ) {
+      return;
+    }
+
+    /*
+     * Already selected -> deselect it.
+     */
+    if (selectedChatMessages.has(messageSysId)) {
+      selectedChatMessages.delete(messageSysId);
+
+      messageRow.dataset.messageSelected = "false";
+
+      messageRow.style.background = "";
+      messageRow.style.borderRadius = "";
+      messageRow.style.boxShadow = "";
+      messageRow.style.paddingTop = "";
+      messageRow.style.paddingBottom = "";
+
+      /*
+       * If nothing remains selected,
+       * leave selection mode completely.
+       */
+      if (selectedChatMessages.size === 0) {
+        chatMessageSelectionMode = "";
+      }
+
+      updateChatMessageSelectionUI();
+
+      return;
+    }
+
+    /*
+     * Not selected yet -> select it.
+     */
+    selectChatMessage(messageRow, message);
+  }
+
+  /* =====================================================
+   CHAT MESSAGE MULTI-SELECTION
+
+   Shared by:
+   - Delete
+   - Forward
+===================================================== */
+
+  let chatMessageSelectionMode = "";
+
+  const selectedChatMessages = new Map();
+
   /*
    * =========================================
    * CHAT SCROLL POSITION
@@ -5079,6 +5449,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const cachedConversation = chatMessageCache.get(openingConversationSysId);
 
+    const openedFromCache = !!(
+      cachedConversation && Array.isArray(cachedConversation.messages)
+    );
+
     if (cachedConversation && Array.isArray(cachedConversation.messages)) {
       const cachedMessages = cachedConversation.messages;
 
@@ -5243,15 +5617,28 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       /* =========================================
-           RENDER IMMEDIATELY
-        ========================================= */
+     AUTHORITATIVE RENDER
+  ========================================= */
 
       if (!chatMessages) {
         return;
       }
 
-      chatMessages.innerHTML = "";
+      /*
+       * If cached messages were already visible,
+       * the user may have started reading/scrolled
+       * upward while the authoritative ServiceNow
+       * request was still running.
+       *
+       * Their manual movement must win.
+       */
+      const preserveUserScroll = openedFromCache && !isChatNearBottom();
 
+      const preservedScrollTop = preserveUserScroll
+        ? chatMessages.scrollTop
+        : 0;
+
+      chatMessages.innerHTML = "";
       if (messages.length === 0) {
         chatMessages.innerHTML = `
                 <div class="chat-message-placeholder">
@@ -5265,7 +5652,20 @@ document.addEventListener("DOMContentLoaded", async () => {
           appendChatMessage(message);
         });
 
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        /*
+         * appendChatMessage() currently scrolls to
+         * the bottom while rendering.
+         *
+         * If the user had already moved upward during
+         * the cache → authoritative refresh, restore
+         * their position after the complete page has
+         * finished rendering.
+         */
+        if (preserveUserScroll) {
+          chatMessages.scrollTop = preservedScrollTop;
+        } else {
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
       }
 
       /* =========================================
@@ -5402,6 +5802,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   let chatMessageSending = false;
 
+  let chatReplyTarget = null;
+
   /* =======================================================
    SERVICECALL CHAT - APPEND MESSAGE
 ======================================================= */
@@ -5424,19 +5826,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const messageSysId = String(message.sys_id || "").trim();
 
     /* =====================================================
-   SYSTEM MESSAGE
-
-   System events are not normal chat messages.
-
-   Examples:
-   - Group created by System Administrator
-   - System Administrator added Abel Tuter
-   - System Administrator made Abel Tuter an owner
-   - System Administrator changed Abel Tuter to a member
-   - System Administrator removed Test User from the group
-
-   Render them as a centered, subtle event imprint.
-===================================================== */
+     SYSTEM MESSAGE
+  ===================================================== */
 
     const messageType = String(message.type || "text")
       .trim()
@@ -5462,8 +5853,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       /* =========================================
-     SYSTEM MESSAGE ROW
-  ========================================= */
+       SYSTEM MESSAGE ROW
+    ========================================= */
 
       const systemRow = document.createElement("div");
 
@@ -5474,128 +5865,114 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       systemRow.style.cssText = `
-    width:100%;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    box-sizing:border-box;
-    margin:16px 0;
-    padding:0 24px;
-    position:relative;
-  `;
+      width:100%;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      box-sizing:border-box;
+      margin:16px 0;
+      padding:0 24px;
+      position:relative;
+    `;
 
       /* =========================================
-     EVENT LINE
-  ========================================= */
+       EVENT LINE
+    ========================================= */
 
       const systemLine = document.createElement("div");
 
       systemLine.style.cssText = `
-    width:100%;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:12px;
-  `;
+      width:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+    `;
 
       /* -------------------------
-     LEFT LINE
-  ------------------------- */
+       LEFT LINE
+    ------------------------- */
 
       const leftLine = document.createElement("div");
 
       leftLine.style.cssText = `
-    width:42px;
-    height:1px;
-    flex-shrink:0;
-    background:linear-gradient(
-      to right,
-      transparent,
-      rgba(96, 112, 108, 0.28)
-    );
-  `;
+      width:42px;
+      height:1px;
+      flex-shrink:0;
+      background:linear-gradient(
+        to right,
+        transparent,
+        rgba(96, 112, 108, 0.28)
+      );
+    `;
 
       /* -------------------------
-     SYSTEM TEXT
-  ------------------------- */
+       SYSTEM TEXT
+    ------------------------- */
 
       const systemText = document.createElement("div");
 
       systemText.textContent = String(message.text || "");
 
       systemText.style.cssText = `
-    max-width:70%;
-    text-align:center;
-
-    color:#7b8884;
-
-    font-size:11.5px;
-    font-weight:500;
-    font-style:italic;
-
-    line-height:1.45;
-
-    letter-spacing:0.25px;
-
-    white-space:normal;
-    overflow-wrap:anywhere;
-
-    opacity:0.88;
-
-    text-shadow:
-      0 1px 0 rgba(255,255,255,0.7);
-  `;
+      max-width:70%;
+      text-align:center;
+      color:#7b8884;
+      font-size:11.5px;
+      font-weight:500;
+      font-style:italic;
+      line-height:1.45;
+      letter-spacing:0.25px;
+      white-space:normal;
+      overflow-wrap:anywhere;
+      opacity:0.88;
+      text-shadow:
+        0 1px 0 rgba(255,255,255,0.7);
+    `;
 
       /* -------------------------
-     RIGHT LINE
-  ------------------------- */
+       RIGHT LINE
+    ------------------------- */
 
       const rightLine = document.createElement("div");
 
       rightLine.style.cssText = `
-    width:42px;
-    height:1px;
-    flex-shrink:0;
-    background:linear-gradient(
-      to left,
-      transparent,
-      rgba(96, 112, 108, 0.28)
-    );
-  `;
+      width:42px;
+      height:1px;
+      flex-shrink:0;
+      background:linear-gradient(
+        to left,
+        transparent,
+        rgba(96, 112, 108, 0.28)
+      );
+    `;
 
       systemLine.appendChild(leftLine);
-
       systemLine.appendChild(systemText);
-
       systemLine.appendChild(rightLine);
 
       /* =========================================
-     TIME
-  ========================================= */
+       TIME
+    ========================================= */
 
       const systemTime = document.createElement("div");
 
       systemTime.textContent = String(message.sent_at || "");
 
       systemTime.style.cssText = `
-    margin-top:4px;
-
-    color:#a0aaa7;
-
-    font-size:9px;
-    font-weight:400;
-
-    letter-spacing:0.2px;
-
-    text-align:center;
-
-    opacity:0.78;
-  `;
+      margin-top:4px;
+      color:#a0aaa7;
+      font-size:9px;
+      font-weight:400;
+      letter-spacing:0.2px;
+      text-align:center;
+      opacity:0.78;
+    `;
 
       /* =========================================
-     BUILD
-  ========================================= */
+       BUILD
+    ========================================= */
 
       systemRow.appendChild(systemLine);
 
@@ -5605,35 +5982,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       chatMessages.appendChild(systemRow);
 
-      /*
-       * System messages deliberately have:
-       *
-       * - no chat bubble
-       * - no sender alignment
-       * - no reaction button
-       * - no reaction summary
-       * - no message background
-       *
-       * They visually behave like events
-       * imprinted into the conversation.
-       */
-
       chatMessages.scrollTop = chatMessages.scrollHeight;
 
       return;
     }
+
     /* =====================================================
-   DUPLICATE MESSAGE PROTECTION
-
-   The same ServiceNow message can reach the renderer
-   through more than one path:
-
-   1. /send-message response
-   2. silent message synchronization
-
-   A ServiceNow message sys_id must only ever have
-   one visible message row.
-===================================================== */
+     DUPLICATE MESSAGE PROTECTION
+  ===================================================== */
 
     if (messageSysId) {
       const existingMessageRow = Array.from(
@@ -5650,119 +6006,579 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     }
 
+    /* =====================================================
+     MESSAGE ROW
+  ===================================================== */
+
     const messageRow = document.createElement("div");
 
     messageRow.className = "chat-message-row";
 
-    /*
-     * Store the REAL ServiceNow message
-     * sys_id on the DOM element.
-     *
-     * Reactions, edits, deletion, etc.
-     * can use this later.
-     */
     if (messageSysId) {
       messageRow.dataset.messageSysId = messageSysId;
     }
 
     messageRow.style.cssText = `
-        display:flex;
-        flex-direction:column;
-        align-items:${message.is_mine ? "flex-end" : "flex-start"};
-        margin:8px 14px;
-        position:relative;
-    `;
+    display:flex;
+    flex-direction:column;
+    align-items:${message.is_mine ? "flex-end" : "flex-start"};
+    margin:8px 14px;
+    position:relative;
+  `;
 
     /*
-     * Bubble + reaction button wrapper.
+     * Bubble + action buttons wrapper.
      */
+
+    /* =====================================================
+   MESSAGE SELECTION INDICATOR
+===================================================== */
+
+    const selectionIndicator = document.createElement("button");
+
+    selectionIndicator.type = "button";
+
+    selectionIndicator.className = "chat-message-selection-indicator";
+
+    selectionIndicator.title = "Select message";
+
+    selectionIndicator.style.cssText = `
+  position:absolute;
+  top:50%;
+
+  width:20px;
+  height:20px;
+
+  padding:0;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  transform:translateY(-50%);
+
+  border:1.5px solid #aab8b4;
+  border-radius:50%;
+
+  background:#ffffff;
+  color:transparent;
+
+  font-size:12px;
+  font-weight:700;
+
+  cursor:pointer;
+
+  opacity:0;
+  pointer-events:none;
+
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+`;
+
+    /*
+     * Keep the selection control on the
+     * opposite side of the message bubble.
+     *
+     * My message       -> checkbox on left
+     * Received message -> checkbox on right
+     */
+    if (message.is_mine) {
+      selectionIndicator.style.left = "8px";
+      selectionIndicator.style.right = "auto";
+    } else {
+      selectionIndicator.style.right = "8px";
+      selectionIndicator.style.left = "auto";
+    }
+
+    selectionIndicator.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (!chatMessageSelectionMode) {
+        return;
+      }
+
+      toggleChatMessageSelection(messageRow, message);
+    });
+
+    messageRow.appendChild(selectionIndicator);
+
     const bubbleWrapper = document.createElement("div");
 
     bubbleWrapper.style.cssText = `
-        display:flex;
-        align-items:center;
-        gap:6px;
-        max-width:78%;
-        position:relative;
-    `;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    max-width:78%;
+    position:relative;
+  `;
 
     /*
      * Incoming:
-     *
-     * [+] [message]
+     * [actions] [message]
      *
      * Outgoing:
-     *
-     * [message] [+]
+     * [message] [actions]
      */
     bubbleWrapper.style.flexDirection = message.is_mine ? "row-reverse" : "row";
 
     const bubble = document.createElement("div");
 
-    bubble.textContent = message.text || "";
+    /* =====================================================
+     REPLIED MESSAGE PREVIEW
+  ===================================================== */
 
-    bubble.style.cssText = `
-        max-width:100%;
-        padding:9px 12px;
-        border-radius:12px;
-        font-size:13px;
-        line-height:1.4;
-        white-space:pre-wrap;
-        overflow-wrap:anywhere;
-        background:${message.is_mine ? "#dff3ec" : "#f1f3f2"};
-        color:#1f2927;
+    const replyTo = message.reply_to || null;
+
+    if (replyTo) {
+      const replyPreview = document.createElement("div");
+
+      replyPreview.className = "chat-message-reply-preview";
+
+      replyPreview.title = "Go to original message";
+
+      replyPreview.style.cssText = `
+      margin-bottom:6px;
+      padding:6px 8px;
+
+      border-left:3px solid
+        ${message.is_mine ? "#4f8f7d" : "#7b8d88"};
+
+      border-radius:6px;
+
+      background:
+        ${
+          message.is_mine ? "rgba(255,255,255,0.48)" : "rgba(255,255,255,0.72)"
+        };
+
+      overflow:hidden;
+      cursor:pointer;
     `;
 
+      const replySender = document.createElement("div");
+
+      replySender.textContent = String(replyTo.sender_name || "Unknown User");
+
+      replySender.style.cssText = `
+      margin-bottom:2px;
+      color:#397261;
+      font-size:10.5px;
+      font-weight:700;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    `;
+
+      const replyText = document.createElement("div");
+
+      if (replyTo.deleted === true) {
+        replyText.textContent = "Message deleted";
+
+        replyText.style.fontStyle = "italic";
+      } else {
+        const originalText = String(replyTo.text || "");
+
+        replyText.textContent =
+          originalText.length > 140
+            ? originalText.substring(0, 137) + "..."
+            : originalText;
+      }
+
+      replyText.style.cssText += `
+      color:#66736f;
+      font-size:10.5px;
+      line-height:1.35;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    `;
+
+      replyPreview.appendChild(replySender);
+
+      replyPreview.appendChild(replyText);
+
+      replyPreview.addEventListener("click", async (event) => {
+        event.stopPropagation();
+
+        const originalMessageSysId = String(replyTo.sys_id || "").trim();
+
+        if (!originalMessageSysId) {
+          return;
+        }
+
+        await jumpToChatMessage(originalMessageSysId);
+      });
+
+      bubble.appendChild(replyPreview);
+    }
+
     /* =====================================================
-       REACTION BUTTON
-    ===================================================== */
+     ACTUAL MESSAGE TEXT
+  ===================================================== */
+
+    const messageText = document.createElement("div");
+
+    /*
+     * Deleted-for-everyone messages are
+     * represented by the backend as:
+     *
+     * deleted: true
+     * text: ""
+     */
+    if (message.deleted === true) {
+      messageText.textContent = "Message deleted";
+
+      messageText.style.cssText = `
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
+      font-style:italic;
+      color:#7f8986;
+    `;
+    } else {
+      messageText.textContent = message.text || "";
+
+      messageText.style.cssText = `
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
+    `;
+    }
+
+    bubble.appendChild(messageText);
+
+    bubble.style.cssText = `
+    max-width:100%;
+    padding:9px 12px;
+    border-radius:12px;
+    font-size:13px;
+    line-height:1.4;
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+    background:${message.is_mine ? "#dff3ec" : "#f1f3f2"};
+    color:#1f2927;
+  `;
+
+    /* =====================================================
+     REPLY BUTTON
+  ===================================================== */
+
+    const replyButton = document.createElement("button");
+
+    replyButton.type = "button";
+    replyButton.textContent = "↩";
+    replyButton.title = "Reply";
+
+    replyButton.style.cssText = `
+    width:24px;
+    height:24px;
+    min-width:24px;
+    border:none;
+    border-radius:50%;
+    background:#eef2f1;
+    color:#60706c;
+    font-size:14px;
+    line-height:24px;
+    padding:0;
+    cursor:pointer;
+    opacity:0;
+    pointer-events:none;
+    transition:
+      opacity 0.15s ease,
+      background 0.15s ease,
+      transform 0.15s ease;
+  `;
+
+    /*
+     * A persisted, non-deleted message is
+     * required before it can become a
+     * reply target.
+     */
+    if (!messageSysId || message.deleted === true) {
+      replyButton.style.display = "none";
+    }
+
+    replyButton.addEventListener("mouseenter", () => {
+      replyButton.style.background = "#dfe8e5";
+
+      replyButton.style.transform = "scale(1.08)";
+    });
+
+    replyButton.addEventListener("mouseleave", () => {
+      replyButton.style.background = "#eef2f1";
+
+      replyButton.style.transform = "scale(1)";
+    });
+
+    replyButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+
+      if (isActiveChatReadOnly()) {
+        showChatMembershipError();
+        return;
+      }
+
+      if (!messageSysId || message.deleted === true) {
+        return;
+      }
+
+      chatReplyTarget = {
+        sys_id: messageSysId,
+
+        sender_name: String(
+          message.sender_name ||
+            message.sender_user_name ||
+            (message.is_mine ? "You" : "Unknown User"),
+        ),
+
+        text: String(message.text || ""),
+      };
+
+      renderChatReplyPreview();
+
+      if (chatMessageInput) {
+        chatMessageInput.focus();
+      }
+    });
+
+    /* =====================================================
+     MORE MESSAGE ACTIONS
+     Forward / Delete
+  ===================================================== */
+
+    const moreButton = document.createElement("button");
+
+    moreButton.type = "button";
+    moreButton.textContent = "⋯";
+    moreButton.title = "More";
+
+    moreButton.className = "chat-message-more-button";
+
+    moreButton.style.cssText = `
+    width:24px;
+    height:24px;
+    min-width:24px;
+    border:none;
+    border-radius:50%;
+    background:#eef2f1;
+    color:#60706c;
+    font-size:16px;
+    font-weight:600;
+    line-height:20px;
+    padding:0;
+    cursor:pointer;
+    opacity:0;
+    transition:
+      opacity 0.15s ease,
+      background 0.15s ease,
+      transform 0.15s ease;
+  `;
+
+    /*
+     * System messages never reach here.
+     *
+     * Deleted-for-everyone tombstones
+     * also do not need Forward/Delete.
+     */
+    if (!messageSysId || message.deleted === true) {
+      moreButton.style.display = "none";
+    }
+
+    moreButton.addEventListener("mouseenter", () => {
+      moreButton.style.background = "#dfe8e5";
+
+      moreButton.style.transform = "scale(1.08)";
+    });
+
+    moreButton.addEventListener("mouseleave", () => {
+      moreButton.style.background = "#eef2f1";
+
+      moreButton.style.transform = "scale(1)";
+    });
+
+    /* =====================================================
+     REACTION BUTTON
+  ===================================================== */
 
     const reactionButton = document.createElement("button");
 
     reactionButton.type = "button";
-
     reactionButton.textContent = "+";
-
     reactionButton.title = "Add reaction";
 
     reactionButton.style.cssText = `
-        width:24px;
-        height:24px;
-        min-width:24px;
-        border:none;
-        border-radius:50%;
-        background:#eef2f1;
-        color:#60706c;
-        font-size:16px;
-        line-height:24px;
-        padding:0;
-        cursor:pointer;
-        opacity:0;
-        transition:
-            opacity 0.15s ease,
-            background 0.15s ease,
-            transform 0.15s ease;
-    `;
+    width:24px;
+    height:24px;
+    min-width:24px;
+    border:none;
+    border-radius:50%;
+    background:#eef2f1;
+    color:#60706c;
+    font-size:16px;
+    line-height:24px;
+    padding:0;
+    cursor:pointer;
+    opacity:0;
+    transition:
+      opacity 0.15s ease,
+      background 0.15s ease,
+      transform 0.15s ease;
+  `;
 
     /*
      * Reactions are allowed only on
-     * another user's message.
-     *
-     * Own messages can still contain
-     * emojis as normal chat messages.
+     * another user's non-deleted message.
      */
-    if (!messageSysId || message.is_mine) {
+    if (!messageSysId || message.is_mine || message.deleted === true) {
       reactionButton.style.display = "none";
     }
 
-    bubbleWrapper.addEventListener("mouseenter", () => {
-      if (messageSysId && !message.is_mine) {
+    /* =====================================================
+   MESSAGE ACTION HOVER
+
+   IMPORTANT:
+   Controls appear ONLY when the pointer
+   is directly over the message bubble.
+===================================================== */
+
+    /* =====================================================
+   MESSAGE ACTION HOVER
+
+   Actions become interactive ONLY while
+   the actual message bubble is hovered.
+===================================================== */
+
+    function showMessageActions() {
+      if (!messageSysId || message.deleted === true) {
+        return;
+      }
+
+      replyButton.style.opacity = "1";
+      replyButton.style.pointerEvents = "auto";
+
+      moreButton.style.opacity = "1";
+      moreButton.style.pointerEvents = "auto";
+
+      if (!message.is_mine) {
         reactionButton.style.opacity = "1";
+        reactionButton.style.pointerEvents = "auto";
+      }
+    }
+
+    function hideMessageActions() {
+      replyButton.style.opacity = "0";
+      replyButton.style.pointerEvents = "none";
+
+      reactionButton.style.opacity = "0";
+      reactionButton.style.pointerEvents = "none";
+
+      moreButton.style.opacity = "0";
+      moreButton.style.pointerEvents = "none";
+    }
+
+    /*
+     * While multi-selection mode is active,
+     * clicking a message bubble selects or
+     * deselects that message.
+     */
+    /*
+     * SELECTION MODE
+     *
+     * Once Delete / Forward selection mode
+     * is active, the entire message row is
+     * selectable — not only the bubble or
+     * checkbox.
+     */
+
+    /*
+     * SELECTION MODE HOVER
+     *
+     * While Delete / Forward selection mode
+     * is active, the whole row behaves like
+     * a selectable surface.
+     */
+    messageRow.addEventListener("mouseenter", () => {
+      if (!chatMessageSelectionMode) {
+        return;
+      }
+
+      messageRow.style.cursor = "pointer";
+
+      /*
+       * Only apply the light hover when
+       * this message is NOT already selected.
+       */
+      if (!selectedChatMessages.has(messageSysId)) {
+        messageRow.style.background = "rgba(79, 143, 125, 0.045)";
+
+        messageRow.style.borderRadius = "10px";
       }
     });
 
+    messageRow.addEventListener("mouseleave", () => {
+      if (!chatMessageSelectionMode) {
+        messageRow.style.cursor = "";
+        return;
+      }
+
+      /*
+       * Selected messages keep their
+       * stronger selection background.
+       */
+      if (selectedChatMessages.has(messageSysId)) {
+        return;
+      }
+
+      messageRow.style.background = "";
+      messageRow.style.borderRadius = "";
+    });
+
+    messageRow.addEventListener("click", (event) => {
+      if (!chatMessageSelectionMode) {
+        return;
+      }
+
+      /*
+       * Ignore clicks on controls.
+       *
+       * The checkbox has its own selection
+       * handler.
+       */
+      if (event.target.closest(".chat-message-selection-indicator")) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      toggleChatMessageSelection(messageRow, message);
+    });
+
+    bubble.addEventListener("mouseenter", () => {
+      showMessageActions();
+    });
+
+    bubble.addEventListener("mouseleave", () => {
+      setTimeout(() => {
+        const pointerStillInActions = bubbleWrapper.matches(":hover");
+
+        const menuOpen = !!bubbleWrapper.querySelector(
+          ".chat-message-more-menu",
+        );
+
+        if (!pointerStillInActions && !menuOpen) {
+          hideMessageActions();
+        }
+      }, 80);
+    });
+
     bubbleWrapper.addEventListener("mouseleave", () => {
-      reactionButton.style.opacity = "0";
+      if (bubbleWrapper.querySelector(".chat-message-more-menu")) {
+        return;
+      }
+
+      hideMessageActions();
     });
 
     reactionButton.addEventListener("mouseenter", () => {
@@ -5778,25 +6594,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     /* =====================================================
-       REACTION SUMMARY
-    ===================================================== */
+     REACTION SUMMARY
+  ===================================================== */
 
     const reactionSummary = document.createElement("div");
 
     reactionSummary.className = "chat-message-reactions";
 
     reactionSummary.style.cssText = `
-        display:flex;
-        flex-wrap:wrap;
-        gap:4px;
-        margin-top:4px;
-        min-height:0;
-    `;
+    display:flex;
+    flex-wrap:wrap;
+    gap:4px;
+    margin-top:4px;
+    min-height:0;
+  `;
 
-    /*
-     * Render reaction summary returned
-     * by ServiceNow.
-     */
     function renderReactions(reactions, myReaction) {
       reactionSummary.innerHTML = "";
 
@@ -5821,26 +6633,23 @@ document.addEventListener("DOMContentLoaded", async () => {
         const isMine = reactionEmoji === myReaction;
 
         chip.style.cssText = `
-                    border:1px solid ${isMine ? "#67a995" : "#d9e0de"};
-                    background:${isMine ? "#e1f3ed" : "#f7f9f8"};
-                    border-radius:12px;
-                    padding:2px 7px;
-                    font-size:12px;
-                    line-height:18px;
-                    cursor:pointer;
-                    color:#31433e;
-                `;
+          border:1px solid ${isMine ? "#67a995" : "#d9e0de"};
+          background:${isMine ? "#e1f3ed" : "#f7f9f8"};
+          border-radius:12px;
+          padding:2px 7px;
+          font-size:12px;
+          line-height:18px;
+          cursor:pointer;
+          color:#31433e;
+        `;
 
-        /*
-         * Clicking an existing reaction
-         * uses the same backend toggle.
-         */
         chip.addEventListener("click", async () => {
           await applyReaction(reactionEmoji);
         });
 
         reactionSummary.appendChild(chip);
       });
+
       reactionSummary.dataset.ready = "true";
     }
 
@@ -5855,23 +6664,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     /* =====================================================
-       APPLY REACTION
-    ===================================================== */
+     APPLY REACTION
+  ===================================================== */
 
     let reactionRequestRunning = false;
 
     async function applyReaction(reaction) {
-      /*
-       * Historical group conversations are
-       * read-only after the user leaves or
-       * is removed.
-       */
       if (isActiveChatReadOnly()) {
         showChatMembershipError();
         return;
       }
 
-      if (reactionRequestRunning || !messageSysId) {
+      if (reactionRequestRunning || !messageSysId || message.deleted === true) {
         return;
       }
 
@@ -5898,18 +6702,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     /* =====================================================
-       EMOJI PICKER
-    ===================================================== */
+     EMOJI PICKER
+  ===================================================== */
 
     reactionButton.addEventListener("click", (event) => {
       event.stopPropagation();
 
-      /*
-       * Close any picker already open
-       * elsewhere in Chat.
-       */
       document.querySelectorAll(".chat-reaction-picker").forEach((picker) => {
         picker.remove();
+      });
+
+      /*
+       * Close More menus as well.
+       */
+      document.querySelectorAll(".chat-message-more-menu").forEach((menu) => {
+        menu.remove();
       });
 
       const picker = document.createElement("div");
@@ -5917,27 +6724,23 @@ document.addEventListener("DOMContentLoaded", async () => {
       picker.className = "chat-reaction-picker";
 
       picker.style.cssText = `
-                position:absolute;
-                z-index:1000;
-                width:300px;
-                max-height:300px;
-                overflow-y:auto;
-                padding:10px;
-                border:1px solid #dfe6e4;
-                border-radius:14px;
-                background:#ffffff;
-                box-shadow:
-                    0 10px 30px
-                    rgba(0,0,0,0.14);
-                display:flex;
-                flex-direction:column;
-                gap:10px;
-            `;
+        position:absolute;
+        z-index:1000;
+        width:300px;
+        max-height:300px;
+        overflow-y:auto;
+        padding:10px;
+        border:1px solid #dfe6e4;
+        border-radius:14px;
+        background:#ffffff;
+        box-shadow:
+          0 10px 30px
+          rgba(0,0,0,0.14);
+        display:flex;
+        flex-direction:column;
+        gap:10px;
+      `;
 
-      /*
-       * Keep the picker toward the
-       * message side of the screen.
-       */
       if (message.is_mine) {
         picker.style.right = "30px";
       } else {
@@ -6087,20 +6890,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         title.textContent = section.title;
 
         title.style.cssText = `
-                        margin-bottom:5px;
-                        font-size:11px;
-                        font-weight:600;
-                        color:#788681;
-                    `;
+            margin-bottom:5px;
+            font-size:11px;
+            font-weight:600;
+            color:#788681;
+          `;
 
         const emojiGrid = document.createElement("div");
 
         emojiGrid.style.cssText = `
-                        display:grid;
-                        grid-template-columns:
-                            repeat(8, 1fr);
-                        gap:3px;
-                    `;
+            display:grid;
+            grid-template-columns:
+              repeat(8, 1fr);
+            gap:3px;
+          `;
 
         section.emojis.forEach((emoji) => {
           const emojiButton = document.createElement("button");
@@ -6110,15 +6913,15 @@ document.addEventListener("DOMContentLoaded", async () => {
           emojiButton.textContent = emoji;
 
           emojiButton.style.cssText = `
-                                width:30px;
-                                height:30px;
-                                border:none;
-                                border-radius:7px;
-                                background:transparent;
-                                font-size:19px;
-                                cursor:pointer;
-                                padding:0;
-                            `;
+                width:30px;
+                height:30px;
+                border:none;
+                border-radius:7px;
+                background:transparent;
+                font-size:19px;
+                cursor:pointer;
+                padding:0;
+              `;
 
           emojiButton.addEventListener("mouseenter", () => {
             emojiButton.style.background = "#eef4f2";
@@ -6149,19 +6952,520 @@ document.addEventListener("DOMContentLoaded", async () => {
       bubbleWrapper.appendChild(picker);
     });
 
+    /* =====================================================
+     MORE ACTIONS MENU
+  ===================================================== */
+
+    moreButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+
+      if (!messageSysId || message.deleted === true) {
+        return;
+      }
+
+      /*
+       * If this exact menu is already
+       * open, clicking More again closes it.
+       */
+      const existingOwnMenu = bubbleWrapper.querySelector(
+        ".chat-message-more-menu",
+      );
+
+      if (existingOwnMenu) {
+        existingOwnMenu.remove();
+
+        moreButton.style.opacity = "0";
+
+        return;
+      }
+
+      /*
+       * Close menus belonging to other
+       * messages.
+       */
+      document.querySelectorAll(".chat-message-more-menu").forEach((menu) => {
+        menu.remove();
+      });
+
+      /*
+       * Close reaction picker.
+       */
+      document.querySelectorAll(".chat-reaction-picker").forEach((picker) => {
+        picker.remove();
+      });
+
+      const menu = document.createElement("div");
+
+      menu.className = "chat-message-more-menu";
+
+      menu.style.cssText = `
+        position:absolute;
+        z-index:1100;
+        min-width:140px;
+        padding:5px;
+        border:1px solid #dfe6e4;
+        border-radius:10px;
+        background:#ffffff;
+        box-shadow:
+          0 8px 24px
+          rgba(0,0,0,0.14);
+        display:flex;
+        flex-direction:column;
+        gap:2px;
+        bottom:30px;
+      `;
+
+      if (message.is_mine) {
+        menu.style.right = "30px";
+      } else {
+        menu.style.left = "30px";
+      }
+
+      /* -------------------------
+         FORWARD
+      ------------------------- */
+
+      const forwardButton = document.createElement("button");
+
+      forwardButton.type = "button";
+
+      forwardButton.textContent = "Forward";
+
+      forwardButton.style.cssText = `
+        border:none;
+        border-radius:7px;
+        background:transparent;
+        padding:8px 10px;
+        text-align:left;
+        font-size:12px;
+        color:#31433e;
+        cursor:pointer;
+      `;
+
+      forwardButton.addEventListener("mouseenter", () => {
+        forwardButton.style.background = "#eef4f2";
+      });
+
+      forwardButton.addEventListener("mouseleave", () => {
+        forwardButton.style.background = "transparent";
+      });
+
+      forwardButton.addEventListener("click", (forwardEvent) => {
+        forwardEvent.stopPropagation();
+
+        menu.remove();
+
+        /*
+         * Forward backend/selection
+         * will be wired after Delete.
+         */
+        console.log("Forward message selected:", messageSysId);
+      });
+
+      /* -------------------------
+   DELETE
+------------------------- */
+
+      const deleteButton = document.createElement("button");
+
+      deleteButton.type = "button";
+
+      deleteButton.textContent = "Delete";
+
+      deleteButton.style.cssText = `
+  border:none;
+  border-radius:7px;
+  background:transparent;
+  padding:8px 10px;
+  text-align:left;
+  font-size:12px;
+  color:#b42318;
+  cursor:pointer;
+`;
+
+      deleteButton.addEventListener("mouseenter", () => {
+        deleteButton.style.background = "#fff1f0";
+      });
+
+      deleteButton.addEventListener("mouseleave", () => {
+        deleteButton.style.background = "transparent";
+      });
+
+      deleteButton.addEventListener("click", (deleteEvent) => {
+        deleteEvent.stopPropagation();
+
+        /*
+         * MULTI-SELECT DELETE MODE
+         *
+         * First Delete click enters selection mode
+         * and selects this message.
+         */
+        if (!chatMessageSelectionMode) {
+          chatMessageSelectionMode = "delete";
+
+          selectedChatMessages.clear();
+
+          selectChatMessage(messageRow, message);
+
+          menu.remove();
+
+          hideMessageActions();
+
+          return;
+        }
+
+        /*
+         * Historical group conversations
+         * are read-only.
+         */
+        if (isActiveChatReadOnly()) {
+          menu.remove();
+
+          hideMessageActions();
+
+          showChatMembershipError();
+
+          return;
+        }
+
+        if (!messageSysId || message.deleted === true) {
+          return;
+        }
+
+        /*
+         * Replace the normal More menu
+         * with the Delete choices.
+         */
+        menu.innerHTML = "";
+
+        menu.style.minWidth = "175px";
+
+        /* =========================================
+       DELETE FOR EVERYONE
+       Only shown for my own message.
+    ========================================= */
+
+        if (message.is_mine) {
+          const deleteForEveryoneButton = document.createElement("button");
+
+          deleteForEveryoneButton.type = "button";
+
+          deleteForEveryoneButton.textContent = "Delete for everyone";
+
+          deleteForEveryoneButton.style.cssText = `
+        border:none;
+        border-radius:7px;
+        background:transparent;
+        padding:8px 10px;
+        text-align:left;
+        font-size:12px;
+        color:#b42318;
+        cursor:pointer;
+      `;
+
+          deleteForEveryoneButton.addEventListener("mouseenter", () => {
+            deleteForEveryoneButton.style.background = "#fff1f0";
+          });
+
+          deleteForEveryoneButton.addEventListener("mouseleave", () => {
+            deleteForEveryoneButton.style.background = "transparent";
+          });
+
+          deleteForEveryoneButton.addEventListener(
+            "click",
+            async (optionEvent) => {
+              optionEvent.stopPropagation();
+
+              if (deleteForEveryoneButton.disabled) {
+                return;
+              }
+
+              deleteForEveryoneButton.disabled = true;
+
+              deleteForEveryoneButton.textContent = "Deleting...";
+
+              try {
+                const result = await window.serviceCall.deleteMessages(
+                  String(activeChatConversation?.sys_id || "").trim(),
+                  [messageSysId],
+                  "everyone",
+                );
+
+                if (!result || result.success !== true) {
+                  console.warn("Delete for everyone failed:", result);
+
+                  deleteForEveryoneButton.disabled = false;
+
+                  deleteForEveryoneButton.textContent = "Delete for everyone";
+
+                  return;
+                }
+
+                /*
+                 * Remove the old row.
+                 *
+                 * Then render the deleted
+                 * tombstone locally.
+                 */
+                messageRow.remove();
+
+                appendChatMessage({
+                  ...message,
+                  text: "",
+                  deleted: true,
+                  reactions: [],
+                  my_reaction: "",
+                });
+
+                /*
+                 * Prevent an old cached copy
+                 * from being trusted after
+                 * this mutation.
+                 */
+                if (activeChatConversation && activeChatConversation.sys_id) {
+                  chatMessageCache.delete(
+                    String(activeChatConversation.sys_id),
+                  );
+                }
+
+                menu.remove();
+
+                hideMessageActions();
+
+                /*
+                 * Refresh sidebar immediately after
+                 * Delete for everyone.
+                 */
+                try {
+                  await loadChatConversations();
+                } catch (refreshError) {
+                  console.error(
+                    "Unable to refresh conversations after delete:",
+                    refreshError,
+                  );
+                }
+              } catch (error) {
+                console.error("Unable to delete message for everyone:", error);
+
+                deleteForEveryoneButton.disabled = false;
+
+                deleteForEveryoneButton.textContent = "Delete for everyone";
+              }
+            },
+          );
+
+          menu.appendChild(deleteForEveryoneButton);
+        }
+
+        /* =========================================
+       DELETE FOR ME
+       Available for both sent and received
+       messages.
+    ========================================= */
+
+        const deleteForMeButton = document.createElement("button");
+
+        deleteForMeButton.type = "button";
+
+        deleteForMeButton.textContent = "Delete for me";
+
+        deleteForMeButton.style.cssText = `
+      border:none;
+      border-radius:7px;
+      background:transparent;
+      padding:8px 10px;
+      text-align:left;
+      font-size:12px;
+      color:#b42318;
+      cursor:pointer;
+    `;
+
+        deleteForMeButton.addEventListener("mouseenter", () => {
+          deleteForMeButton.style.background = "#fff1f0";
+        });
+
+        deleteForMeButton.addEventListener("mouseleave", () => {
+          deleteForMeButton.style.background = "transparent";
+        });
+
+        deleteForMeButton.addEventListener("click", async (optionEvent) => {
+          optionEvent.stopPropagation();
+
+          if (deleteForMeButton.disabled) {
+            return;
+          }
+
+          deleteForMeButton.disabled = true;
+
+          deleteForMeButton.textContent = "Deleting...";
+
+          try {
+            const result = await window.serviceCall.deleteMessages(
+              String(activeChatConversation?.sys_id || "").trim(),
+              [messageSysId],
+              "me",
+            );
+
+            if (!result || result.success !== true) {
+              console.warn("Delete for me failed:", result);
+
+              deleteForMeButton.disabled = false;
+
+              deleteForMeButton.textContent = "Delete for me";
+
+              return;
+            }
+
+            /*
+             * Delete-for-me means this
+             * message disappears completely
+             * from this user's view.
+             */
+            messageRow.remove();
+
+            /*
+             * Invalidate this conversation's
+             * cached messages so reopening it
+             * cannot resurrect the hidden
+             * message.
+             */
+            if (activeChatConversation && activeChatConversation.sys_id) {
+              chatMessageCache.delete(String(activeChatConversation.sys_id));
+            }
+
+            menu.remove();
+
+            hideMessageActions();
+
+            /*
+             * Refresh sidebar immediately after
+             * Delete for me.
+             */
+            try {
+              await loadChatConversations();
+            } catch (refreshError) {
+              console.error(
+                "Unable to refresh conversations after delete for me:",
+                refreshError,
+              );
+            }
+          } catch (error) {
+            console.error("Unable to delete message for me:", error);
+
+            deleteForMeButton.disabled = false;
+
+            deleteForMeButton.textContent = "Delete for me";
+          }
+        });
+
+        menu.appendChild(deleteForMeButton);
+
+        /* =========================================
+       CANCEL
+    ========================================= */
+
+        const cancelDeleteButton = document.createElement("button");
+
+        cancelDeleteButton.type = "button";
+
+        cancelDeleteButton.textContent = "Cancel";
+
+        cancelDeleteButton.style.cssText = `
+      border:none;
+      border-radius:7px;
+      background:transparent;
+      padding:8px 10px;
+      text-align:left;
+      font-size:12px;
+      color:#60706c;
+      cursor:pointer;
+    `;
+
+        cancelDeleteButton.addEventListener("mouseenter", () => {
+          cancelDeleteButton.style.background = "#eef4f2";
+        });
+
+        cancelDeleteButton.addEventListener("mouseleave", () => {
+          cancelDeleteButton.style.background = "transparent";
+        });
+
+        cancelDeleteButton.addEventListener("click", (optionEvent) => {
+          optionEvent.stopPropagation();
+
+          menu.remove();
+
+          hideMessageActions();
+        });
+
+        menu.appendChild(cancelDeleteButton);
+      });
+
+      menu.appendChild(forwardButton);
+
+      menu.appendChild(deleteButton);
+
+      bubbleWrapper.appendChild(menu);
+
+      moreButton.style.opacity = "1";
+      moreButton.style.pointerEvents = "auto";
+
+      /*
+       * Close this menu when the user
+       * clicks anywhere outside it.
+       *
+       * setTimeout prevents the same click
+       * that opened the menu from immediately
+       * closing it again.
+       */
+      setTimeout(() => {
+        function closeMoreMenuOnOutsideClick(outsideEvent) {
+          if (
+            menu.contains(outsideEvent.target) ||
+            moreButton.contains(outsideEvent.target)
+          ) {
+            return;
+          }
+
+          menu.remove();
+
+          hideMessageActions();
+
+          document.removeEventListener(
+            "click",
+            closeMoreMenuOnOutsideClick,
+            true,
+          );
+        }
+
+        document.addEventListener("click", closeMoreMenuOnOutsideClick, true);
+      }, 0);
+    });
+
+    /* =====================================================
+     BUILD MESSAGE ACTION AREA
+  ===================================================== */
+
     bubbleWrapper.appendChild(bubble);
 
+    bubbleWrapper.appendChild(replyButton);
+
     bubbleWrapper.appendChild(reactionButton);
+
+    bubbleWrapper.appendChild(moreButton);
+
+    /* =====================================================
+     METADATA
+  ===================================================== */
 
     const metadata = document.createElement("div");
 
     metadata.textContent = message.sent_at || "";
 
     metadata.style.cssText = `
-        margin-top:3px;
-        font-size:10px;
-        color:#89918f;
-    `;
+    margin-top:3px;
+    font-size:10px;
+    color:#89918f;
+  `;
 
     messageRow.appendChild(bubbleWrapper);
 
@@ -6174,7 +7478,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     /*
      * If a future /messages response
      * already contains reactions,
-     * this will render them immediately.
+     * render them immediately.
      */
     renderReactions(message.reactions || [], message.my_reaction || "");
 
@@ -6401,6 +7705,151 @@ document.addEventListener("DOMContentLoaded", async () => {
         chatMessageHistoryLoading = false;
       }
     }
+  }
+
+  async function jumpToChatMessage(messageSysId) {
+    const targetMessageSysId = String(messageSysId || "").trim();
+
+    if (
+      !targetMessageSysId ||
+      !chatMessages ||
+      !activeChatConversation ||
+      !activeChatConversation.sys_id
+    ) {
+      return;
+    }
+
+    /*
+     * Remember which conversation started
+     * this operation.
+     *
+     * If the user changes conversations while
+     * older history is loading, stop immediately.
+     */
+    const conversationSysId = String(activeChatConversation.sys_id).trim();
+
+    function findTargetRow() {
+      return Array.from(
+        chatMessages.querySelectorAll(".chat-message-row"),
+      ).find(
+        (row) => String(row.dataset.messageSysId || "") === targetMessageSysId,
+      );
+    }
+
+    function highlightTargetRow(row) {
+      if (!row) {
+        return;
+      }
+
+      row.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+
+      const previousTransition = row.style.transition;
+
+      const previousBackground = row.style.background;
+
+      row.style.transition = "background 0.25s ease";
+
+      row.style.background = "rgba(79, 143, 125, 0.18)";
+
+      window.setTimeout(() => {
+        row.style.background = previousBackground;
+
+        window.setTimeout(() => {
+          row.style.transition = previousTransition;
+        }, 300);
+      }, 900);
+    }
+
+    /*
+     * The original message may already be
+     * among the currently rendered messages.
+     */
+    let targetRow = findTargetRow();
+
+    if (targetRow) {
+      highlightTargetRow(targetRow);
+      return;
+    }
+
+    /*
+     * Otherwise progressively request older
+     * pages using the pagination logic that
+     * already works for normal Chat history.
+     */
+    while (chatMessageHistoryHasMore) {
+      /*
+       * Stop if the user switched conversations.
+       */
+      if (
+        !activeChatConversation ||
+        String(activeChatConversation.sys_id || "").trim() !== conversationSysId
+      ) {
+        return;
+      }
+
+      /*
+       * loadOlderChatMessages() has its own
+       * request lock.
+       *
+       * If another history request is currently
+       * running, wait briefly for it to finish
+       * instead of starting a competing request.
+       */
+      if (chatMessageHistoryLoading) {
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, 100);
+        });
+
+        continue;
+      }
+
+      const previousOldestMessageSysId = String(
+        oldestChatMessageSysId || "",
+      ).trim();
+
+      await loadOlderChatMessages();
+
+      /*
+       * The requested older page may now contain
+       * our original reply target.
+       */
+      targetRow = findTargetRow();
+
+      if (targetRow) {
+        highlightTargetRow(targetRow);
+        return;
+      }
+
+      /*
+       * Safety guard:
+       *
+       * If pagination made no progress, do not
+       * accidentally loop forever.
+       */
+      const currentOldestMessageSysId = String(
+        oldestChatMessageSysId || "",
+      ).trim();
+
+      if (
+        chatMessageHistoryHasMore &&
+        previousOldestMessageSysId === currentOldestMessageSysId
+      ) {
+        console.warn(
+          "Chat history pagination made no progress while locating reply target:",
+          targetMessageSysId,
+        );
+
+        return;
+      }
+    }
+
+    console.log(
+      "Original reply message was not found in available history:",
+      targetMessageSysId,
+    );
   }
 
   /*
@@ -7099,6 +8548,136 @@ document.addEventListener("DOMContentLoaded", async () => {
     chatMembershipMessage.style.display = "block";
   }
 
+  function renderChatReplyPreview() {
+    if (!chatMessageInput) {
+      return;
+    }
+
+    /*
+     * Remove an existing preview first.
+     */
+    const existingPreview = document.getElementById("chatReplyPreview");
+
+    if (existingPreview) {
+      existingPreview.remove();
+    }
+
+    if (!chatReplyTarget) {
+      return;
+    }
+
+    const preview = document.createElement("div");
+
+    preview.id = "chatReplyPreview";
+
+    preview.style.cssText = `
+    width:100%;
+    box-sizing:border-box;
+    margin:0 0 6px 0;
+    padding:8px 10px;
+
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+
+    border-left:3px solid #4f8f7d;
+    border-radius:7px;
+
+    background:#f0f6f4;
+  `;
+
+    const content = document.createElement("div");
+
+    content.style.cssText = `
+    min-width:0;
+    flex:1;
+  `;
+
+    const sender = document.createElement("div");
+
+    sender.textContent = chatReplyTarget.sender_name || "Message";
+
+    sender.style.cssText = `
+    margin-bottom:2px;
+    color:#397261;
+    font-size:11px;
+    font-weight:700;
+  `;
+
+    const text = document.createElement("div");
+
+    const originalText = String(chatReplyTarget.text || "");
+
+    text.textContent =
+      originalText.length > 120
+        ? originalText.substring(0, 117) + "..."
+        : originalText;
+
+    text.style.cssText = `
+    color:#66736f;
+    font-size:11px;
+
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  `;
+
+    const cancelButton = document.createElement("button");
+
+    cancelButton.type = "button";
+
+    cancelButton.textContent = "×";
+
+    cancelButton.title = "Cancel reply";
+
+    cancelButton.style.cssText = `
+    width:24px;
+    height:24px;
+    min-width:24px;
+
+    border:none;
+    border-radius:50%;
+
+    background:transparent;
+    color:#65736f;
+
+    font-size:18px;
+    line-height:22px;
+
+    cursor:pointer;
+  `;
+
+    cancelButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      chatReplyTarget = null;
+
+      renderChatReplyPreview();
+
+      if (chatMessageInput) {
+        chatMessageInput.focus();
+      }
+    });
+
+    content.appendChild(sender);
+    content.appendChild(text);
+
+    preview.appendChild(content);
+    preview.appendChild(cancelButton);
+
+    /*
+     * Your textarea is already inside its own
+     * flex-column wrapper with the membership
+     * warning above it.
+     *
+     * Therefore insert the reply preview directly
+     * before the textarea.
+     */
+    chatMessageInput.parentElement.insertBefore(preview, chatMessageInput);
+  }
+
   async function sendActiveChatMessage() {
     if (chatMessageSending) {
       return;
@@ -7231,10 +8810,21 @@ document.addEventListener("DOMContentLoaded", async () => {
            empty recipient + conversationSysId
         ========================================= */
 
+      /*
+       * Capture the reply target for this send.
+       *
+       * Empty string = ordinary message.
+       */
+      const replyToMessageSysId =
+        chatReplyTarget && chatReplyTarget.sys_id
+          ? String(chatReplyTarget.sys_id).trim()
+          : "";
+
       const result = await window.serviceCall.sendMessage(
         recipientSysId,
         conversationSysId,
         message,
+        replyToMessageSysId,
       );
 
       console.log("ServiceCall message sent:", result);
@@ -7342,6 +8932,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         chatMessageInput.value = "";
 
         resizeChatMessageInput();
+
+        /*
+         * The reply was successfully stored.
+         * Leave reply mode only after server success.
+         */
+        chatReplyTarget = null;
+
+        renderChatReplyPreview();
       }
 
       /* =========================================
@@ -7349,6 +8947,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         ========================================= */
 
       const savedMessage = result.message || {};
+
+      const savedReplyTo = savedMessage.reply_to || null;
 
       /*
        * Only render locally when this is still
@@ -7369,6 +8969,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           sent_at: String(savedMessage.sent_at || ""),
 
           is_mine: true,
+
+          reply_to: savedReplyTo,
         });
 
         /*

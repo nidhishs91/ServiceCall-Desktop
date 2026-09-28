@@ -6678,9 +6678,13 @@ ipcMain.handle(
 
     const message = String(payload.message || "").trim();
 
+    const replyToMessageSysId = String(
+      payload.replyToMessageSysId || "",
+    ).trim();
+
     /* -------------------------
-           VALIDATION
-        ------------------------- */
+       VALIDATION
+    ------------------------- */
 
     if (!recipientSysId && !conversationSysId) {
       return {
@@ -6706,6 +6710,21 @@ ipcMain.handle(
       };
     }
 
+    /*
+     * Reply is optional.
+     *
+     * When supplied, it must look like a
+     * ServiceNow sys_id before we send it
+     * to the server.
+     */
+    if (replyToMessageSysId && !/^[0-9a-f]{32}$/i.test(replyToMessageSysId)) {
+      return {
+        success: false,
+        code: "INVALID_REPLY_MESSAGE",
+        message: "Invalid reply message.",
+      };
+    }
+
     try {
       const requestBody = {
         message: message,
@@ -6723,6 +6742,16 @@ ipcMain.handle(
        */
       if (conversationSysId) {
         requestBody.conversation_id = conversationSysId;
+      }
+
+      /*
+       * Optional reply.
+       *
+       * Do not send the property at all for
+       * an ordinary message.
+       */
+      if (replyToMessageSysId) {
+        requestBody.reply_to_message_sys_id = replyToMessageSysId;
       }
 
       const result = await serviceCallApiRequest(
@@ -7196,6 +7225,120 @@ ipcMain.handle(
         code: "LEAVE_GROUP_FAILED",
         message:
           error && error.message ? error.message : "Unable to leave group.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "servicecall-delete-messages",
+
+  async (event, payload = {}) => {
+    const conversationSysId = String(payload.conversationSysId || "").trim();
+
+    const mode = String(payload.mode || "")
+      .trim()
+      .toLowerCase();
+
+    const rawMessageSysIds = payload.messageSysIds;
+
+    /* -------------------------
+       VALIDATION
+    ------------------------- */
+
+    if (!conversationSysId || !/^[0-9a-f]{32}$/i.test(conversationSysId)) {
+      return {
+        success: false,
+        code: "INVALID_CONVERSATION",
+        message: "Invalid conversation.",
+      };
+    }
+
+    /*
+     * Supported modes:
+     *
+     * everyone
+     * me
+     */
+    if (mode !== "everyone" && mode !== "me") {
+      return {
+        success: false,
+        code: "INVALID_DELETE_MODE",
+        message: "Delete mode must be everyone or me.",
+      };
+    }
+
+    if (!Array.isArray(rawMessageSysIds) || rawMessageSysIds.length === 0) {
+      return {
+        success: false,
+        code: "MESSAGES_REQUIRED",
+        message: "At least one message is required.",
+      };
+    }
+
+    if (rawMessageSysIds.length > 100) {
+      return {
+        success: false,
+        code: "TOO_MANY_MESSAGES",
+        message: "You can delete up to 100 messages at a time.",
+      };
+    }
+
+    /*
+     * Normalize and validate every message sys_id
+     * before sending anything to ServiceNow.
+     */
+    const messageSysIds = [];
+
+    const seenMessageSysIds = new Set();
+
+    for (const rawMessageSysId of rawMessageSysIds) {
+      const messageSysId = String(rawMessageSysId || "").trim();
+
+      if (!/^[0-9a-f]{32}$/i.test(messageSysId)) {
+        return {
+          success: false,
+          code: "INVALID_MESSAGE",
+          message: "One or more selected messages are invalid.",
+        };
+      }
+
+      if (seenMessageSysIds.has(messageSysId)) {
+        return {
+          success: false,
+          code: "DUPLICATE_MESSAGE",
+          message: "The same message was selected more than once.",
+        };
+      }
+
+      seenMessageSysIds.add(messageSysId);
+
+      messageSysIds.push(messageSysId);
+    }
+
+    /* -------------------------
+       SERVICENOW REQUEST
+    ------------------------- */
+
+    try {
+      const result = await serviceCallApiRequest("/delete-messages", "POST", {
+        conversation_id: conversationSysId,
+
+        message_sys_ids: messageSysIds,
+
+        mode: mode,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("Unable to delete ServiceCall messages:", error.message);
+
+      return {
+        success: false,
+
+        code: error.code || "DELETE_MESSAGES_FAILED",
+
+        message: error.message || "Unable to delete selected messages.",
       };
     }
   },

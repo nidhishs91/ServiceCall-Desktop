@@ -131,13 +131,27 @@ contextBridge.exposeInMainWorld("serviceCall", {
       reaction: reaction,
     }),
 
-  sendMessage: (recipientSysId, conversationSysId, message) =>
+  sendMessage: (
+    recipientSysId,
+    conversationSysId,
+    message,
+    replyToMessageSysId = "",
+  ) =>
     ipcRenderer.invoke("servicecall-send-message", {
       recipientSysId: recipientSysId || "",
 
       conversationSysId: conversationSysId || "",
 
       message: message,
+
+      replyToMessageSysId: replyToMessageSysId || "",
+    }),
+
+  deleteMessages: (conversationSysId, messageSysIds, mode) =>
+    ipcRenderer.invoke("servicecall-delete-messages", {
+      conversationSysId,
+      messageSysIds,
+      mode,
     }),
 
   leaveCall: (callSysId) =>
