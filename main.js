@@ -6573,6 +6573,22 @@ ipcMain.handle(
 
     const afterMessageSysId = String(payload.afterMessageSysId || "").trim();
 
+    const beforeMessageSysId = String(payload.beforeMessageSysId || "").trim();
+
+    let limit = parseInt(payload.limit, 10);
+
+    /*
+     * Keep the Electron-side value bounded
+     * exactly like the ServiceNow API.
+     */
+    if (!Number.isFinite(limit) || limit < 1) {
+      limit = 50;
+    }
+
+    if (limit > 100) {
+      limit = 100;
+    }
+
     if (!conversationId) {
       return {
         success: false,
@@ -6582,11 +6598,23 @@ ipcMain.handle(
       };
     }
 
+    /*
+     * A request must never ask for both
+     * newer and older messages at once.
+     */
+    if (afterMessageSysId && beforeMessageSysId) {
+      return {
+        success: false,
+        code: "INVALID_MESSAGE_CURSOR",
+        message:
+          "after and before message checkpoints cannot be used together.",
+        messages: [],
+      };
+    }
+
     try {
       /*
-       * Normal initial load:
-       *
-       * /messages?conversation_id=...
+       * Base request.
        */
       let endpoint =
         "/messages?conversation_id=" + encodeURIComponent(conversationId);
@@ -6594,12 +6622,31 @@ ipcMain.handle(
       /*
        * Silent incremental refresh:
        *
-       * /messages?conversation_id=...
-       * &after=<last_message_sys_id>
+       * Give me messages NEWER than
+       * this checkpoint.
        */
       if (afterMessageSysId) {
         endpoint += "&after=" + encodeURIComponent(afterMessageSysId);
       }
+
+      /*
+       * Older history:
+       *
+       * Give me messages OLDER than
+       * this checkpoint.
+       */
+      if (beforeMessageSysId) {
+        endpoint += "&before=" + encodeURIComponent(beforeMessageSysId);
+      }
+
+      /*
+       * Initial/history page size.
+       *
+       * The backend currently ignores this
+       * for an "after" live-sync request,
+       * which is intentional.
+       */
+      endpoint += "&limit=" + encodeURIComponent(String(limit));
 
       const result = await serviceCallApiRequest(endpoint, "GET");
 

@@ -85,11 +85,20 @@ contextBridge.exposeInMainWorld("serviceCall", {
 
   getConversations: () => ipcRenderer.invoke("servicecall-get-conversations"),
 
-  getMessages: (conversationSysId, afterMessageSysId = "") =>
+  getMessages: (
+    conversationSysId,
+    afterMessageSysId = "",
+    beforeMessageSysId = "",
+    limit = 50,
+  ) =>
     ipcRenderer.invoke("servicecall-get-messages", {
       conversationSysId: conversationSysId,
 
       afterMessageSysId: afterMessageSysId,
+
+      beforeMessageSysId: beforeMessageSysId,
+
+      limit: limit,
     }),
 
   getReactionUpdates: (conversationSysId, afterCheckpoint = "") =>
