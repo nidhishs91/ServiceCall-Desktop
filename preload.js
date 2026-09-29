@@ -345,6 +345,12 @@ contextBridge.exposeInMainWorld("serviceCall", {
     });
   },
 
+  deleteChat: (conversationSysId) =>
+  ipcRenderer.invoke(
+    "servicecall-delete-chat",
+    conversationSysId,
+  ),
+
   updateMeeting: (meetingSysId, meetingData) =>
     ipcRenderer.invoke("servicecall-update-meeting", meetingSysId, meetingData),
 

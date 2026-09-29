@@ -7343,3 +7343,62 @@ ipcMain.handle(
     }
   },
 );
+
+/* =========================================================
+   SERVICECALL CHAT - DELETE CHAT
+========================================================= */
+ 
+ipcMain.handle(
+  "servicecall-delete-chat",
+ 
+  async (event, conversationSysId) => {
+    try {
+      const normalizedConversationSysId = String(
+        conversationSysId || "",
+      ).trim();
+ 
+      /* -------------------------------------------------
+         VALIDATION
+      ------------------------------------------------- */
+ 
+      if (
+        !normalizedConversationSysId ||
+        !/^[0-9a-f]{32}$/i.test(normalizedConversationSysId)
+      ) {
+        return {
+          success: false,
+          code: "INVALID_CONVERSATION",
+          message: "A valid conversation is required.",
+        };
+      }
+ 
+      /* -------------------------------------------------
+         SERVICECALL API
+      ------------------------------------------------- */
+ 
+      const result = await serviceCallApiRequest(
+  "/delete-chat",
+  "POST",
+  {
+    conversation_id: normalizedConversationSysId,
+  },
+);
+ 
+      return result;
+    } catch (error) {
+      console.error(
+        "ServiceCall delete chat failed:",
+        error,
+      );
+ 
+      return {
+        success: false,
+        code: "DELETE_CHAT_FAILED",
+        message:
+          error && error.message
+            ? error.message
+            : "Unable to delete chat.",
+      };
+    }
+  },
+);
