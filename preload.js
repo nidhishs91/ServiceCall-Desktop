@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld("serviceCall", {
     afterMessageSysId = "",
     beforeMessageSysId = "",
     limit = 50,
+    editedAfter = "",
   ) =>
     ipcRenderer.invoke("servicecall-get-messages", {
       conversationSysId: conversationSysId,
@@ -99,6 +100,8 @@ contextBridge.exposeInMainWorld("serviceCall", {
       beforeMessageSysId: beforeMessageSysId,
 
       limit: limit,
+
+      editedAfter: editedAfter,
     }),
 
   getReactionUpdates: (conversationSysId, afterCheckpoint = "") =>
@@ -152,6 +155,19 @@ contextBridge.exposeInMainWorld("serviceCall", {
       conversationSysId,
       messageSysIds,
       mode,
+    }),
+
+  forwardMessages: (messageSysIds, destinationConversationIds) =>
+    ipcRenderer.invoke("servicecall-forward-messages", {
+      messageSysIds,
+      destinationConversationIds,
+    }),
+
+  editMessage: (conversationSysId, messageSysId, message) =>
+    ipcRenderer.invoke("servicecall-edit-message", {
+      conversationSysId,
+      messageSysId,
+      message,
     }),
 
   leaveCall: (callSysId) =>
@@ -346,10 +362,7 @@ contextBridge.exposeInMainWorld("serviceCall", {
   },
 
   deleteChat: (conversationSysId) =>
-  ipcRenderer.invoke(
-    "servicecall-delete-chat",
-    conversationSysId,
-  ),
+    ipcRenderer.invoke("servicecall-delete-chat", conversationSysId),
 
   updateMeeting: (meetingSysId, meetingData) =>
     ipcRenderer.invoke("servicecall-update-meeting", meetingSysId, meetingData),

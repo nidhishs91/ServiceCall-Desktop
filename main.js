@@ -6575,6 +6575,8 @@ ipcMain.handle(
 
     const beforeMessageSysId = String(payload.beforeMessageSysId || "").trim();
 
+    const editedAfter = String(payload.editedAfter || "").trim();
+
     let limit = parseInt(payload.limit, 10);
 
     /*
@@ -6629,6 +6631,12 @@ ipcMain.handle(
         endpoint += "&after=" + encodeURIComponent(afterMessageSysId);
       }
 
+      /*
+       * Edited-message live synchronization.
+       */
+      if (editedAfter) {
+        endpoint += "&edited_after=" + encodeURIComponent(editedAfter);
+      }
       /*
        * Older history:
        *
@@ -6770,6 +6778,123 @@ ipcMain.handle(
         code: error.code || "SEND_MESSAGE_FAILED",
 
         message: error.message || "Unable to send message.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "servicecall-forward-messages",
+
+  async (event, payload = {}) => {
+    /*
+     * Multiple source messages.
+     */
+    const messageSysIds = Array.isArray(payload.messageSysIds)
+      ? payload.messageSysIds
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      : [];
+
+    /*
+     * Multiple destination conversations.
+     */
+    const destinationConversationIds = Array.isArray(
+      payload.destinationConversationIds,
+    )
+      ? payload.destinationConversationIds
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      : [];
+
+    /* -------------------------
+       VALIDATION
+    ------------------------- */
+
+    if (messageSysIds.length === 0) {
+      return {
+        success: false,
+        code: "MESSAGES_REQUIRED",
+        message: "Select at least one message to forward.",
+      };
+    }
+
+    if (destinationConversationIds.length === 0) {
+      return {
+        success: false,
+        code: "DESTINATIONS_REQUIRED",
+        message: "Select at least one destination.",
+      };
+    }
+
+    /*
+     * Match the server-side safety limits.
+     */
+    if (messageSysIds.length > 50) {
+      return {
+        success: false,
+        code: "TOO_MANY_MESSAGES",
+        message: "Too many messages were selected.",
+      };
+    }
+
+    if (destinationConversationIds.length > 50) {
+      return {
+        success: false,
+        code: "TOO_MANY_DESTINATIONS",
+        message: "Too many destinations were selected.",
+      };
+    }
+
+    /*
+     * Validate every source message sys_id.
+     */
+    for (const messageSysId of messageSysIds) {
+      if (!/^[0-9a-f]{32}$/i.test(messageSysId)) {
+        return {
+          success: false,
+          code: "INVALID_MESSAGE",
+          message: "One or more selected messages are invalid.",
+        };
+      }
+    }
+
+    /*
+     * Validate every destination conversation sys_id.
+     */
+    for (const conversationSysId of destinationConversationIds) {
+      if (!/^[0-9a-f]{32}$/i.test(conversationSysId)) {
+        return {
+          success: false,
+          code: "INVALID_DESTINATION",
+          message: "One or more destinations are invalid.",
+        };
+      }
+    }
+
+    try {
+      const requestBody = {
+        message_sys_ids: messageSysIds,
+
+        destination_conversation_ids: destinationConversationIds,
+      };
+
+      const result = await serviceCallApiRequest(
+        "/forward-message",
+        "POST",
+        requestBody,
+      );
+
+      return result;
+    } catch (error) {
+      console.error("Unable to forward ServiceCall messages:", error.message);
+
+      return {
+        success: false,
+
+        code: error.code || "FORWARD_MESSAGE_FAILED",
+
+        message: error.message || "Unable to forward the selected messages.",
       };
     }
   },
@@ -7347,20 +7472,20 @@ ipcMain.handle(
 /* =========================================================
    SERVICECALL CHAT - DELETE CHAT
 ========================================================= */
- 
+
 ipcMain.handle(
   "servicecall-delete-chat",
- 
+
   async (event, conversationSysId) => {
     try {
       const normalizedConversationSysId = String(
         conversationSysId || "",
       ).trim();
- 
+
       /* -------------------------------------------------
          VALIDATION
       ------------------------------------------------- */
- 
+
       if (
         !normalizedConversationSysId ||
         !/^[0-9a-f]{32}$/i.test(normalizedConversationSysId)
@@ -7371,33 +7496,102 @@ ipcMain.handle(
           message: "A valid conversation is required.",
         };
       }
- 
+
       /* -------------------------------------------------
          SERVICECALL API
       ------------------------------------------------- */
- 
-      const result = await serviceCallApiRequest(
-  "/delete-chat",
-  "POST",
-  {
-    conversation_id: normalizedConversationSysId,
-  },
-);
- 
+
+      const result = await serviceCallApiRequest("/delete-chat", "POST", {
+        conversation_id: normalizedConversationSysId,
+      });
+
       return result;
     } catch (error) {
-      console.error(
-        "ServiceCall delete chat failed:",
-        error,
-      );
- 
+      console.error("ServiceCall delete chat failed:", error);
+
       return {
         success: false,
         code: "DELETE_CHAT_FAILED",
         message:
-          error && error.message
-            ? error.message
-            : "Unable to delete chat.",
+          error && error.message ? error.message : "Unable to delete chat.",
+      };
+    }
+  },
+);
+
+/* =====================================================
+   SERVICECALL CHAT - EDIT MESSAGE
+===================================================== */
+
+ipcMain.handle(
+  "servicecall-edit-message",
+
+  async (event, payload = {}) => {
+    const conversationSysId = String(payload.conversationSysId || "").trim();
+
+    const messageSysId = String(payload.messageSysId || "").trim();
+
+    const message = String(payload.message || "").trim();
+
+    /* -------------------------
+       VALIDATION
+    ------------------------- */
+
+    if (!conversationSysId || !/^[0-9a-f]{32}$/i.test(conversationSysId)) {
+      return {
+        success: false,
+        code: "INVALID_CONVERSATION",
+        message: "Invalid conversation.",
+      };
+    }
+
+    if (!messageSysId || !/^[0-9a-f]{32}$/i.test(messageSysId)) {
+      return {
+        success: false,
+        code: "INVALID_MESSAGE",
+        message: "Invalid message.",
+      };
+    }
+
+    if (!message) {
+      return {
+        success: false,
+        code: "MESSAGE_REQUIRED",
+        message: "Edited message cannot be empty.",
+      };
+    }
+
+    if (message.length > 10000) {
+      return {
+        success: false,
+        code: "MESSAGE_TOO_LONG",
+        message: "Message cannot exceed 10000 characters.",
+      };
+    }
+
+    /* -------------------------
+       SERVICENOW REQUEST
+    ------------------------- */
+
+    try {
+      const result = await serviceCallApiRequest("/edit-message", "POST", {
+        conversation_id: conversationSysId,
+
+        message_sys_id: messageSysId,
+
+        message: message,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("Unable to edit ServiceCall message:", error.message);
+
+      return {
+        success: false,
+
+        code: error.code || "EDIT_MESSAGE_FAILED",
+
+        message: error.message || "Unable to edit message.",
       };
     }
   },
