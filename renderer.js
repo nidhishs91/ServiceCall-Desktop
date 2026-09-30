@@ -10691,7 +10691,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         ? String(cachedMessage.sent_at || "").trim()
         : "";
 
-      metadata.textContent = sentAt + (editedAt ? " · Edited" : "");
+      const editTime = String(editedAt || "").trim();
+
+      metadata.textContent = sentAt + (editTime ? " · Edited " + editTime : "");
     }
   }
 
