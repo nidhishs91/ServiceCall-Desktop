@@ -51,6 +51,2309 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const chatMessageInput = document.getElementById("chatMessageInput");
 
+  const chatEmojiButton = document.getElementById("chatEmojiButton");
+
+  /* =====================================================
+   CHAT COMPOSER EMOJI PICKER
+===================================================== */
+
+  function toggleChatEmojiPicker() {
+    /*
+     * Only allow the picker when there is an
+     * active conversation and the composer can be used.
+     */
+    if (
+      !activeChatConversation ||
+      !chatMessageInput ||
+      chatMessageInput.disabled
+    ) {
+      return;
+    }
+
+    /*
+     * If already open, clicking 😊 closes it.
+     */
+    const existingPicker = document.getElementById("chatComposerEmojiPicker");
+
+    if (existingPicker) {
+      existingPicker.remove();
+      return;
+    }
+
+    const picker = document.createElement("div");
+
+    picker.id = "chatComposerEmojiPicker";
+
+    picker.style.cssText = `
+    position:fixed;
+    z-index:5000;
+
+    width:380px;
+    height:420px;
+
+    display:flex;
+    flex-direction:column;
+
+    overflow:hidden;
+
+    background:#ffffff;
+
+    border:
+      1px solid #dce5e2;
+
+    border-radius:16px;
+
+    box-shadow:
+      0 18px 50px
+      rgba(16,47,43,0.20);
+  `;
+
+    /* =====================================================
+   EMOJI DATA
+===================================================== */
+
+    const emojiCategories = [
+      {
+        id: "smileys",
+        icon: "😀",
+        title: "Smileys & Emotion",
+        emojis: [
+          "😀",
+          "😃",
+          "😄",
+          "😁",
+          "😆",
+          "😅",
+          "😂",
+          "🤣",
+          "🥲",
+          "😊",
+          "😇",
+          "🙂",
+          "🙃",
+          "😉",
+          "😌",
+          "😍",
+          "🥰",
+          "😘",
+          "😗",
+          "😙",
+          "😚",
+          "😋",
+          "😛",
+          "😝",
+          "😜",
+          "🤪",
+          "🤨",
+          "🧐",
+          "🤓",
+          "😎",
+          "🥸",
+          "🤩",
+          "🥳",
+          "🙂‍↕️",
+          "😏",
+          "😒",
+          "🙂‍↔️",
+          "😞",
+          "😔",
+          "😟",
+          "😕",
+          "🙁",
+          "☹️",
+          "😣",
+          "😖",
+          "😫",
+          "😩",
+          "🥺",
+          "😢",
+          "😭",
+          "😮‍💨",
+          "😤",
+          "😠",
+          "😡",
+          "🤬",
+          "🤯",
+          "😳",
+          "🥵",
+          "🥶",
+          "😱",
+          "😨",
+          "😰",
+          "😥",
+          "😓",
+          "🫣",
+          "🤗",
+          "🫡",
+          "🤔",
+          "🫢",
+          "🤭",
+          "🤫",
+          "🤥",
+          "😶",
+          "😶‍🌫️",
+          "😐",
+          "😑",
+          "😬",
+          "🫨",
+          "🫠",
+          "🙄",
+          "😯",
+          "😦",
+          "😧",
+          "😮",
+          "😲",
+          "🥱",
+          "😴",
+          "🤤",
+          "😪",
+          "😵",
+          "😵‍💫",
+          "🤐",
+          "🥴",
+          "🤢",
+          "🤮",
+          "🤧",
+          "😷",
+          "🤒",
+          "🤕",
+          "🤑",
+          "🤠",
+          "😈",
+          "👿",
+          "👹",
+          "👺",
+          "🤡",
+          "💩",
+          "👻",
+          "💀",
+          "☠️",
+          "👽",
+          "👾",
+          "🤖",
+          "🎃",
+
+          "😺",
+          "😸",
+          "😹",
+          "😻",
+          "😼",
+          "😽",
+          "🙀",
+          "😿",
+          "😾",
+
+          "❤️",
+          "🩷",
+          "🧡",
+          "💛",
+          "💚",
+          "💙",
+          "🩵",
+          "💜",
+          "🤎",
+          "🖤",
+          "🩶",
+          "🤍",
+          "💔",
+          "❤️‍🔥",
+          "❤️‍🩹",
+          "❣️",
+          "💕",
+          "💞",
+          "💓",
+          "💗",
+          "💖",
+          "💘",
+          "💝",
+          "💟",
+          "♥️",
+
+          "💋",
+          "💯",
+          "💢",
+          "💥",
+          "💫",
+          "💦",
+          "💨",
+          "🕳️",
+          "💬",
+          "👁️‍🗨️",
+          "🗨️",
+          "🗯️",
+          "💭",
+          "💤",
+        ],
+      },
+
+      {
+        id: "people",
+        icon: "👋",
+        title: "People & Gestures",
+        emojis: [
+          "👋",
+          "🤚",
+          "🖐️",
+          "✋",
+          "🖖",
+          "🫱",
+          "🫲",
+          "🫳",
+          "🫴",
+          "🫷",
+          "🫸",
+          "👌",
+          "🤌",
+          "🤏",
+          "✌️",
+          "🤞",
+          "🫰",
+          "🤟",
+          "🤘",
+          "🤙",
+          "👈",
+          "👉",
+          "👆",
+          "🖕",
+          "👇",
+          "☝️",
+          "🫵",
+          "👍",
+          "👎",
+          "✊",
+          "👊",
+          "🤛",
+          "🤜",
+          "👏",
+          "🙌",
+          "🫶",
+          "👐",
+          "🤲",
+          "🤝",
+          "🙏",
+          "✍️",
+          "💅",
+          "🤳",
+          "💪",
+          "🦾",
+          "🦿",
+          "🦵",
+          "🦶",
+          "👂",
+          "🦻",
+          "👃",
+          "🧠",
+          "🫀",
+          "🫁",
+          "🦷",
+          "🦴",
+          "👀",
+          "👁️",
+          "👅",
+          "👄",
+          "🫦",
+
+          "👶",
+          "🧒",
+          "👦",
+          "👧",
+          "🧑",
+          "👱",
+          "👨",
+          "🧔",
+          "👩",
+          "🧓",
+          "👴",
+          "👵",
+
+          "🙍",
+          "🙎",
+          "🙅",
+          "🙆",
+          "💁",
+          "🙋",
+          "🧏",
+          "🙇",
+          "🤦",
+          "🤷",
+          "🫂",
+
+          "👮",
+          "👷",
+          "💂",
+          "🕵️",
+          "👩‍⚕️",
+          "👨‍⚕️",
+          "👩‍🎓",
+          "👨‍🎓",
+          "👩‍🏫",
+          "👨‍🏫",
+          "👩‍⚖️",
+          "👨‍⚖️",
+          "👩‍🌾",
+          "👨‍🌾",
+          "👩‍🍳",
+          "👨‍🍳",
+          "👩‍🔧",
+          "👨‍🔧",
+          "👩‍💻",
+          "👨‍💻",
+          "👩‍🎤",
+          "👨‍🎤",
+          "👩‍🎨",
+          "👨‍🎨",
+          "👩‍✈️",
+          "👨‍✈️",
+          "👩‍🚀",
+          "👨‍🚀",
+          "👩‍🚒",
+          "👨‍🚒",
+
+          "👼",
+          "🎅",
+          "🤶",
+          "🦸",
+          "🦹",
+          "🧙",
+          "🧚",
+          "🧛",
+          "🧜",
+          "🧝",
+          "🧞",
+          "🧟",
+
+          "🚶",
+          "🧍",
+          "🧎",
+          "🏃",
+          "💃",
+          "🕺",
+          "🕴️",
+          "👯",
+          "🧖",
+          "🧘",
+          "🛀",
+          "🛌",
+        ],
+      },
+
+      {
+        id: "animals",
+        icon: "🐶",
+        title: "Animals & Nature",
+        emojis: [
+          "🐶",
+          "🐱",
+          "🐭",
+          "🐹",
+          "🐰",
+          "🦊",
+          "🐻",
+          "🐼",
+          "🐻‍❄️",
+          "🐨",
+          "🐯",
+          "🦁",
+          "🐮",
+          "🐷",
+          "🐽",
+          "🐸",
+          "🐵",
+          "🙈",
+          "🙉",
+          "🙊",
+          "🐒",
+          "🐔",
+          "🐧",
+          "🐦",
+          "🐤",
+          "🐣",
+          "🐥",
+          "🦆",
+          "🦅",
+          "🦉",
+          "🦇",
+          "🐺",
+          "🐗",
+          "🐴",
+          "🦄",
+          "🐝",
+          "🪱",
+          "🐛",
+          "🦋",
+          "🐌",
+          "🐞",
+          "🐜",
+          "🪰",
+          "🪲",
+          "🪳",
+          "🦟",
+          "🦗",
+          "🕷️",
+          "🦂",
+          "🐢",
+          "🐍",
+          "🦎",
+          "🦖",
+          "🦕",
+          "🐙",
+          "🦑",
+          "🦐",
+          "🦞",
+          "🦀",
+          "🐡",
+          "🐠",
+          "🐟",
+          "🐬",
+          "🐳",
+          "🐋",
+          "🦈",
+          "🦭",
+          "🐊",
+          "🐅",
+          "🐆",
+          "🦓",
+          "🦍",
+          "🦧",
+          "🐘",
+          "🦛",
+          "🦏",
+          "🐪",
+          "🐫",
+          "🦒",
+          "🦘",
+          "🦬",
+          "🐃",
+          "🐂",
+          "🐄",
+          "🐎",
+          "🐖",
+          "🐏",
+          "🐑",
+          "🦙",
+          "🐐",
+          "🦌",
+          "🐕",
+          "🐩",
+          "🦮",
+          "🐕‍🦺",
+          "🐈",
+          "🐈‍⬛",
+          "🪶",
+          "🐓",
+          "🦃",
+          "🦚",
+          "🦜",
+          "🪽",
+          "🐇",
+          "🦝",
+          "🦨",
+          "🦡",
+          "🦫",
+          "🦦",
+          "🦥",
+          "🐁",
+          "🐀",
+          "🐿️",
+          "🦔",
+
+          "🌵",
+          "🎄",
+          "🌲",
+          "🌳",
+          "🌴",
+          "🪵",
+          "🌱",
+          "🌿",
+          "☘️",
+          "🍀",
+          "🎍",
+          "🪴",
+          "🎋",
+          "🍃",
+          "🍂",
+          "🍁",
+          "🍄",
+          "🐚",
+          "🪨",
+          "🌾",
+          "💐",
+          "🌷",
+          "🌹",
+          "🥀",
+          "🪻",
+          "🌺",
+          "🌸",
+          "🌼",
+          "🌻",
+
+          "🌞",
+          "🌝",
+          "🌛",
+          "🌜",
+          "🌚",
+          "🌕",
+          "🌖",
+          "🌗",
+          "🌘",
+          "🌑",
+          "🌒",
+          "🌓",
+          "🌔",
+          "🌙",
+          "🌎",
+          "🌍",
+          "🌏",
+          "🪐",
+          "💫",
+          "⭐",
+          "🌟",
+          "✨",
+          "⚡",
+          "☄️",
+          "💥",
+          "🔥",
+          "🌪️",
+          "🌈",
+          "☀️",
+          "🌤️",
+          "⛅",
+          "🌥️",
+          "☁️",
+          "🌦️",
+          "🌧️",
+          "⛈️",
+          "🌩️",
+          "🌨️",
+          "❄️",
+          "☃️",
+          "⛄",
+          "🌬️",
+          "💨",
+          "💧",
+          "💦",
+          "☔",
+          "☂️",
+        ],
+      },
+
+      {
+        id: "food",
+        icon: "🍕",
+        title: "Food & Drink",
+        emojis: [
+          "🍏",
+          "🍎",
+          "🍐",
+          "🍊",
+          "🍋",
+          "🍋‍🟩",
+          "🍌",
+          "🍉",
+          "🍇",
+          "🍓",
+          "🫐",
+          "🍈",
+          "🍒",
+          "🍑",
+          "🥭",
+          "🍍",
+          "🥥",
+          "🥝",
+          "🍅",
+          "🍆",
+          "🥑",
+          "🥦",
+          "🫛",
+          "🥬",
+          "🥒",
+          "🌶️",
+          "🫑",
+          "🌽",
+          "🥕",
+          "🫒",
+          "🧄",
+          "🧅",
+          "🥔",
+          "🍠",
+          "🫚",
+          "🫘",
+          "🥐",
+          "🥯",
+          "🍞",
+          "🥖",
+          "🥨",
+          "🧀",
+          "🥚",
+          "🍳",
+          "🧈",
+          "🥞",
+          "🧇",
+          "🥓",
+          "🥩",
+          "🍗",
+          "🍖",
+          "🌭",
+          "🍔",
+          "🍟",
+          "🍕",
+          "🫓",
+          "🥪",
+          "🥙",
+          "🧆",
+          "🌮",
+          "🌯",
+          "🫔",
+          "🥗",
+          "🥘",
+          "🫕",
+          "🥫",
+          "🍝",
+          "🍜",
+          "🍲",
+          "🍛",
+          "🍣",
+          "🍱",
+          "🥟",
+          "🦪",
+          "🍤",
+          "🍙",
+          "🍚",
+          "🍘",
+          "🍥",
+          "🥠",
+          "🥮",
+          "🍢",
+          "🍡",
+          "🍧",
+          "🍨",
+          "🍦",
+          "🥧",
+          "🧁",
+          "🍰",
+          "🎂",
+          "🍮",
+          "🍭",
+          "🍬",
+          "🍫",
+          "🍿",
+          "🍩",
+          "🍪",
+          "🌰",
+          "🥜",
+          "🍯",
+
+          "🥛",
+          "🍼",
+          "☕",
+          "🫖",
+          "🍵",
+          "🧃",
+          "🥤",
+          "🧋",
+          "🫙",
+          "🍶",
+          "🍺",
+          "🍻",
+          "🥂",
+          "🍷",
+          "🥃",
+          "🍸",
+          "🍹",
+          "🧉",
+          "🍾",
+          "🧊",
+
+          "🥄",
+          "🍴",
+          "🍽️",
+          "🥣",
+          "🥡",
+          "🥢",
+          "🧂",
+        ],
+      },
+
+      {
+        id: "activities",
+        icon: "⚽",
+        title: "Activities",
+        emojis: [
+          "⚽",
+          "🏀",
+          "🏈",
+          "⚾",
+          "🥎",
+          "🎾",
+          "🏐",
+          "🏉",
+          "🥏",
+          "🎱",
+          "🪀",
+          "🏓",
+          "🏸",
+          "🏒",
+          "🏑",
+          "🥍",
+          "🏏",
+          "🪃",
+          "🥅",
+          "⛳",
+          "🪁",
+          "🏹",
+          "🎣",
+          "🤿",
+          "🥊",
+          "🥋",
+          "🎽",
+          "🛹",
+          "🛼",
+          "🛷",
+          "⛸️",
+          "🥌",
+          "🎿",
+          "⛷️",
+          "🏂",
+          "🪂",
+          "🏋️",
+          "🤼",
+          "🤸",
+          "⛹️",
+          "🤺",
+          "🤾",
+          "🏌️",
+          "🏇",
+          "🧘",
+          "🏄",
+          "🏊",
+          "🤽",
+          "🚣",
+          "🧗",
+          "🚵",
+          "🚴",
+
+          "🏆",
+          "🥇",
+          "🥈",
+          "🥉",
+          "🏅",
+          "🎖️",
+          "🏵️",
+          "🎗️",
+          "🎫",
+          "🎟️",
+          "🎪",
+          "🤹",
+          "🎭",
+          "🩰",
+          "🎨",
+          "🎬",
+          "🎤",
+          "🎧",
+          "🎼",
+          "🎹",
+          "🥁",
+          "🪘",
+          "🎷",
+          "🎺",
+          "🪗",
+          "🎸",
+          "🪕",
+          "🎻",
+          "🪈",
+
+          "🎲",
+          "♟️",
+          "🎯",
+          "🎳",
+          "🎮",
+          "🎰",
+          "🧩",
+        ],
+      },
+
+      {
+        id: "travel",
+        icon: "🚗",
+        title: "Travel & Places",
+        emojis: [
+          "🚗",
+          "🚕",
+          "🚙",
+          "🚌",
+          "🚎",
+          "🏎️",
+          "🚓",
+          "🚑",
+          "🚒",
+          "🚐",
+          "🛻",
+          "🚚",
+          "🚛",
+          "🚜",
+          "🏍️",
+          "🛵",
+          "🚲",
+          "🛴",
+          "🛹",
+          "🛼",
+          "🚨",
+          "🚔",
+          "🚍",
+          "🚘",
+          "🚖",
+          "🚡",
+          "🚠",
+          "🚟",
+          "🚃",
+          "🚋",
+          "🚞",
+          "🚝",
+          "🚄",
+          "🚅",
+          "🚈",
+          "🚂",
+          "🚆",
+          "🚇",
+          "🚊",
+          "🚉",
+          "✈️",
+          "🛫",
+          "🛬",
+          "🛩️",
+          "💺",
+          "🛰️",
+          "🚀",
+          "🛸",
+          "🚁",
+          "🛶",
+          "⛵",
+          "🚤",
+          "🛥️",
+          "🛳️",
+          "⛴️",
+          "🚢",
+          "⚓",
+          "🛟",
+          "⛽",
+          "🚧",
+          "🚦",
+          "🚥",
+          "🗺️",
+          "🗿",
+          "🗽",
+          "🗼",
+          "🏰",
+          "🏯",
+          "🏟️",
+          "🎡",
+          "🎢",
+          "🎠",
+          "⛲",
+          "⛱️",
+          "🏖️",
+          "🏝️",
+          "🏜️",
+          "🌋",
+          "⛰️",
+          "🏔️",
+          "🗻",
+          "🏕️",
+          "⛺",
+          "🛖",
+          "🏠",
+          "🏡",
+          "🏢",
+          "🏥",
+          "🏦",
+          "🏨",
+          "🏪",
+          "🏫",
+          "🏭",
+          "🏛️",
+          "⛪",
+          "🕌",
+          "🛕",
+          "🕍",
+          "⛩️",
+          "🕋",
+          "🌅",
+          "🌄",
+          "🌠",
+          "🎇",
+          "🎆",
+          "🌇",
+          "🌆",
+          "🏙️",
+          "🌃",
+          "🌌",
+          "🌉",
+          "🌁",
+        ],
+      },
+
+      {
+        id: "objects",
+        icon: "💡",
+        title: "Objects",
+        emojis: [
+          "⌚",
+          "📱",
+          "📲",
+          "💻",
+          "⌨️",
+          "🖥️",
+          "🖨️",
+          "🖱️",
+          "🖲️",
+          "🕹️",
+          "🗜️",
+          "💽",
+          "💾",
+          "💿",
+          "📀",
+          "📼",
+          "📷",
+          "📸",
+          "📹",
+          "🎥",
+          "📽️",
+          "🎞️",
+          "📞",
+          "☎️",
+          "📟",
+          "📠",
+          "📺",
+          "📻",
+          "🎙️",
+          "🎚️",
+          "🎛️",
+          "🧭",
+          "⏱️",
+          "⏲️",
+          "⏰",
+          "🕰️",
+          "⌛",
+          "⏳",
+          "📡",
+          "🔋",
+          "🪫",
+          "🔌",
+          "💡",
+          "🔦",
+          "🕯️",
+          "🪔",
+          "🧯",
+          "🛢️",
+          "💸",
+          "💵",
+          "💴",
+          "💶",
+          "💷",
+          "🪙",
+          "💰",
+          "💳",
+          "💎",
+          "⚖️",
+          "🪜",
+          "🧰",
+          "🪛",
+          "🔧",
+          "🔨",
+          "⚒️",
+          "🛠️",
+          "⛏️",
+          "🪚",
+          "🔩",
+          "⚙️",
+          "🧱",
+          "⛓️",
+          "🧲",
+          "🔫",
+          "💣",
+          "🧨",
+          "🪓",
+          "🔪",
+          "🗡️",
+          "⚔️",
+          "🛡️",
+          "🚬",
+          "⚰️",
+          "🪦",
+          "⚱️",
+          "🏺",
+          "🔮",
+          "📿",
+          "🧿",
+          "🪬",
+          "💈",
+          "⚗️",
+          "🔭",
+          "🔬",
+          "🕳️",
+          "🩹",
+          "🩺",
+          "💊",
+          "💉",
+          "🩸",
+          "🧬",
+          "🦠",
+          "🧫",
+          "🧪",
+          "🌡️",
+          "🧹",
+          "🪠",
+          "🧺",
+          "🧻",
+          "🚽",
+          "🚿",
+          "🛁",
+          "🪥",
+          "🪒",
+          "🧴",
+          "🧼",
+          "🫧",
+          "🧽",
+          "🧯",
+          "🛒",
+          "🎁",
+          "🎈",
+          "🎏",
+          "🎀",
+          "🪄",
+          "🪅",
+          "🎊",
+          "🎉",
+          "🎎",
+          "🏮",
+          "🎐",
+          "🧧",
+          "✉️",
+          "📩",
+          "📨",
+          "📧",
+          "💌",
+          "📥",
+          "📤",
+          "📦",
+          "🏷️",
+          "🪧",
+          "📪",
+          "📫",
+          "📬",
+          "📭",
+          "📮",
+          "📯",
+          "📜",
+          "📃",
+          "📄",
+          "📑",
+          "🧾",
+          "📊",
+          "📈",
+          "📉",
+          "🗒️",
+          "🗓️",
+          "📆",
+          "📅",
+          "🗑️",
+          "📇",
+          "🗃️",
+          "🗳️",
+          "🗄️",
+          "📋",
+          "📁",
+          "📂",
+          "🗂️",
+          "🗞️",
+          "📰",
+          "📓",
+          "📔",
+          "📒",
+          "📕",
+          "📗",
+          "📘",
+          "📙",
+          "📚",
+          "📖",
+          "🔖",
+          "🧷",
+          "🔗",
+          "📎",
+          "🖇️",
+          "📐",
+          "📏",
+          "🧮",
+          "📌",
+          "📍",
+          "✂️",
+          "🖊️",
+          "🖋️",
+          "✒️",
+          "🖌️",
+          "🖍️",
+          "📝",
+          "✏️",
+          "🔍",
+          "🔎",
+          "🔏",
+          "🔐",
+          "🔒",
+          "🔓",
+          "🔑",
+          "🗝️",
+          "🔨",
+        ],
+      },
+
+      {
+        id: "symbols",
+        icon: "❤️",
+        title: "Symbols",
+        emojis: [
+          "❤️",
+          "🩷",
+          "🧡",
+          "💛",
+          "💚",
+          "💙",
+          "🩵",
+          "💜",
+          "🖤",
+          "🩶",
+          "🤍",
+          "🤎",
+          "💔",
+          "❣️",
+          "💕",
+          "💞",
+          "💓",
+          "💗",
+          "💖",
+          "💘",
+          "💝",
+          "💟",
+
+          "☮️",
+          "✝️",
+          "☪️",
+          "🕉️",
+          "☸️",
+          "✡️",
+          "🔯",
+          "🕎",
+          "☯️",
+          "☦️",
+          "🛐",
+          "⛎",
+
+          "♈",
+          "♉",
+          "♊",
+          "♋",
+          "♌",
+          "♍",
+          "♎",
+          "♏",
+          "♐",
+          "♑",
+          "♒",
+          "♓",
+
+          "🆔",
+          "⚛️",
+          "🉑",
+          "☢️",
+          "☣️",
+          "📴",
+          "📳",
+          "🈶",
+          "🈚",
+          "🈸",
+          "🈺",
+          "🈷️",
+          "✴️",
+          "🆚",
+          "💮",
+          "🉐",
+          "㊙️",
+          "㊗️",
+          "🈴",
+          "🈵",
+          "🈹",
+          "🈲",
+          "🅰️",
+          "🅱️",
+          "🆎",
+          "🆑",
+          "🅾️",
+          "🆘",
+          "❌",
+          "⭕",
+          "🛑",
+          "⛔",
+          "📛",
+          "🚫",
+          "💯",
+          "💢",
+          "♨️",
+          "🚷",
+          "🚯",
+          "🚳",
+          "🚱",
+          "🔞",
+          "📵",
+          "🚭",
+          "❗",
+          "❕",
+          "❓",
+          "❔",
+          "‼️",
+          "⁉️",
+          "🔅",
+          "🔆",
+          "〽️",
+          "⚠️",
+          "🚸",
+          "🔱",
+          "⚜️",
+          "🔰",
+          "♻️",
+          "✅",
+          "🈯",
+          "💹",
+          "❇️",
+          "✳️",
+          "❎",
+          "🌐",
+          "💠",
+          "Ⓜ️",
+          "🌀",
+          "💤",
+          "🏧",
+          "🚾",
+          "♿",
+          "🅿️",
+          "🛗",
+          "🈳",
+          "🈂️",
+          "🛂",
+          "🛃",
+          "🛄",
+          "🛅",
+          "🚹",
+          "🚺",
+          "🚼",
+          "⚧️",
+          "🚻",
+          "🚮",
+          "🎦",
+          "📶",
+          "🈁",
+          "🔣",
+          "ℹ️",
+          "🔤",
+          "🔡",
+          "🔠",
+          "🆖",
+          "🆗",
+          "🆙",
+          "🆒",
+          "🆕",
+          "🆓",
+          "0️⃣",
+          "1️⃣",
+          "2️⃣",
+          "3️⃣",
+          "4️⃣",
+          "5️⃣",
+          "6️⃣",
+          "7️⃣",
+          "8️⃣",
+          "9️⃣",
+          "🔟",
+          "#️⃣",
+          "*️⃣",
+          "▶️",
+          "⏸️",
+          "⏯️",
+          "⏹️",
+          "⏺️",
+          "⏭️",
+          "⏮️",
+          "⏩",
+          "⏪",
+          "🔀",
+          "🔁",
+          "🔂",
+          "◀️",
+          "🔼",
+          "🔽",
+          "➡️",
+          "⬅️",
+          "⬆️",
+          "⬇️",
+          "↗️",
+          "↘️",
+          "↙️",
+          "↖️",
+          "↕️",
+          "↔️",
+          "↪️",
+          "↩️",
+          "⤴️",
+          "⤵️",
+          "🔃",
+          "🔄",
+          "🔙",
+          "🔚",
+          "🔛",
+          "🔜",
+          "🔝",
+          "🛐",
+          "⚛️",
+        ],
+      },
+
+      // {
+      //   id: "flags",
+      //   icon: "🏳️",
+      //   title: "Flags",
+      //   emojis: [
+      //     "🏳️",
+      //     "🏴",
+      //     "🏁",
+      //     "🚩",
+      //     "🏳️‍🌈",
+      //     "🏳️‍⚧️",
+      //     "🏴‍☠️",
+      //     "🇮🇳",
+      //     "🇺🇸",
+      //     "🇬🇧",
+      //     "🇨🇦",
+      //     "🇦🇺",
+      //     "🇳🇿",
+      //     "🇯🇵",
+      //     "🇰🇷",
+      //     "🇨🇳",
+      //     "🇸🇬",
+      //     "🇦🇪",
+      //     "🇸🇦",
+      //     "🇶🇦",
+      //     "🇴🇲",
+      //     "🇧🇭",
+      //     "🇰🇼",
+      //     "🇫🇷",
+      //     "🇩🇪",
+      //     "🇮🇹",
+      //     "🇪🇸",
+      //     "🇵🇹",
+      //     "🇳🇱",
+      //     "🇧🇪",
+      //     "🇨🇭",
+      //     "🇦🇹",
+      //     "🇸🇪",
+      //     "🇳🇴",
+      //     "🇩🇰",
+      //     "🇫🇮",
+      //     "🇮🇸",
+      //     "🇮🇪",
+      //     "🇵🇱",
+      //     "🇬🇷",
+      //     "🇹🇷",
+      //     "🇧🇷",
+      //     "🇦🇷",
+      //     "🇲🇽",
+      //     "🇿🇦",
+      //     "🇪🇬",
+      //     "🇳🇵",
+      //     "🇧🇹",
+      //     "🇧🇩",
+      //     "🇱🇰",
+      //     "🇵🇰",
+      //     "🇮🇩",
+      //     "🇲🇾",
+      //     "🇹🇭",
+      //     "🇻🇳",
+      //     "🇵🇭",
+      //   ],
+      // },
+    ];
+
+    /* =====================================================
+   EMOJI SEARCH KEYWORDS
+===================================================== */
+
+    const emojiSearchKeywords = {
+      "😀": "grinning smile happy face",
+      "😃": "smile happy joy face",
+      "😄": "smile happy laugh joy",
+      "😁": "grin happy teeth smile",
+      "😆": "laugh laughing happy",
+      "😅": "sweat nervous laugh relief",
+      "😂": "laugh laughing tears joy funny lol",
+      "🤣": "rolling laugh laughing funny lol",
+      "🥲": "smile tear emotional sad happy",
+      "😊": "smile happy blush cute",
+      "😇": "angel innocent halo",
+      "🙂": "smile slightly happy",
+      "🙃": "upside down smile sarcastic",
+      "😉": "wink flirty",
+      "😍": "love heart eyes crush",
+      "🥰": "love hearts affection cute",
+      "😘": "kiss love heart",
+      "😋": "yum tasty delicious food",
+      "😜": "tongue wink playful",
+      "🤪": "crazy silly goofy",
+      "🤓": "nerd glasses smart",
+      "😎": "cool sunglasses",
+      "🤩": "star eyes excited amazing",
+      "🥳": "party celebration birthday",
+      "😏": "smirk",
+      "😒": "annoyed unimpressed",
+      "😔": "sad disappointed",
+      "😕": "confused",
+      "☹️": "sad frown",
+      "🥺": "pleading puppy eyes cute",
+      "😢": "cry sad tear",
+      "😭": "cry crying tears sad",
+      "😤": "angry frustrated steam",
+      "😠": "angry mad",
+      "😡": "angry rage mad",
+      "🤬": "swearing angry curse",
+      "🤯": "mind blown shocked explosion",
+      "😳": "embarrassed shocked blush",
+      "🥵": "hot heat",
+      "🥶": "cold freezing",
+      "😱": "scream scared shocked horror",
+      "😨": "fear scared",
+      "🤗": "hug hugging",
+      "🫡": "salute respect",
+      "🤔": "thinking think question",
+      "🤭": "giggle laugh hand mouth",
+      "🤫": "quiet shh secret",
+      "🙄": "eye roll annoyed",
+      "😴": "sleep sleeping tired",
+      "🤤": "drool hungry",
+      "🤢": "sick nauseous",
+      "🤮": "vomit sick",
+      "🤧": "sneeze sick",
+      "😷": "mask sick doctor",
+      "🤒": "fever sick",
+      "🤕": "hurt injury",
+      "🤑": "money rich",
+      "🤠": "cowboy",
+      "😈": "devil evil",
+      "🤡": "clown",
+      "💩": "poop funny",
+      "👻": "ghost halloween",
+      "💀": "skull dead death lol",
+      "👽": "alien space",
+      "🤖": "robot bot ai",
+      "🎃": "pumpkin halloween",
+
+      "❤️": "heart red love romance",
+      "🩷": "heart pink love",
+      "🧡": "heart orange love",
+      "💛": "heart yellow love",
+      "💚": "heart green love",
+      "💙": "heart blue love",
+      "🩵": "heart light blue love",
+      "💜": "heart purple love",
+      "🖤": "heart black love",
+      "🤍": "heart white love",
+      "🤎": "heart brown love",
+      "💔": "broken heart breakup sad",
+      "❤️‍🔥": "heart fire passion love",
+      "❤️‍🩹": "healing heart recovery",
+      "💕": "hearts love",
+      "💞": "hearts love romance",
+      "💖": "sparkling heart love",
+      "💘": "cupid heart love",
+      "💋": "kiss lips love",
+
+      "👋": "wave hello hi bye hand",
+      "👌": "ok okay perfect hand",
+      "✌️": "peace victory two",
+      "🤞": "fingers crossed luck",
+      "🤟": "love you hand",
+      "🤘": "rock metal hand",
+      "🤙": "call me hand",
+      "👉": "right point",
+      "👈": "left point",
+      "👆": "up point",
+      "👇": "down point",
+      "👍": "thumbs up like yes good",
+      "👎": "thumbs down dislike no bad",
+      "👏": "clap applause congratulations",
+      "🙌": "celebrate raised hands hooray",
+      "🫶": "heart hands love",
+      "🙏": "pray please thanks namaste",
+      "💪": "muscle strong strength gym",
+      "👀": "eyes look watch see",
+      "🧠": "brain smart think",
+
+      "🐶": "dog puppy animal",
+      "🐱": "cat kitten animal",
+      "🐭": "mouse animal",
+      "🐰": "rabbit bunny animal",
+      "🦊": "fox animal",
+      "🐻": "bear animal",
+      "🐼": "panda animal",
+      "🐯": "tiger animal",
+      "🦁": "lion animal",
+      "🐮": "cow animal",
+      "🐷": "pig animal",
+      "🐸": "frog animal",
+      "🐵": "monkey animal",
+      "🙈": "monkey see no evil",
+      "🙉": "monkey hear no evil",
+      "🙊": "monkey speak no evil",
+      "🐔": "chicken animal",
+      "🐧": "penguin animal",
+      "🦄": "unicorn magical",
+      "🐝": "bee insect honey",
+      "🦋": "butterfly insect",
+      "🐢": "turtle animal",
+      "🐍": "snake animal",
+      "🐙": "octopus sea",
+      "🐬": "dolphin sea",
+      "🐳": "whale sea",
+      "🦈": "shark sea",
+      "🌹": "rose flower love",
+      "🌸": "cherry blossom flower",
+      "🌻": "sunflower flower",
+      "🍀": "clover luck",
+      "⭐": "star favorite",
+      "🌟": "star glowing",
+      "✨": "sparkles magic shine",
+      "⚡": "lightning electric fast",
+      "🔥": "fire flame hot lit",
+      "🌈": "rainbow",
+      "☀️": "sun sunny weather",
+      "☁️": "cloud weather",
+      "🌧️": "rain weather",
+      "❄️": "snow cold winter",
+      "💧": "water drop",
+
+      "🍎": "apple fruit",
+      "🍌": "banana fruit",
+      "🍉": "watermelon fruit",
+      "🍇": "grapes fruit",
+      "🍓": "strawberry fruit",
+      "🍒": "cherry fruit",
+      "🥭": "mango fruit",
+      "🍍": "pineapple fruit",
+      "🥑": "avocado food",
+      "🌶️": "chilli pepper spicy hot",
+      "🍞": "bread food",
+      "🧀": "cheese food",
+      "🍳": "egg breakfast food",
+      "🍗": "chicken food",
+      "🍔": "burger hamburger food",
+      "🍟": "fries chips food",
+      "🍕": "pizza food",
+      "🌮": "taco food",
+      "🍜": "noodles ramen food",
+      "🍣": "sushi food",
+      "🍦": "ice cream dessert",
+      "🎂": "cake birthday",
+      "🍫": "chocolate sweet",
+      "🍿": "popcorn movie",
+      "🍩": "donut doughnut",
+      "🍪": "cookie biscuit",
+      "☕": "coffee tea drink",
+      "🍵": "tea drink",
+      "🍺": "beer drink",
+      "🍻": "beer cheers",
+      "🥂": "cheers celebration",
+      "🍷": "wine drink",
+
+      "⚽": "football soccer sport",
+      "🏀": "basketball sport",
+      "🏈": "american football sport",
+      "⚾": "baseball sport",
+      "🎾": "tennis sport",
+      "🏏": "cricket sport",
+      "🏆": "trophy winner champion",
+      "🥇": "gold medal first winner",
+      "🎯": "target bullseye",
+      "🎮": "game gaming controller",
+      "🎤": "microphone singing music",
+      "🎧": "headphones music",
+      "🎹": "piano music",
+      "🥁": "drum music",
+      "🎸": "guitar music",
+      "🎻": "violin music",
+      "🎨": "art paint",
+      "🎬": "movie film cinema",
+
+      "🚗": "car vehicle travel",
+      "🚕": "taxi cab vehicle",
+      "🚌": "bus vehicle",
+      "🚑": "ambulance emergency",
+      "🚒": "fire truck emergency",
+      "🚲": "bicycle bike",
+      "✈️": "plane airplane flight travel",
+      "🚀": "rocket space launch",
+      "🚁": "helicopter",
+      "🚢": "ship boat",
+      "🏠": "house home",
+      "🏥": "hospital medical",
+      "🏫": "school education",
+      "🏖️": "beach vacation",
+      "⛰️": "mountain",
+      "🌅": "sunrise",
+      "🌃": "night city",
+
+      "📱": "phone mobile",
+      "💻": "laptop computer work",
+      "⌨️": "keyboard computer",
+      "🖥️": "desktop computer monitor",
+      "📷": "camera photo",
+      "📞": "phone call telephone",
+      "🔋": "battery power",
+      "💡": "bulb idea light",
+      "💰": "money bag rich",
+      "💳": "card credit payment",
+      "💎": "diamond gem",
+      "🔧": "wrench tool",
+      "🔨": "hammer tool",
+      "⚙️": "gear settings",
+      "🎁": "gift present",
+      "🎈": "balloon party",
+      "🎉": "party celebration confetti",
+      "📧": "email mail",
+      "📦": "package box delivery",
+      "📅": "calendar date",
+      "📎": "paperclip attachment",
+      "📝": "memo note write",
+      "✏️": "pencil write",
+      "🔍": "search magnify",
+      "🔒": "lock secure security",
+      "🔓": "unlock security",
+      "🔑": "key password",
+
+      "✅": "check correct yes done success",
+      "❌": "cross wrong no cancel",
+      "⚠️": "warning caution alert",
+      "❗": "exclamation important",
+      "❓": "question help",
+      "💯": "hundred perfect score",
+      "♻️": "recycle",
+      "➡️": "right arrow next",
+      "⬅️": "left arrow back",
+      "⬆️": "up arrow",
+      "⬇️": "down arrow",
+
+      // "🇮🇳": "india indian flag",
+      // "🇺🇸": "usa united states america flag",
+      // "🇬🇧": "uk united kingdom britain flag",
+      // "🇨🇦": "canada flag",
+      // "🇦🇺": "australia flag",
+      // "🇯🇵": "japan flag",
+      // "🇰🇷": "south korea korean flag",
+      // "🇨🇳": "china chinese flag",
+      // "🇸🇬": "singapore flag",
+      // "🇦🇪": "uae united arab emirates dubai flag",
+      // "🇫🇷": "france french flag",
+      // "🇩🇪": "germany german flag",
+      // "🇮🇹": "italy italian flag",
+      // "🇪🇸": "spain spanish flag",
+      // "🇧🇷": "brazil flag",
+      // "🇳🇵": "nepal flag",
+    };
+
+    /* =====================================================
+   RECENTLY USED EMOJIS
+===================================================== */
+
+    const CHAT_RECENT_EMOJIS_KEY = "servicecall_chat_recent_emojis";
+
+    function getRecentChatEmojis() {
+      try {
+        const stored = localStorage.getItem(CHAT_RECENT_EMOJIS_KEY);
+
+        if (!stored) {
+          return [];
+        }
+
+        const parsed = JSON.parse(stored);
+
+        if (!Array.isArray(parsed)) {
+          return [];
+        }
+
+        return parsed.slice(0, 24);
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function saveRecentChatEmoji(emoji) {
+      const recent = getRecentChatEmojis();
+
+      /*
+       * Remove it first so the newest use
+       * always moves to the front.
+       */
+      const updated = [emoji, ...recent.filter((item) => item !== emoji)].slice(
+        0,
+        24,
+      );
+
+      try {
+        localStorage.setItem(CHAT_RECENT_EMOJIS_KEY, JSON.stringify(updated));
+      } catch (error) {
+        // Do not break Chat if storage fails.
+      }
+    }
+
+    /* =====================================================
+   PICKER SHELL
+===================================================== */
+
+    picker.innerHTML = `
+  <div style="
+    padding:14px 14px 10px;
+    border-bottom:1px solid #edf1f0;
+    background:#ffffff;
+  ">
+
+    <div style="
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:11px;
+    ">
+      <div style="
+        font-size:14px;
+        font-weight:750;
+        color:#29463f;
+      ">
+        Emojis
+      </div>
+
+      <button
+        id="chatEmojiPickerClose"
+        type="button"
+        title="Close"
+        style="
+          width:28px;
+          height:28px;
+          border:none;
+          border-radius:8px;
+          background:transparent;
+          color:#71827d;
+          font-size:19px;
+          cursor:pointer;
+        "
+      >
+        ×
+      </button>
+    </div>
+
+    <div style="
+      position:relative;
+    ">
+      <span style="
+        position:absolute;
+        left:11px;
+        top:50%;
+        transform:translateY(-50%);
+        pointer-events:none;
+        font-size:13px;
+      ">
+        🔍
+      </span>
+
+      <input
+        id="chatEmojiSearch"
+        type="text"
+        autocomplete="off"
+        placeholder="Search emojis..."
+        style="
+          width:100%;
+          height:36px;
+          padding:0 11px 0 34px;
+          border:1px solid #d6e0dd;
+          border-radius:9px;
+          outline:none;
+          background:#f9fbfa;
+          color:#29463f;
+          font-size:12px;
+        "
+      >
+    </div>
+
+    <div
+      id="chatEmojiCategories"
+      style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:3px;
+        margin-top:10px;
+      "
+    ></div>
+
+  </div>
+
+  <div
+    id="chatEmojiContent"
+    style="
+      flex:1;
+      min-height:0;
+      overflow-y:auto;
+      padding:10px 10px 14px;
+      scroll-behavior:smooth;
+    "
+  ></div>
+`;
+
+    /* =====================================================
+   ELEMENT REFERENCES
+===================================================== */
+
+    const searchInput = picker.querySelector("#chatEmojiSearch");
+
+    const categoriesElement = picker.querySelector("#chatEmojiCategories");
+
+    const contentElement = picker.querySelector("#chatEmojiContent");
+
+    const closeButton = picker.querySelector("#chatEmojiPickerClose");
+
+    /* =====================================================
+   INSERT EMOJI AT CURRENT CURSOR
+===================================================== */
+
+    function insertEmojiIntoComposer(emoji) {
+      if (!chatMessageInput || chatMessageInput.disabled) {
+        return;
+      }
+
+      const value = String(chatMessageInput.value || "");
+
+      const start =
+        typeof chatMessageInput.selectionStart === "number"
+          ? chatMessageInput.selectionStart
+          : value.length;
+
+      const end =
+        typeof chatMessageInput.selectionEnd === "number"
+          ? chatMessageInput.selectionEnd
+          : start;
+
+      chatMessageInput.value = value.slice(0, start) + emoji + value.slice(end);
+
+      const newCursorPosition = start + emoji.length;
+
+      chatMessageInput.focus();
+
+      chatMessageInput.setSelectionRange(newCursorPosition, newCursorPosition);
+
+      /*
+       * Reuse your existing composer input
+       * handling for resize + Send/Save state.
+       */
+      chatMessageInput.dispatchEvent(
+        new Event("input", {
+          bubbles: true,
+        }),
+      );
+    }
+
+    /* =====================================================
+   RENDER EMOJIS
+===================================================== */
+
+    function renderEmojiSections(searchText = "") {
+      const normalizedSearch = String(searchText || "")
+        .trim()
+        .toLowerCase();
+
+      contentElement.innerHTML = "";
+
+      let visibleEmojiCount = 0;
+
+      /*
+       * Build the list that will be rendered.
+       * Recently Used appears first when
+       * we have at least one saved emoji.
+       */
+      const recentEmojis = getRecentChatEmojis();
+
+      const categoriesToRender = [
+        ...(recentEmojis.length
+          ? [
+              {
+                id: "recent",
+                icon: "🕘",
+                title: "Recently Used",
+                emojis: recentEmojis,
+              },
+            ]
+          : []),
+
+        ...emojiCategories,
+      ];
+
+      categoriesToRender.forEach((category) => {
+        /*
+         * Search currently matches category names.
+         *
+         * Searching "food", "heart", "flag",
+         * "animal", etc. therefore works.
+         */
+        let filteredEmojis = category.emojis;
+
+        if (normalizedSearch) {
+          filteredEmojis = category.emojis.filter((emoji) => {
+            const keywords = String(
+              emojiSearchKeywords[emoji] || "",
+            ).toLowerCase();
+
+            return (
+              category.title.toLowerCase().includes(normalizedSearch) ||
+              keywords.includes(normalizedSearch)
+            );
+          });
+        }
+
+        if (filteredEmojis.length === 0) {
+          return;
+        }
+
+        visibleEmojiCount += filteredEmojis.length;
+
+        const section = document.createElement("div");
+
+        section.id = `chatEmojiSection-${category.id}`;
+
+        section.style.cssText = `
+        margin-bottom:14px;
+        scroll-margin-top:8px;
+      `;
+
+        const title = document.createElement("div");
+
+        title.textContent = category.title;
+
+        title.style.cssText = `
+        position:sticky;
+        top:-10px;
+        z-index:2;
+
+        padding:
+          7px 3px 6px;
+
+        margin-bottom:4px;
+
+        background:
+          rgba(255,255,255,0.96);
+
+        color:#60736e;
+
+        font-size:11px;
+        font-weight:700;
+      `;
+
+        const grid = document.createElement("div");
+
+        grid.style.cssText = `
+        display:grid;
+        grid-template-columns:
+          repeat(8, 1fr);
+        gap:3px;
+      `;
+
+        filteredEmojis.forEach((emoji) => {
+          const emojiButton = document.createElement("button");
+
+          emojiButton.type = "button";
+
+          emojiButton.textContent = emoji;
+
+          emojiButton.title = emoji;
+
+          emojiButton.style.cssText = `
+            width:38px;
+            height:38px;
+
+            display:flex;
+            align-items:center;
+            justify-content:center;
+
+            padding:0;
+
+            border:none;
+            border-radius:9px;
+
+            background:transparent;
+
+            font-size:22px;
+            line-height:1;
+
+            cursor:pointer;
+
+            transition:
+              background 0.12s ease,
+              transform 0.12s ease;
+          `;
+
+          emojiButton.addEventListener("mouseenter", () => {
+            emojiButton.style.background = "#edf4f2";
+
+            emojiButton.style.transform = "scale(1.12)";
+          });
+
+          emojiButton.addEventListener("mouseleave", () => {
+            emojiButton.style.background = "transparent";
+
+            emojiButton.style.transform = "scale(1)";
+          });
+
+          emojiButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+
+            /*
+             * Insert into the message composer.
+             */
+            insertEmojiIntoComposer(emoji);
+
+            /*
+             * Remember it for Recently Used.
+             */
+            saveRecentChatEmoji(emoji);
+
+            /*
+             * Refresh the picker immediately so
+             * Recently Used updates live.
+             *
+             * Do not refresh while searching,
+             * otherwise the current search results
+             * would be disturbed.
+             */
+            if (!String(searchInput.value || "").trim()) {
+              renderEmojiSections("");
+            }
+          });
+
+          document.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape") {
+              return;
+            }
+
+            const picker = document.getElementById("chatComposerEmojiPicker");
+
+            if (!picker) {
+              return;
+            }
+
+            picker.remove();
+
+            if (chatMessageInput && !chatMessageInput.disabled) {
+              chatMessageInput.focus();
+            }
+          });
+          grid.appendChild(emojiButton);
+        });
+
+        section.appendChild(title);
+
+        section.appendChild(grid);
+
+        contentElement.appendChild(section);
+      });
+
+      if (visibleEmojiCount === 0) {
+        const empty = document.createElement("div");
+
+        empty.textContent = "No emojis found";
+
+        empty.style.cssText = `
+      padding:45px 20px;
+      text-align:center;
+      color:#82918d;
+      font-size:12px;
+    `;
+
+        contentElement.appendChild(empty);
+      }
+    }
+
+    /* =====================================================
+   CATEGORY BUTTONS
+===================================================== */
+
+    const recentForNavigation = getRecentChatEmojis();
+
+    const navigationCategories = [
+      ...(recentForNavigation.length
+        ? [
+            {
+              id: "recent",
+              icon: "🕘",
+              title: "Recently Used",
+            },
+          ]
+        : []),
+
+      ...emojiCategories,
+    ];
+
+    navigationCategories.forEach((category) => {
+      const categoryButton = document.createElement("button");
+
+      categoryButton.type = "button";
+
+      categoryButton.textContent = category.icon;
+
+      categoryButton.title = category.title;
+
+      categoryButton.style.cssText = `
+      width:31px;
+      height:31px;
+
+      display:flex;
+      align-items:center;
+      justify-content:center;
+
+      padding:0;
+
+      border:none;
+      border-radius:8px;
+
+      background:transparent;
+
+      font-size:17px;
+      cursor:pointer;
+    `;
+
+      categoryButton.addEventListener("mouseenter", () => {
+        categoryButton.style.background = "#edf4f2";
+      });
+
+      categoryButton.addEventListener("mouseleave", () => {
+        categoryButton.style.background = "transparent";
+      });
+
+      categoryButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+
+        /*
+         * Clear search so all sections exist.
+         */
+        searchInput.value = "";
+
+        renderEmojiSections();
+
+        const targetSection = contentElement.querySelector(
+          `#chatEmojiSection-${category.id}`,
+        );
+
+        if (targetSection) {
+          targetSection.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }
+      });
+
+      categoriesElement.appendChild(categoryButton);
+    });
+
+    /* =====================================================
+   SEARCH
+===================================================== */
+
+    searchInput.addEventListener("input", () => {
+      renderEmojiSections(searchInput.value);
+    });
+
+    /* =====================================================
+   CLOSE
+===================================================== */
+
+    closeButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+
+      picker.remove();
+
+      if (chatMessageInput && !chatMessageInput.disabled) {
+        chatMessageInput.focus();
+      }
+    });
+
+    /* =====================================================
+   FIRST RENDER
+===================================================== */
+
+    renderEmojiSections();
+
+    document.body.appendChild(picker);
+
+    /*
+     * Position picker above the 😊 button.
+     */
+    const buttonRect = chatEmojiButton.getBoundingClientRect();
+
+    const pickerWidth = 380;
+    const pickerHeight = 420;
+    const gap = 10;
+
+    let left = buttonRect.left;
+
+    let top = buttonRect.top - pickerHeight - gap;
+
+    /*
+     * Keep it inside the application window.
+     */
+    if (left + pickerWidth > window.innerWidth - 12) {
+      left = window.innerWidth - pickerWidth - 12;
+    }
+
+    if (left < 12) {
+      left = 12;
+    }
+
+    if (top < 12) {
+      top = buttonRect.bottom + gap;
+    }
+
+    picker.style.left = `${left}px`;
+
+    picker.style.top = `${top}px`;
+
+    /*
+     * Prevent clicks inside the picker from
+     * reaching the document click handler.
+     */
+    picker.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+  }
+
+  if (chatEmojiButton) {
+    chatEmojiButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+
+      toggleChatEmojiPicker();
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    const picker = document.getElementById("chatComposerEmojiPicker");
+
+    if (
+      picker &&
+      !picker.contains(event.target) &&
+      event.target !== chatEmojiButton
+    ) {
+      picker.remove();
+    }
+  });
+
   const chatMembershipMessage = document.getElementById(
     "chatMembershipMessage",
   );
