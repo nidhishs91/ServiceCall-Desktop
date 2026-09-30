@@ -10685,15 +10685,12 @@ document.addEventListener("DOMContentLoaded", async () => {
      * the message row in the current renderer.
      */
     const metadata = row.lastElementChild;
-
     if (metadata) {
       const sentAt = cachedMessage
         ? String(cachedMessage.sent_at || "").trim()
         : "";
 
-      const editTime = String(editedAt || "").trim();
-
-      metadata.textContent = sentAt + (editTime ? " · Edited " + editTime : "");
+      metadata.textContent = sentAt + (editedAt ? " · Edited" : "");
     }
   }
 
