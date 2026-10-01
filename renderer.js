@@ -15,6 +15,218 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const openActiveCallButton = document.getElementById("openActiveCallButton");
 
+  const chatAttachButton = document.getElementById("chatAttachButton");
+
+  const chatAttachmentInput = document.createElement("input");
+
+  let pendingChatAttachment = null;
+
+  chatAttachmentInput.type = "file";
+
+  chatAttachmentInput.style.display = "none";
+
+  document.body.appendChild(chatAttachmentInput);
+
+  chatAttachButton?.addEventListener("click", () => {
+    /*
+     * Clear the previous value so selecting
+     * the same file twice still fires change.
+     */
+    chatAttachmentInput.value = "";
+
+    chatAttachmentInput.click();
+  });
+
+  chatAttachmentInput.addEventListener(
+    "change",
+
+    async () => {
+      const file = chatAttachmentInput.files?.[0];
+
+      if (!file) {
+        return;
+      }
+
+      /* -------------------------
+       BASIC CLIENT VALIDATION
+    ------------------------- */
+
+      const MAX_FILE_SIZE = 25 * 1024 * 1024;
+
+      if (file.size <= 0) {
+        console.error("Selected attachment is empty.");
+
+        return;
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        console.error("Attachment exceeds 25 MB.");
+
+        return;
+      }
+
+      /*
+       * We need the conversation that is
+       * currently open in Chat.
+       *
+       * IMPORTANT:
+       * Replace currentConversationSysId below
+       * only if your existing variable has
+       * a different name.
+       */
+      const conversationSysId = String(
+        activeChatConversation?.sys_id || "",
+      ).trim();
+
+      const isTemporaryConversation =
+        activeChatConversation?.temporary === true;
+
+      /*
+       * A brand-new direct chat does not have a
+       * ServiceNow conversation yet.
+       *
+       * Do not attempt attachment upload against
+       * a temporary/local conversation.
+       */
+      if (isTemporaryConversation) {
+        console.warn(
+          "Attachment upload requires the direct conversation to exist first.",
+        );
+
+        return;
+      }
+
+      if (!conversationSysId || !/^[0-9a-f]{32}$/i.test(conversationSysId)) {
+        console.error("No valid ServiceCall conversation is currently open.");
+
+        return;
+      }
+
+      if (!conversationSysId || !/^[0-9a-f]{32}$/i.test(conversationSysId)) {
+        console.error("No valid ServiceCall conversation is currently open.");
+
+        return;
+      }
+
+      try {
+        console.log("Preparing ServiceCall attachment:", file.name);
+
+        const result = await window.serviceCall.prepareChatAttachment({
+          conversationSysId: conversationSysId,
+
+          fileName: file.name,
+
+          mimeType: file.type || "application/octet-stream",
+
+          fileSize: file.size,
+        });
+
+        console.log("Prepare attachment result:", result);
+
+        if (!result?.success) {
+          console.error(
+            "Unable to prepare attachment:",
+            result?.message || "Unknown error",
+          );
+
+          return;
+        }
+
+        /*
+         * =========================================
+         * UPLOAD ACTUAL FILE BINARY
+         * =========================================
+         */
+
+        const attachmentSysId = String(result.attachment?.sys_id || "").trim();
+
+        if (!attachmentSysId || !/^[0-9a-f]{32}$/i.test(attachmentSysId)) {
+          throw new Error("ServiceCall did not return a valid attachment ID.");
+        }
+
+        console.log("Reading attachment binary:", file.name);
+
+        /*
+         * Browser File → ArrayBuffer
+         */
+        const arrayBuffer = await file.arrayBuffer();
+
+        console.log("Uploading attachment binary:", {
+          attachmentSysId: attachmentSysId,
+
+          bytes: arrayBuffer.byteLength,
+        });
+
+        /*
+         * Renderer
+         *    ↓
+         * preload.js
+         *    ↓
+         * main.js
+         *    ↓
+         * raw application/octet-stream
+         *    ↓
+         * ServiceNow
+         */
+        const uploadResult =
+          await window.serviceCall.uploadChatAttachmentBinary(
+            attachmentSysId,
+            arrayBuffer,
+          );
+
+        console.log("Attachment binary upload result:", uploadResult);
+
+        if (!uploadResult?.success) {
+          throw new Error(
+            uploadResult?.message || "Unable to upload attachment binary.",
+          );
+        }
+
+        console.log("🔥 ServiceCall attachment upload complete:", uploadResult);
+
+        pendingChatAttachment = {
+          sysId: attachmentSysId,
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          fileSize: file.size,
+        };
+
+        renderPendingChatAttachment();
+
+        /*
+         * A prepared attachment is now waiting
+         * in the composer, so Send must be enabled
+         * even when there is no text.
+         */
+        if (chatSendButton) {
+          chatSendButton.disabled = false;
+        }
+
+        /*
+         * =========================================
+         * SEND ATTACHMENT AS CHAT MESSAGE
+         * =========================================
+         *
+         * Binary storage is complete.
+         *
+         * Now ServiceNow will re-check:
+         * - attachment ownership
+         * - attachment status
+         * - conversation
+         * - active membership
+         *
+         * before creating the actual chat message.
+         */
+        console.log(
+          "ServiceCall attachment metadata created successfully.",
+          result,
+        );
+      } catch (error) {
+        console.error("Attachment preparation failed:", error);
+      }
+    },
+  );
+
   /* -------------------------------------------------
    PEOPLE ELEMENTS
 ------------------------------------------------- */
@@ -9800,37 +10012,192 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     /* =====================================================
-     ACTUAL MESSAGE TEXT
-  ===================================================== */
+ ACTUAL MESSAGE CONTENT
+===================================================== */
 
-    const messageText = document.createElement("div");
+    const isAttachmentMessage =
+      messageType === "attachment" &&
+      message.deleted !== true &&
+      message.attachment;
 
-    /*
-     * Deleted-for-everyone messages are
-     * represented by the backend as:
-     *
-     * deleted: true
-     * text: ""
-     */
+    /* -----------------------------------------------------
+   DELETED MESSAGE
+----------------------------------------------------- */
+
     if (message.deleted === true) {
+      const messageText = document.createElement("div");
+
       messageText.textContent = "Message deleted";
 
       messageText.style.cssText = `
-      white-space:pre-wrap;
-      overflow-wrap:anywhere;
-      font-style:italic;
-      color:#7f8986;
-    `;
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+    font-style:italic;
+    color:#7f8986;
+  `;
+
+      bubble.appendChild(messageText);
+    } else if (isAttachmentMessage) {
+
+    /* -----------------------------------------------------
+   ATTACHMENT MESSAGE
+----------------------------------------------------- */
+      const attachment = message.attachment;
+
+      const attachmentCard = document.createElement("div");
+
+      attachmentCard.className = "chat-message-attachment-card";
+
+      attachmentCard.style.cssText = `
+    min-width:220px;
+    max-width:320px;
+
+    display:flex;
+    align-items:center;
+    gap:10px;
+
+    padding:8px 10px;
+
+    border:
+      1px solid rgba(
+        88,
+        112,
+        105,
+        0.16
+      );
+
+    border-radius:10px;
+
+    background:
+      rgba(
+        255,
+        255,
+        255,
+        0.58
+      );
+
+    box-sizing:border-box;
+  `;
+
+      /* -------------------------
+     FILE ICON
+  ------------------------- */
+
+      const attachmentIcon = document.createElement("div");
+
+      attachmentIcon.textContent = "📄";
+
+      attachmentIcon.style.cssText = `
+    width:36px;
+    height:36px;
+
+    flex-shrink:0;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    border-radius:9px;
+
+    background:
+      rgba(
+        79,
+        143,
+        125,
+        0.12
+      );
+
+    font-size:20px;
+  `;
+
+      /* -------------------------
+     FILE INFORMATION
+  ------------------------- */
+
+      const attachmentInfo = document.createElement("div");
+
+      attachmentInfo.style.cssText = `
+    min-width:0;
+    flex:1;
+  `;
+
+      const attachmentName = document.createElement("div");
+
+      attachmentName.textContent = String(
+        attachment.file_name || message.text || "Attachment",
+      );
+
+      attachmentName.title = attachmentName.textContent;
+
+      attachmentName.style.cssText = `
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+
+    color:#24332f;
+
+    font-size:12.5px;
+    font-weight:600;
+    line-height:1.35;
+  `;
+
+      const attachmentDetails = document.createElement("div");
+
+      const mimeType = String(attachment.mime_type || "");
+
+      let fileTypeLabel = "FILE";
+
+      if (mimeType === "application/pdf") {
+        fileTypeLabel = "PDF";
+      } else if (mimeType.startsWith("image/")) {
+        fileTypeLabel = "IMAGE";
+      } else if (mimeType.startsWith("video/")) {
+        fileTypeLabel = "VIDEO";
+      } else if (mimeType.startsWith("audio/")) {
+        fileTypeLabel = "AUDIO";
+      }
+
+      const attachmentSize = formatChatFileSize(
+        Number(attachment.file_size || 0),
+      );
+
+      attachmentDetails.textContent =
+        fileTypeLabel + (attachmentSize ? " · " + attachmentSize : "");
+
+      attachmentDetails.style.cssText = `
+    margin-top:2px;
+
+    color:#71807c;
+
+    font-size:10.5px;
+    line-height:1.3;
+  `;
+
+      attachmentInfo.appendChild(attachmentName);
+
+      attachmentInfo.appendChild(attachmentDetails);
+
+      attachmentCard.appendChild(attachmentIcon);
+
+      attachmentCard.appendChild(attachmentInfo);
+
+      bubble.appendChild(attachmentCard);
     } else {
+
+    /* -----------------------------------------------------
+   NORMAL TEXT MESSAGE
+----------------------------------------------------- */
+      const messageText = document.createElement("div");
+
       messageText.textContent = message.text || "";
 
       messageText.style.cssText = `
-      white-space:pre-wrap;
-      overflow-wrap:anywhere;
-    `;
-    }
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+  `;
 
-    bubble.appendChild(messageText);
+      bubble.appendChild(messageText);
+    }
 
     bubble.style.cssText = `
     max-width:100%;
@@ -12521,11 +12888,43 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const message = String(chatMessageInput.value || "").trim();
 
-    if (!message) {
+    /*
+     * A send is valid when we have:
+     *
+     * 1. text
+     * OR
+     * 2. a prepared attachment
+     */
+    const hasText = !!message;
+
+    const hasAttachment = !!(
+      pendingChatAttachment && pendingChatAttachment.sysId
+    );
+
+    /*
+     * Capture the pending attachment before
+     * asynchronous sending begins.
+     *
+     * The live pendingChatAttachment may be
+     * cleared after a successful send.
+     */
+    const sendingAttachment = hasAttachment
+      ? {
+          sysId: String(pendingChatAttachment.sysId || "").trim(),
+
+          fileName: String(pendingChatAttachment.fileName || ""),
+
+          mimeType: String(pendingChatAttachment.mimeType || ""),
+
+          fileSize: Number(pendingChatAttachment.fileSize || 0),
+        }
+      : null;
+
+    if (!hasText && !hasAttachment) {
       return;
     }
 
-    if (message.length > 10000) {
+    if (hasText && message.length > 10000) {
       console.error("Message exceeds 10000 characters.");
 
       return;
@@ -12599,21 +12998,71 @@ document.addEventListener("DOMContentLoaded", async () => {
           ? String(chatReplyTarget.sys_id).trim()
           : "";
 
-      const result = await window.serviceCall.sendMessage(
-        recipientSysId,
-        conversationSysId,
-        message,
-        replyToMessageSysId,
-      );
+      /*
+       * =========================================
+       * SEND TEXT / ATTACHMENT
+       * =========================================
+       */
 
-      console.log("ServiceCall message sent:", result);
+      let result = null;
 
-      if (!result || result.success !== true) {
-        throw new Error(
-          result && result.message ? result.message : "Unable to send message.",
+      let attachmentSendResult = null;
+
+      /*
+       * TEXT
+       *
+       * Keep the existing text-message flow
+       * completely unchanged when text exists.
+       */
+      if (hasText) {
+        result = await window.serviceCall.sendMessage(
+          recipientSysId,
+          conversationSysId,
+          message,
+          replyToMessageSysId,
         );
+
+        console.log("ServiceCall message sent:", result);
+
+        if (!result || result.success !== true) {
+          throw new Error(
+            result && result.message
+              ? result.message
+              : "Unable to send message.",
+          );
+        }
       }
 
+      /*
+       * =========================================
+       * ATTACHMENT
+       * =========================================
+       *
+       * The file is already uploaded and sitting
+       * in ServiceNow as Available.
+       *
+       * It becomes a real chat message ONLY now,
+       * when the user presses Send.
+       */
+      if (hasAttachment) {
+        const pendingAttachmentSysId = String(
+          pendingChatAttachment.sysId || "",
+        ).trim();
+
+        attachmentSendResult = await window.serviceCall.sendAttachmentMessage(
+          pendingAttachmentSysId,
+        );
+
+        console.log("ServiceCall attachment sent:", attachmentSendResult);
+
+        if (!attachmentSendResult || attachmentSendResult.success !== true) {
+          throw new Error(
+            attachmentSendResult && attachmentSendResult.message
+              ? attachmentSendResult.message
+              : "Unable to send attachment.",
+          );
+        }
+      }
       /*
        * =========================================
        * PROMOTE TEMPORARY DIRECT CHAT
@@ -12630,6 +13079,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         isDirectConversation &&
         activeChatConversation &&
         activeChatConversation.temporary === true &&
+        result &&
         result.conversation &&
         result.conversation.sys_id
       ) {
@@ -12742,32 +13192,63 @@ document.addEventListener("DOMContentLoaded", async () => {
        * which this message was sent.
        */
       if (stillViewingSentConversation) {
-        chatMessageInput.value = "";
+        /*
+         * Clear text only when text was sent.
+         */
+        if (hasText) {
+          chatMessageInput.value = "";
 
-        resizeChatMessageInput();
+          resizeChatMessageInput();
+
+          /*
+           * The reply was successfully stored.
+           * Leave reply mode only after server success.
+           */
+          chatReplyTarget = null;
+
+          renderChatReplyPreview();
+        }
 
         /*
-         * The reply was successfully stored.
-         * Leave reply mode only after server success.
+         * Attachment was accepted by ServiceNow.
+         *
+         * Only now remove it from the composer.
          */
-        chatReplyTarget = null;
+        if (
+          hasAttachment &&
+          attachmentSendResult &&
+          attachmentSendResult.success === true
+        ) {
+          pendingChatAttachment = null;
 
-        renderChatReplyPreview();
+          renderPendingChatAttachment();
+
+          /*
+           * Allow the same file to be
+           * selected again later.
+           */
+          if (chatAttachmentInput) {
+            chatAttachmentInput.value = "";
+          }
+        }
       }
 
       /* =========================================
-           AUTHORITATIVE SAVED MESSAGE
-        ========================================= */
-
-      const savedMessage = result.message || {};
-
-      const savedReplyTo = savedMessage.reply_to || null;
+   AUTHORITATIVE SAVED TEXT MESSAGE
+========================================= */
 
       /*
-       * Only render locally when this is still
-       * the conversation currently displayed.
+       * Only locally render a text message when
+       * a text message was actually sent.
+       *
+       * Attachment rendering will come through
+       * our attachment-aware message flow later.
        */
-      if (stillViewingSentConversation) {
+      if (hasText && result && result.message && stillViewingSentConversation) {
+        const savedMessage = result.message || {};
+
+        const savedReplyTo = savedMessage.reply_to || null;
+
         appendChatMessage({
           sys_id: String(savedMessage.sys_id || ""),
 
@@ -12787,9 +13268,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
 
         /*
-         * Prevent the silent polling loop
-         * from fetching our locally-rendered
-         * message again.
+         * Prevent polling from fetching the
+         * locally-rendered TEXT message again.
          */
         if (savedMessage.sys_id) {
           lastChatMessageSysId = String(savedMessage.sys_id).trim();
@@ -12799,12 +13279,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                UPDATE ACTIVE CONVERSATION MEMORY
             ===================================== */
 
-        activeChatConversation.last_message_preview = message;
-
         activeChatConversation.last_message_at =
-          result.conversation && result.conversation.last_message_at
+          result && result.conversation && result.conversation.last_message_at
             ? String(result.conversation.last_message_at)
-            : activeChatConversation.last_message_at || "";
+            : attachmentSendResult &&
+                attachmentSendResult.message &&
+                attachmentSendResult.message.sent_at
+              ? String(attachmentSendResult.message.sent_at)
+              : activeChatConversation.last_message_at || "";
 
         /* =====================================
                UPDATE SIDEBAR PREVIEW
@@ -12836,7 +13318,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           const preview = information.children[1];
 
           if (preview) {
-            preview.textContent = message;
+            preview.textContent = sentPreviewText;
           }
 
           /*
@@ -12912,9 +13394,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         chatMessageInput.disabled = false;
 
         if (chatSendButton) {
-          chatSendButton.disabled = !String(
-            chatMessageInput.value || "",
-          ).trim();
+          const hasCurrentText = !!String(chatMessageInput.value || "").trim();
+
+          const hasCurrentAttachment = !!(
+            pendingChatAttachment && pendingChatAttachment.sysId
+          );
+
+          chatSendButton.disabled = !hasCurrentText && !hasCurrentAttachment;
         }
 
         chatMessageInput.focus();
@@ -17172,6 +17658,100 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     updateChatCreateGroupSubmitState();
+  }
+
+  function renderPendingChatAttachment() {
+    const preview = document.getElementById("chatAttachmentPreview");
+
+    if (!preview) {
+      return;
+    }
+
+    if (!pendingChatAttachment) {
+      preview.hidden = true;
+      preview.replaceChildren();
+
+      return;
+    }
+
+    preview.hidden = false;
+    preview.replaceChildren();
+
+    const card = document.createElement("div");
+
+    card.className = "chat-attachment-preview-card";
+
+    const icon = document.createElement("span");
+
+    icon.className = "chat-attachment-preview-icon";
+
+    icon.textContent = "📄";
+
+    const info = document.createElement("div");
+
+    info.className = "chat-attachment-preview-info";
+
+    const name = document.createElement("div");
+
+    name.className = "chat-attachment-preview-name";
+
+    name.textContent = pendingChatAttachment.fileName;
+
+    const size = document.createElement("div");
+
+    size.className = "chat-attachment-preview-size";
+
+    size.textContent = formatChatFileSize(pendingChatAttachment.fileSize);
+
+    info.appendChild(name);
+    info.appendChild(size);
+
+    const removeButton = document.createElement("button");
+
+    removeButton.type = "button";
+
+    removeButton.className = "chat-attachment-preview-remove";
+
+    removeButton.title = "Remove attachment";
+
+    removeButton.textContent = "×";
+
+    removeButton.addEventListener("click", () => {
+      pendingChatAttachment = null;
+
+      renderPendingChatAttachment();
+
+      /*
+       * After removing the attachment,
+       * Send should remain enabled only
+       * when there is text in the composer.
+       */
+      if (chatSendButton) {
+        const hasCurrentText = !!String(chatMessageInput?.value || "").trim();
+
+        chatSendButton.disabled = !hasCurrentText;
+      }
+    });
+
+    card.appendChild(icon);
+    card.appendChild(info);
+    card.appendChild(removeButton);
+
+    preview.appendChild(card);
+  }
+
+  function formatChatFileSize(bytes) {
+    const size = Number(bytes || 0);
+
+    if (size < 1024) {
+      return size + " B";
+    }
+
+    if (size < 1024 * 1024) {
+      return (size / 1024).toFixed(1) + " KB";
+    }
+
+    return (size / (1024 * 1024)).toFixed(1) + " MB";
   }
 
   /* =====================================================

@@ -104,6 +104,20 @@ contextBridge.exposeInMainWorld("serviceCall", {
       editedAfter: editedAfter,
     }),
 
+  prepareChatAttachment: (payload) =>
+    ipcRenderer.invoke("servicecall-prepare-chat-attachment", payload),
+
+  uploadChatAttachmentBinary: (attachmentSysId, fileBytes) =>
+    ipcRenderer.invoke("servicecall-upload-chat-attachment-binary", {
+      attachmentSysId,
+      fileBytes,
+    }),
+
+  sendAttachmentMessage: (attachmentSysId) =>
+    ipcRenderer.invoke("servicecall-send-attachment-message", {
+      attachmentSysId,
+    }),
+
   getReactionUpdates: (conversationSysId, afterCheckpoint = "") =>
     ipcRenderer.invoke("servicecall-get-reaction-updates", {
       conversationSysId: conversationSysId,

@@ -3476,6 +3476,150 @@ async function serviceCallApiRequest(
   return result;
 }
 
+async function serviceCallBinaryApiRequest(
+  pathName,
+  binaryData,
+  allowRefresh = true,
+) {
+  const config = loadConfig();
+
+  const validAccessToken = await ensureValidAccessToken();
+
+  if (!config || !config.instanceUrl || !config.accessToken) {
+    throw new Error("ServiceCall Desktop is not connected to ServiceNow.");
+  }
+
+  /*
+   * Binary data must be a Buffer.
+   */
+  if (!Buffer.isBuffer(binaryData)) {
+    const error = new Error("Attachment data must be binary.");
+
+    error.code = "INVALID_BINARY_DATA";
+
+    throw error;
+  }
+
+  if (binaryData.length === 0) {
+    const error = new Error("Attachment file is empty.");
+
+    error.code = "EMPTY_ATTACHMENT";
+
+    throw error;
+  }
+
+  const url =
+    config.instanceUrl.replace(/\/$/, "") +
+    "/api/x_1806573_servic_0/servicecall_desktop_api" +
+    pathName;
+
+  const options = {
+    method: "POST",
+
+    headers: {
+      Accept: "application/json",
+
+      Authorization: "Bearer " + validAccessToken,
+
+      "Content-Type": "application/octet-stream",
+
+      /*
+       * Gives ServiceNow the actual byte count
+       * of the request body.
+       */
+      "Content-Length": String(binaryData.length),
+    },
+
+    body: binaryData,
+  };
+
+  let response = await fetch(url, options);
+
+  /*
+   * ---------------------------------------------
+   * ACCESS TOKEN EXPIRED
+   * ---------------------------------------------
+   *
+   * Same behavior as our existing JSON helper.
+   */
+  if (response.status === 401 && allowRefresh) {
+    console.log(
+      "ServiceCall binary API authorization expired. Trying automatic renewal...",
+    );
+
+    try {
+      const newAccessToken = await refreshAccessToken();
+
+      options.headers["Authorization"] = "Bearer " + newAccessToken;
+
+      /*
+       * A Buffer can safely be reused for
+       * this single retry.
+       */
+      response = await fetch(url, options);
+    } catch (refreshError) {
+      console.error(
+        "Automatic ServiceCall authorization renewal failed:",
+        refreshError.message,
+      );
+
+      const error = new Error(
+        "Your ServiceCall authorization has expired. Please sign in to ServiceNow again.",
+      );
+
+      error.code = "AUTHENTICATION_REQUIRED";
+
+      throw error;
+    }
+  }
+
+  /* -------------------------
+     RESPONSE
+  ------------------------- */
+
+  let data = {};
+
+  try {
+    data = await response.json();
+  } catch (error) {
+    data = {};
+  }
+
+  const result = data.result || data;
+
+  if (response.status === 401) {
+    const error = new Error(
+      "Your ServiceCall authorization has expired. Please sign in to ServiceNow again.",
+    );
+
+    error.code = "AUTHENTICATION_REQUIRED";
+
+    throw error;
+  }
+
+  if (!response.ok) {
+    console.error("ServiceCall binary API failed:", {
+      status: response.status,
+      statusText: response.statusText,
+      url: url,
+      response: result,
+    });
+
+    const error = new Error(
+      result.message ||
+        "ServiceCall binary request failed. HTTP " +
+          response.status +
+          " " +
+          response.statusText,
+    );
+
+    error.code = result.code || "SERVICECALL_BINARY_API_ERROR";
+
+    throw error;
+  }
+  return result;
+}
+
 async function getCurrentServiceCallUser() {
   const result = await serviceCallApiRequest("/me", "GET");
 
@@ -6784,6 +6928,84 @@ ipcMain.handle(
 );
 
 ipcMain.handle(
+  "servicecall-prepare-chat-attachment",
+
+  async (event, payload = {}) => {
+    const conversationSysId = String(payload.conversationSysId || "").trim();
+
+    const fileName = String(payload.fileName || "").trim();
+
+    const mimeType = String(
+      payload.mimeType || "application/octet-stream",
+    ).trim();
+
+    const fileSize = Number(payload.fileSize || 0);
+
+    /* -------------------------
+       VALIDATION
+    ------------------------- */
+
+    if (!conversationSysId || !/^[0-9a-f]{32}$/i.test(conversationSysId)) {
+      return {
+        success: false,
+        code: "INVALID_CONVERSATION",
+        message: "A valid conversation is required.",
+      };
+    }
+
+    if (!fileName) {
+      return {
+        success: false,
+        code: "FILE_NAME_REQUIRED",
+        message: "File name is required.",
+      };
+    }
+
+    if (!Number.isFinite(fileSize) || fileSize <= 0) {
+      return {
+        success: false,
+        code: "INVALID_FILE_SIZE",
+        message: "File size must be greater than zero.",
+      };
+    }
+
+    const MAX_FILE_SIZE = 25 * 1024 * 1024;
+
+    if (fileSize > MAX_FILE_SIZE) {
+      return {
+        success: false,
+        code: "FILE_TOO_LARGE",
+        message: "File cannot exceed 25 MB.",
+      };
+    }
+
+    try {
+      const result = await serviceCallApiRequest("/upload-attachment", "POST", {
+        conversation_id: conversationSysId,
+
+        file_name: fileName,
+
+        mime_type: mimeType,
+
+        file_size: fileSize,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("Unable to prepare ServiceCall attachment:", error.message);
+
+      return {
+        success: false,
+
+        code: error.code || "PREPARE_ATTACHMENT_FAILED",
+
+        message: error.message || "Unable to prepare attachment.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
   "servicecall-forward-messages",
 
   async (event, payload = {}) => {
@@ -7592,6 +7814,153 @@ ipcMain.handle(
         code: error.code || "EDIT_MESSAGE_FAILED",
 
         message: error.message || "Unable to edit message.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "servicecall-upload-chat-attachment-binary",
+
+  async (event, payload = {}) => {
+    const attachmentSysId = String(payload.attachmentSysId || "").trim();
+
+    const fileBytes = payload.fileBytes;
+
+    /* -------------------------
+       VALIDATION
+    ------------------------- */
+
+    if (!attachmentSysId || !/^[0-9a-f]{32}$/i.test(attachmentSysId)) {
+      return {
+        success: false,
+        code: "INVALID_ATTACHMENT",
+        message: "A valid attachment is required.",
+      };
+    }
+
+    if (!fileBytes) {
+      return {
+        success: false,
+        code: "FILE_DATA_REQUIRED",
+        message: "Attachment file data is required.",
+      };
+    }
+
+    try {
+      /*
+       * Electron IPC may give us an
+       * ArrayBuffer / Uint8Array rather
+       * than a Node Buffer.
+       *
+       * Convert it here in main.js.
+       */
+      let binaryData;
+
+      if (Buffer.isBuffer(fileBytes)) {
+        binaryData = fileBytes;
+      } else if (fileBytes instanceof ArrayBuffer) {
+        binaryData = Buffer.from(fileBytes);
+      } else if (ArrayBuffer.isView(fileBytes)) {
+        binaryData = Buffer.from(
+          fileBytes.buffer,
+          fileBytes.byteOffset,
+          fileBytes.byteLength,
+        );
+      } else {
+        /*
+         * Electron structured-clone can
+         * sometimes give Buffer-like data.
+         */
+        binaryData = Buffer.from(fileBytes);
+      }
+
+      if (!binaryData.length) {
+        return {
+          success: false,
+          code: "EMPTY_ATTACHMENT",
+          message: "Attachment file is empty.",
+        };
+      }
+
+      const MAX_FILE_SIZE = 25 * 1024 * 1024;
+
+      if (binaryData.length > MAX_FILE_SIZE) {
+        return {
+          success: false,
+          code: "FILE_TOO_LARGE",
+          message: "File cannot exceed 25 MB.",
+        };
+      }
+
+      /* -------------------------
+         BINARY UPLOAD
+      ------------------------- */
+
+      const result = await serviceCallBinaryApiRequest(
+        "/upload-attachment/" + encodeURIComponent(attachmentSysId) + "/binary",
+
+        binaryData,
+      );
+
+      return result;
+    } catch (error) {
+      console.error(
+        "Unable to upload ServiceCall attachment binary:",
+        error.message,
+      );
+
+      return {
+        success: false,
+
+        code: error.code || "UPLOAD_ATTACHMENT_BINARY_FAILED",
+
+        message: error.message || "Unable to upload attachment.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "servicecall-send-attachment-message",
+
+  async (event, payload = {}) => {
+    const attachmentSysId = String(payload.attachmentSysId || "").trim();
+
+    /* -------------------------
+       VALIDATION
+    ------------------------- */
+
+    if (!attachmentSysId || !/^[0-9a-f]{32}$/i.test(attachmentSysId)) {
+      return {
+        success: false,
+        code: "INVALID_ATTACHMENT",
+        message: "A valid attachment is required.",
+      };
+    }
+
+    try {
+      const result = await serviceCallApiRequest(
+        "/send-attachment-message",
+        "POST",
+        {
+          attachment_id: attachmentSysId,
+        },
+      );
+
+      return result;
+    } catch (error) {
+      console.error(
+        "Unable to send ServiceCall attachment message:",
+        error.message,
+      );
+
+      return {
+        success: false,
+
+        code: error.code || "SEND_ATTACHMENT_MESSAGE_FAILED",
+
+        message: error.message || "Unable to send attachment message.",
       };
     }
   },
