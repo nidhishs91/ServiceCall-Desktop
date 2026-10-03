@@ -8,6 +8,8 @@ const {
   desktopCapturer,
   dialog,
   powerMonitor,
+  clipboard,
+  nativeImage,
 } = require("electron");
 
 const path = require("path");
@@ -8405,3 +8407,157 @@ ipcMain.handle("servicecall-send-chat-content", async (event, payload = {}) => {
     };
   }
 });
+
+ipcMain.handle(
+  "servicecall-save-chat-attachment",
+  async (event, payload = {}) => {
+    const attachmentSysId = String(payload.attachmentSysId || "").trim();
+
+    const requestedFileName = String(payload.fileName || "attachment").trim();
+
+    /* -------------------------
+       VALIDATION
+    ------------------------- */
+
+    if (!attachmentSysId || !/^[0-9a-f]{32}$/i.test(attachmentSysId)) {
+      return {
+        success: false,
+        code: "INVALID_ATTACHMENT",
+        message: "A valid attachment is required.",
+      };
+    }
+
+    try {
+      /*
+       * Never trust the supplied filename
+       * as a filesystem path.
+       */
+      const safeFileName = path
+        .basename(requestedFileName || "attachment")
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
+
+      /*
+       * Let the user choose the destination
+       * BEFORE downloading the file.
+       *
+       * Cancelling the dialog therefore causes
+       * no unnecessary network/file activity.
+       */
+      const saveResult = await dialog.showSaveDialog(mainWindow, {
+        title: "Save ServiceCall Attachment",
+        defaultPath: safeFileName,
+      });
+
+      if (saveResult.canceled || !saveResult.filePath) {
+        return {
+          success: true,
+          cancelled: true,
+        };
+      }
+
+      /*
+       * Download through the SAME secure
+       * ServiceCall authorization endpoint
+       * used by Open.
+       */
+      const result = await serviceCallBinaryDownloadRequest(
+        "/download-attachment/" + encodeURIComponent(attachmentSysId),
+      );
+
+      /*
+       * Write only to the exact location
+       * selected by the user.
+       */
+      fs.writeFileSync(saveResult.filePath, result.buffer);
+
+      return {
+        success: true,
+        cancelled: false,
+      };
+    } catch (error) {
+      console.error("ServiceCall save attachment failed:", error);
+
+      return {
+        success: false,
+        code: error.code || "SAVE_ATTACHMENT_FAILED",
+        message: error.message || "Unable to save attachment.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "servicecall-copy-image-to-clipboard",
+
+  async (event, payload = {}) => {
+    try {
+      const imageBytes = payload?.imageBytes;
+
+      if (!imageBytes) {
+        return {
+          success: false,
+          message: "Image data is required.",
+        };
+      }
+
+      const buffer = Buffer.from(imageBytes);
+
+      if (buffer.length === 0) {
+        return {
+          success: false,
+          message: "Image data is empty.",
+        };
+      }
+
+      const image = nativeImage.createFromBuffer(buffer);
+
+      if (image.isEmpty()) {
+        return {
+          success: false,
+          message: "Unable to read image data.",
+        };
+      }
+
+      /*
+       * Check the actual current clipboard image
+       * before overwriting it.
+       */
+      const currentClipboardImage = clipboard.readImage();
+
+      let alreadyCopied = false;
+
+      if (!currentClipboardImage.isEmpty()) {
+        try {
+          const currentPng = currentClipboardImage.toPNG();
+
+          const newPng = image.toPNG();
+
+          alreadyCopied =
+            currentPng.length === newPng.length && currentPng.equals(newPng);
+        } catch (error) {
+          console.warn("Unable to compare clipboard image:", error);
+        }
+      }
+
+      /*
+       * Don't rewrite the clipboard when it already
+       * contains exactly this image.
+       */
+      if (!alreadyCopied) {
+        clipboard.writeImage(image);
+      }
+
+      return {
+        success: true,
+        alreadyCopied: alreadyCopied,
+      };
+    } catch (error) {
+      console.error("Unable to copy image to clipboard:", error);
+
+      return {
+        success: false,
+        message: error?.message || "Unable to copy image.",
+      };
+    }
+  },
+);

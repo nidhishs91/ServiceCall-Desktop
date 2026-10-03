@@ -143,9 +143,20 @@ contextBridge.exposeInMainWorld("serviceCall", {
       fileName,
     }),
 
+  saveChatAttachment: (attachmentSysId, fileName) =>
+    ipcRenderer.invoke("servicecall-save-chat-attachment", {
+      attachmentSysId,
+      fileName,
+    }),
+
   cancelChatAttachment: (attachmentSysId) =>
     ipcRenderer.invoke("servicecall-cancel-chat-attachment", {
       attachmentSysId,
+    }),
+
+  copyImageToClipboard: (imageBytes) =>
+    ipcRenderer.invoke("servicecall-copy-image-to-clipboard", {
+      imageBytes,
     }),
 
   sendChatContent: (

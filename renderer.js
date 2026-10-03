@@ -23,6 +23,53 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   let pendingChatAttachments = [];
 
+  /* =======================================================
+   CHAT ATTACHMENT IMAGE CACHE
+======================================================= */
+
+  const chatAttachmentImageCache = new Map();
+
+  async function getCachedChatAttachmentImage(attachmentSysId) {
+    const safeAttachmentSysId = String(attachmentSysId || "").trim();
+
+    if (!safeAttachmentSysId) {
+      throw new Error("Attachment sys_id is required.");
+    }
+
+    /*
+     * Already downloaded during this app session.
+     */
+    const cached = chatAttachmentImageCache.get(safeAttachmentSysId);
+
+    if (cached) {
+      return cached;
+    }
+
+    /*
+     * Otherwise securely download it once.
+     */
+    const result =
+      await window.serviceCall.downloadChatAttachment(safeAttachmentSysId);
+
+    if (!result || result.success !== true || !result.fileBytes) {
+      throw new Error(result?.message || "Unable to load image attachment.");
+    }
+
+    const cachedImage = {
+      success: true,
+
+      fileBytes: result.fileBytes,
+
+      contentType: result.contentType || "application/octet-stream",
+
+      contentDisposition: result.contentDisposition || "",
+    };
+
+    chatAttachmentImageCache.set(safeAttachmentSysId, cachedImage);
+
+    return cachedImage;
+  }
+
   chatAttachmentInput.multiple = true;
 
   chatAttachmentInput.type = "file";
@@ -41,323 +88,343 @@ document.addEventListener("DOMContentLoaded", async () => {
     chatAttachmentInput.click();
   });
 
-  chatAttachmentInput.addEventListener(
-    "change",
+  async function processChatAttachmentFiles(files) {
+    /*
+     * Normalize any FileList / clipboard files /
+     * normal array into the same attachment pipeline.
+     */
+    const selectedFiles = Array.from(files || []);
 
-    async () => {
-      /*
-       * Convert FileList to a normal array.
-       */
-      const selectedFiles = Array.from(chatAttachmentInput.files || []);
+    if (selectedFiles.length === 0) {
+      return;
+    }
 
-      if (selectedFiles.length === 0) {
-        return;
-      }
-
-      /* =========================================
+    /* =========================================
        CONVERSATION
     ========================================= */
 
-      const conversationSysId = String(
-        activeChatConversation?.sys_id || "",
-      ).trim();
+    const conversationSysId = String(
+      activeChatConversation?.sys_id || "",
+    ).trim();
 
-      const isTemporaryConversation =
-        activeChatConversation?.temporary === true;
+    const isTemporaryConversation = activeChatConversation?.temporary === true;
 
-      /*
-       * Attachments currently require an
-       * existing ServiceNow conversation.
-       */
-      if (isTemporaryConversation) {
-        console.warn(
-          "Attachment upload requires the direct conversation to exist first.",
-        );
+    /*
+     * Attachments currently require an
+     * existing ServiceNow conversation.
+     */
+    if (isTemporaryConversation) {
+      console.warn(
+        "Attachment upload requires the direct conversation to exist first.",
+      );
 
-        chatAttachmentInput.value = "";
+      chatAttachmentInput.value = "";
 
-        return;
-      }
+      return;
+    }
 
-      if (!conversationSysId || !/^[0-9a-f]{32}$/i.test(conversationSysId)) {
-        console.error("No valid ServiceCall conversation is currently open.");
+    if (!conversationSysId || !/^[0-9a-f]{32}$/i.test(conversationSysId)) {
+      console.error("No valid ServiceCall conversation is currently open.");
 
-        chatAttachmentInput.value = "";
+      chatAttachmentInput.value = "";
 
-        return;
-      }
+      return;
+    }
 
-      /* =========================================
+    /* =========================================
        LIMITS
     ========================================= */
 
-      const MAX_FILE_SIZE = 25 * 1024 * 1024;
+    const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
-      const MAX_ATTACHMENTS = 10;
+    const MAX_ATTACHMENTS = 10;
 
-      /*
-       * Existing pending files +
-       * newly selected files cannot
-       * exceed our backend limit.
-       */
-      if (
-        pendingChatAttachments.length + selectedFiles.length >
-        MAX_ATTACHMENTS
-      ) {
-        console.error("A maximum of 10 attachments is allowed per message.");
+    /*
+     * Existing pending files +
+     * newly selected files cannot
+     * exceed our backend limit.
+     */
+    if (
+      pendingChatAttachments.length + selectedFiles.length >
+      MAX_ATTACHMENTS
+    ) {
+      console.error("A maximum of 10 attachments is allowed per message.");
+
+      chatAttachmentInput.value = "";
+
+      return;
+    }
+
+    /* =========================================
+       VALIDATE ALL SELECTED FILES FIRST
+    ========================================= */
+
+    for (const file of selectedFiles) {
+      if (file.size <= 0) {
+        console.error("Selected attachment is empty:", file.name);
 
         chatAttachmentInput.value = "";
 
         return;
       }
 
-      /* =========================================
-       VALIDATE ALL SELECTED FILES FIRST
-    ========================================= */
+      if (file.size > MAX_FILE_SIZE) {
+        console.error("Attachment exceeds 25 MB:", file.name);
 
-      for (const file of selectedFiles) {
-        if (file.size <= 0) {
-          console.error("Selected attachment is empty:", file.name);
+        chatAttachmentInput.value = "";
 
-          chatAttachmentInput.value = "";
-
-          return;
-        }
-
-        if (file.size > MAX_FILE_SIZE) {
-          console.error("Attachment exceeds 25 MB:", file.name);
-
-          chatAttachmentInput.value = "";
-
-          return;
-        }
+        return;
       }
+    }
+
+    /*
+     * These files are now entering the
+     * upload pipeline.
+     *
+     * Send must remain disabled until every
+     * selected file has either completed or
+     * failed.
+     */
+    chatAttachmentUploadsInProgress += selectedFiles.length;
+
+    if (chatSendButton) {
+      chatSendButton.disabled = true;
+    }
+
+    /*
+     * Show selected files immediately while
+     * their uploads are still in progress.
+     */
+    selectedFiles.forEach((file) => {
+      const mimeType = file.type || "application/octet-stream";
 
       /*
-       * These files are now entering the
-       * upload pipeline.
+       * Images get a temporary LOCAL preview URL.
        *
-       * Send must remain disabled until every
-       * selected file has either completed or
-       * failed.
+       * This does not upload or expose the image.
+       * It only lets us display the selected/pasted
+       * image immediately in the composer.
        */
-      chatAttachmentUploadsInProgress += selectedFiles.length;
+      const localPreviewUrl = mimeType.startsWith("image/")
+        ? URL.createObjectURL(file)
+        : "";
 
-      if (chatSendButton) {
-        chatSendButton.disabled = true;
-      }
+      pendingChatAttachments.push({
+        sysId: "",
+        fileName: file.name,
+        mimeType: mimeType,
+        fileSize: file.size,
+        status: "uploading",
 
-      /*
-       * Show selected files immediately while
-       * their uploads are still in progress.
-       */
-      selectedFiles.forEach((file) => {
-        pendingChatAttachments.push({
-          sysId: "",
-          fileName: file.name,
-          mimeType: file.type || "application/octet-stream",
-          fileSize: file.size,
-          status: "uploading",
-        });
+        localPreviewUrl: localPreviewUrl,
       });
+    });
 
-      renderPendingChatAttachment();
+    renderPendingChatAttachment();
 
-      /* =========================================
+    /* =========================================
        UPLOAD EACH FILE
     ========================================= */
 
-      for (const file of selectedFiles) {
-        let preparedAttachmentSysId = "";
+    for (const file of selectedFiles) {
+      let preparedAttachmentSysId = "";
 
-        try {
-          console.log("Preparing ServiceCall attachment:", file.name);
+      try {
+        console.log("Preparing ServiceCall attachment:", file.name);
 
-          /* -----------------------------------------
+        /* -----------------------------------------
            CREATE ATTACHMENT METADATA
         ----------------------------------------- */
 
-          const result = await window.serviceCall.prepareChatAttachment({
-            conversationSysId: conversationSysId,
+        const result = await window.serviceCall.prepareChatAttachment({
+          conversationSysId: conversationSysId,
 
-            fileName: file.name,
+          fileName: file.name,
 
-            mimeType: file.type || "application/octet-stream",
+          mimeType: file.type || "application/octet-stream",
 
-            fileSize: file.size,
-          });
+          fileSize: file.size,
+        });
 
-          console.log("Prepare attachment result:", result);
+        console.log("Prepare attachment result:", result);
 
-          if (!result?.success) {
-            throw new Error(result?.message || "Unable to prepare attachment.");
-          }
+        if (!result?.success) {
+          throw new Error(result?.message || "Unable to prepare attachment.");
+        }
 
-          preparedAttachmentSysId = String(
-            result.attachment?.sys_id || "",
-          ).trim();
+        preparedAttachmentSysId = String(
+          result.attachment?.sys_id || "",
+        ).trim();
 
-          if (
-            !preparedAttachmentSysId ||
-            !/^[0-9a-f]{32}$/i.test(preparedAttachmentSysId)
-          ) {
-            throw new Error(
-              "ServiceCall did not return a valid attachment ID.",
-            );
-          }
+        if (
+          !preparedAttachmentSysId ||
+          !/^[0-9a-f]{32}$/i.test(preparedAttachmentSysId)
+        ) {
+          throw new Error("ServiceCall did not return a valid attachment ID.");
+        }
 
-          /* -----------------------------------------
+        /* -----------------------------------------
            READ FILE
         ----------------------------------------- */
 
-          const arrayBuffer = await file.arrayBuffer();
+        const arrayBuffer = await file.arrayBuffer();
 
-          console.log("Uploading attachment binary:", {
-            attachmentSysId: preparedAttachmentSysId,
+        console.log("Uploading attachment binary:", {
+          attachmentSysId: preparedAttachmentSysId,
 
-            fileName: file.name,
+          fileName: file.name,
 
-            bytes: arrayBuffer.byteLength,
-          });
+          bytes: arrayBuffer.byteLength,
+        });
 
-          /* -----------------------------------------
+        /* -----------------------------------------
            UPLOAD BINARY
         ----------------------------------------- */
 
-          const uploadResult =
-            await window.serviceCall.uploadChatAttachmentBinary(
-              preparedAttachmentSysId,
-              arrayBuffer,
-            );
+        const uploadResult =
+          await window.serviceCall.uploadChatAttachmentBinary(
+            preparedAttachmentSysId,
+            arrayBuffer,
+          );
 
-          console.log("Attachment binary upload result:", uploadResult);
+        console.log("Attachment binary upload result:", uploadResult);
 
-          if (!uploadResult?.success) {
-            throw new Error(
-              uploadResult?.message || "Unable to upload attachment binary.",
-            );
-          }
+        if (!uploadResult?.success) {
+          throw new Error(
+            uploadResult?.message || "Unable to upload attachment binary.",
+          );
+        }
 
-          /* -----------------------------------------
+        /* -----------------------------------------
            ADD TO PENDING COMPOSER
         ----------------------------------------- */
 
-          /*
-           * Convert the existing uploading item
-           * into a ready attachment.
-           */
-          const uploadingAttachment = pendingChatAttachments.find(
-            (attachment) =>
-              !attachment.sysId &&
-              attachment.status === "uploading" &&
-              attachment.fileName === file.name &&
-              attachment.fileSize === file.size,
-          );
-
-          if (uploadingAttachment) {
-            uploadingAttachment.sysId = preparedAttachmentSysId;
-
-            uploadingAttachment.status = "ready";
-          }
-
-          /*
-           * Re-render so the composer reflects
-           * the completed upload.
-           */
-          renderPendingChatAttachment();
-
-          console.log("🔥 ServiceCall attachment ready:", file.name);
-        } catch (error) {
-          console.error("Attachment preparation failed:", file.name, error);
-
-          if (preparedAttachmentSysId) {
-            try {
-              await window.serviceCall.cancelChatAttachment(
-                preparedAttachmentSysId,
-              );
-            } catch (cleanupError) {
-              console.error(
-                "Unable to clean up failed attachment:",
-                cleanupError,
-              );
-            }
-          }
-        } finally {
-          /*
-           * This individual file has finished
-           * its upload attempt.
-           */
-          chatAttachmentUploadsInProgress = Math.max(
-            0,
-            chatAttachmentUploadsInProgress - 1,
-          );
-
-          /*
-           * Send stays locked while ANY file
-           * is still uploading.
-           */
-          if (chatSendButton) {
-            const hasCurrentText = !!String(
-              chatMessageInput?.value || "",
-            ).trim();
-
-            const hasCurrentAttachments = pendingChatAttachments.some(
-              (attachment) =>
-                attachment &&
-                attachment.status !== "failed" &&
-                !!String(attachment.sysId || "").trim(),
-            );
-          }
-        }
         /*
-         * Keep the failed file visible so the
-         * user knows that its upload did not succeed.
+         * Convert the existing uploading item
+         * into a ready attachment.
          */
-        const failedAttachment = pendingChatAttachments.find(
+        const uploadingAttachment = pendingChatAttachments.find(
           (attachment) =>
+            !attachment.sysId &&
             attachment.status === "uploading" &&
             attachment.fileName === file.name &&
             attachment.fileSize === file.size,
         );
 
-        if (failedAttachment) {
-          failedAttachment.sysId = "";
-          failedAttachment.status = "failed";
+        if (uploadingAttachment) {
+          uploadingAttachment.sysId = preparedAttachmentSysId;
+
+          uploadingAttachment.status = "ready";
         }
 
+        /*
+         * Re-render so the composer reflects
+         * the completed upload.
+         */
         renderPendingChatAttachment();
+
+        console.log("🔥 ServiceCall attachment ready:", file.name);
+      } catch (error) {
+        console.error("Attachment preparation failed:", file.name, error);
+
+        if (preparedAttachmentSysId) {
+          try {
+            await window.serviceCall.cancelChatAttachment(
+              preparedAttachmentSysId,
+            );
+          } catch (cleanupError) {
+            console.error(
+              "Unable to clean up failed attachment:",
+              cleanupError,
+            );
+          }
+        }
+      } finally {
+        /*
+         * This individual file has finished
+         * its upload attempt.
+         */
+        chatAttachmentUploadsInProgress = Math.max(
+          0,
+          chatAttachmentUploadsInProgress - 1,
+        );
+
+        /*
+         * Send stays locked while ANY file
+         * is still uploading.
+         */
+        if (chatSendButton) {
+          const hasCurrentText = !!String(chatMessageInput?.value || "").trim();
+
+          const hasCurrentAttachments = pendingChatAttachments.some(
+            (attachment) =>
+              attachment &&
+              attachment.status !== "failed" &&
+              !!String(attachment.sysId || "").trim(),
+          );
+        }
+      }
+      /*
+       * Keep the failed file visible so the
+       * user knows that its upload did not succeed.
+       */
+      const failedAttachment = pendingChatAttachments.find(
+        (attachment) =>
+          attachment.status === "uploading" &&
+          attachment.fileName === file.name &&
+          attachment.fileSize === file.size,
+      );
+
+      if (failedAttachment) {
+        failedAttachment.sysId = "";
+        failedAttachment.status = "failed";
       }
 
-      /* =========================================
+      renderPendingChatAttachment();
+    }
+
+    /* =========================================
        RESET FILE PICKER
 
        This allows selecting the same file
        again later if needed.
     ========================================= */
 
-      chatAttachmentInput.value = "";
+    chatAttachmentInput.value = "";
 
-      /* =========================================
+    /* =========================================
        SEND BUTTON
     ========================================= */
 
-      if (chatSendButton) {
-        const hasCurrentText = !!String(chatMessageInput?.value || "").trim();
+    if (chatSendButton) {
+      const hasCurrentText = !!String(chatMessageInput?.value || "").trim();
 
-        const hasCurrentAttachments = pendingChatAttachments.some(
-          (attachment) =>
-            attachment &&
-            attachment.status !== "failed" &&
-            !!String(attachment.sysId || "").trim(),
-        );
+      const hasCurrentAttachments = pendingChatAttachments.some(
+        (attachment) =>
+          attachment &&
+          attachment.status !== "failed" &&
+          !!String(attachment.sysId || "").trim(),
+      );
 
-        const uploadsStillRunning = chatAttachmentUploadsInProgress > 0;
+      const uploadsStillRunning = chatAttachmentUploadsInProgress > 0;
 
-        chatSendButton.disabled =
-          uploadsStillRunning || (!hasCurrentText && !hasCurrentAttachments);
-      }
+      chatSendButton.disabled =
+        uploadsStillRunning || (!hasCurrentText && !hasCurrentAttachments);
+    }
+  }
+
+  /* =======================================================
+   NORMAL FILE PICKER → SHARED ATTACHMENT PIPELINE
+======================================================= */
+
+  chatAttachmentInput.addEventListener(
+    "change",
+
+    async () => {
+      await processChatAttachmentFiles(chatAttachmentInput.files);
     },
   );
+
   /* -------------------------------------------------
    PEOPLE ELEMENTS
 ------------------------------------------------- */
@@ -393,6 +460,32 @@ document.addEventListener("DOMContentLoaded", async () => {
   );
 
   const chatMessageInput = document.getElementById("chatMessageInput");
+
+  /* =======================================================
+   CHAT COMPOSER - CLIPBOARD ATTACHMENTS
+======================================================= */
+
+  chatMessageInput?.addEventListener(
+    "paste",
+
+    async (event) => {
+      const clipboardData = event.clipboardData;
+
+      if (!clipboardData) {
+        return;
+      }
+
+      const clipboardFiles = Array.from(clipboardData.files || []);
+
+      if (clipboardFiles.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+
+      await processChatAttachmentFiles(clipboardFiles);
+    },
+  );
 
   const chatEmojiButton = document.getElementById("chatEmojiButton");
 
@@ -9698,6 +9791,650 @@ document.addEventListener("DOMContentLoaded", async () => {
   let chatEditTarget = null;
 
   /* =======================================================
+   SERVICECALL ATTACHMENT VIEWER
+======================================================= */
+
+  async function openServiceCallAttachmentViewer({
+    attachmentSysId,
+    fileName,
+    mimeType,
+  }) {
+    const safeAttachmentSysId = String(attachmentSysId || "").trim();
+
+    const safeFileName = String(fileName || "Attachment").trim();
+
+    const safeMimeType = String(mimeType || "").toLowerCase();
+
+    if (!safeAttachmentSysId || !/^[0-9a-f]{32}$/i.test(safeAttachmentSysId)) {
+      console.error(
+        "Cannot open attachment viewer without a valid attachment.",
+      );
+
+      return;
+    }
+
+    /*
+     * V1 viewer currently supports images.
+     * Other previewable file types will use
+     * this same viewer shell later.
+     */
+    const isImage = safeMimeType.startsWith("image/");
+
+    const isPdf = safeMimeType === "application/pdf";
+
+    const isAudio = safeMimeType.startsWith("audio/");
+
+    const isVideo = safeMimeType.startsWith("video/");
+
+    if (!isImage && !isPdf && !isAudio && !isVideo) {
+      return;
+    }
+    /* =========================================
+     BACKDROP
+  ========================================= */
+
+    const backdrop = document.createElement("div");
+
+    backdrop.style.cssText = `
+    position:fixed;
+    inset:0;
+    z-index:100000;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    padding:24px;
+
+    background:rgba(8, 15, 24, 0.88);
+
+    box-sizing:border-box;
+  `;
+
+    /* =========================================
+     VIEWER
+  ========================================= */
+
+    const viewer = document.createElement("div");
+
+    viewer.style.cssText = `
+    width:min(1100px, 96vw);
+    height:min(760px, 92vh);
+
+    display:flex;
+    flex-direction:column;
+
+    overflow:hidden;
+
+    border-radius:14px;
+
+    background:#111a22;
+
+    box-shadow:
+      0 24px 80px rgba(0,0,0,0.45);
+  `;
+
+    /* =========================================
+     HEADER
+  ========================================= */
+
+    const header = document.createElement("div");
+
+    header.style.cssText = `
+    min-height:54px;
+
+    display:flex;
+    align-items:center;
+    gap:12px;
+
+    padding:8px 14px;
+
+    border-bottom:
+      1px solid rgba(255,255,255,0.10);
+
+    box-sizing:border-box;
+  `;
+
+    const title = document.createElement("div");
+
+    title.textContent = safeFileName;
+    title.title = safeFileName;
+
+    title.style.cssText = `
+    flex:1;
+    min-width:0;
+
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+
+    color:#ffffff;
+
+    font-size:13px;
+    font-weight:600;
+  `;
+
+    /* =========================================
+     DOWNLOAD
+  ========================================= */
+
+    const downloadButton = document.createElement("button");
+
+    downloadButton.type = "button";
+    downloadButton.textContent = "↓";
+    downloadButton.title = "Save As";
+
+    downloadButton.style.cssText = `
+    width:38px;
+    height:38px;
+
+    border:0;
+    border-radius:8px;
+
+    background:rgba(255,255,255,0.08);
+    color:#ffffff;
+
+    font-size:20px;
+
+    cursor:pointer;
+  `;
+
+    /*
+     * IMPORTANT:
+     *
+     * Downloading does NOT close the viewer.
+     */
+    downloadButton.addEventListener(
+      "click",
+
+      async (event) => {
+        event.stopPropagation();
+
+        if (downloadButton.dataset.saving === "true") {
+          return;
+        }
+
+        downloadButton.dataset.saving = "true";
+        downloadButton.disabled = true;
+
+        try {
+          const result = await window.serviceCall.saveChatAttachment(
+            safeAttachmentSysId,
+            safeFileName,
+          );
+
+          if (result?.cancelled === true) {
+            return;
+          }
+
+          if (!result || result.success !== true) {
+            throw new Error(result?.message || "Unable to save attachment.");
+          }
+        } catch (error) {
+          console.error("Unable to save attachment from viewer:", error);
+        } finally {
+          delete downloadButton.dataset.saving;
+
+          downloadButton.disabled = false;
+        }
+      },
+    );
+
+    /* =========================================
+     CLOSE
+  ========================================= */
+
+    const closeButton = document.createElement("button");
+
+    closeButton.type = "button";
+    closeButton.textContent = "×";
+    closeButton.title = "Close";
+
+    closeButton.style.cssText = `
+    width:38px;
+    height:38px;
+
+    border:0;
+    border-radius:8px;
+
+    background:rgba(255,255,255,0.08);
+    color:#ffffff;
+
+    font-size:24px;
+    line-height:1;
+
+    cursor:pointer;
+  `;
+
+    header.appendChild(title);
+    header.appendChild(downloadButton);
+    header.appendChild(closeButton);
+
+    /* =========================================
+     CONTENT
+  ========================================= */
+
+    const content = document.createElement("div");
+
+    content.style.cssText = `
+    position:relative;
+
+    flex:1;
+    min-height:0;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    overflow:auto;
+
+    padding:18px;
+
+    box-sizing:border-box;
+  `;
+
+    const loadingText = document.createElement("div");
+
+    loadingText.textContent = "Loading image...";
+
+    loadingText.style.cssText = `
+    color:rgba(255,255,255,0.72);
+    font-size:13px;
+  `;
+
+    content.appendChild(loadingText);
+
+    viewer.appendChild(header);
+    viewer.appendChild(content);
+
+    backdrop.appendChild(viewer);
+
+    document.body.appendChild(backdrop);
+
+    let copyToastTimer = null;
+    let lastCopyToastMessage = "";
+    let lastCopyToastTime = 0;
+
+    function showViewerCopyToast(message) {
+      const now = Date.now();
+
+      /*
+       * Don't repeatedly flash the same copy
+       * notification when Ctrl+C is pressed
+       * several times quickly.
+       */
+      if (message === lastCopyToastMessage && now - lastCopyToastTime < 1500) {
+        return;
+      }
+
+      /*
+       * Only final copy-result messages participate
+       * in duplicate-toast suppression.
+       */
+      if (message !== "Copying…") {
+        lastCopyToastMessage = message;
+        lastCopyToastTime = now;
+      }
+      let toast = viewer.querySelector(".servicecall-viewer-copy-toast");
+
+      if (!toast) {
+        toast = document.createElement("div");
+
+        toast.className = "servicecall-viewer-copy-toast";
+
+        toast.style.cssText = `
+      position:absolute;
+      left:50%;
+      bottom:24px;
+      transform:translateX(-50%);
+
+      z-index:10;
+
+      padding:9px 14px;
+
+      border-radius:8px;
+
+      background:rgba(0,0,0,0.78);
+      color:#ffffff;
+
+      font-size:13px;
+      font-weight:500;
+
+      pointer-events:none;
+
+      box-shadow:
+        0 6px 20px rgba(0,0,0,0.28);
+    `;
+
+        viewer.appendChild(toast);
+      }
+
+      toast.textContent = message;
+
+      toast.hidden = false;
+
+      if (copyToastTimer) {
+        clearTimeout(copyToastTimer);
+      }
+
+      copyToastTimer = setTimeout(() => {
+        toast.hidden = true;
+      }, 1800);
+    }
+
+    /* =========================================
+     CLOSE / CLEANUP
+  ========================================= */
+
+    let viewerObjectUrl = "";
+
+    function closeViewer() {
+      const activeAudio = viewer.querySelector("audio");
+
+      if (activeAudio) {
+        activeAudio.pause();
+        activeAudio.removeAttribute("src");
+        activeAudio.load();
+      }
+
+      const activeVideo = viewer.querySelector("video");
+
+      if (activeVideo) {
+        activeVideo.pause();
+        activeVideo.removeAttribute("src");
+        activeVideo.load();
+      }
+
+      if (viewerObjectUrl) {
+        URL.revokeObjectURL(viewerObjectUrl);
+
+        viewerObjectUrl = "";
+      }
+
+      document.removeEventListener("keydown", handleViewerKeyDown);
+
+      backdrop.remove();
+    }
+
+    async function copyViewerImage() {
+      if (!isImage) {
+        return;
+      }
+
+      try {
+        const result = await getCachedChatAttachmentImage(safeAttachmentSysId);
+
+        if (!result || result.success !== true || !result.fileBytes) {
+          throw new Error(
+            result?.message || "Unable to load image for copying.",
+          );
+        }
+
+        const copyResult = await window.serviceCall.copyImageToClipboard(
+          result.fileBytes,
+        );
+
+        if (!copyResult || copyResult.success !== true) {
+          throw new Error(copyResult?.message || "Unable to copy image.");
+        }
+
+        showViewerCopyToast(
+          copyResult.alreadyCopied ? "✓ Already copied" : "✓ Image copied",
+        );
+      } catch (error) {
+        console.error("Unable to copy ServiceCall image:", error);
+      }
+    }
+
+    async function handleViewerKeyDown(event) {
+      /*
+       * Escape closes the viewer.
+       */
+      if (event.key === "Escape") {
+        closeViewer();
+        return;
+      }
+
+      /*
+       * Ctrl+C / Cmd+C copies the actual image
+       * while the image viewer is open.
+       *
+       * PDF / Audio / Video are untouched.
+       */
+      const isCopyShortcut =
+        (event.ctrlKey || event.metaKey) &&
+        String(event.key || "").toLowerCase() === "c";
+
+      if (!isCopyShortcut || !isImage) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      await copyViewerImage();
+
+      try {
+        /*
+         * Uses our existing secure in-memory
+         * attachment cache.
+         */
+        const result = await getCachedChatAttachmentImage(safeAttachmentSysId);
+
+        if (!result || result.success !== true || !result.fileBytes) {
+          throw new Error(
+            result?.message || "Unable to load image for copying.",
+          );
+        }
+
+        showViewerCopyToast("Copying…");
+
+        const copyResult = await window.serviceCall.copyImageToClipboard(
+          result.fileBytes,
+        );
+
+        if (!copyResult || copyResult.success !== true) {
+          throw new Error(copyResult?.message || "Unable to copy image.");
+        }
+
+        showViewerCopyToast(
+          copyResult.alreadyCopied ? "✓ Already copied" : "✓ Image copied",
+        );
+      } catch (error) {
+        console.error("Unable to copy ServiceCall image:", error);
+      }
+    }
+    closeButton.addEventListener("click", closeViewer);
+
+    document.addEventListener("keydown", handleViewerKeyDown);
+
+    /*
+     * Clicking the dark area outside the
+     * viewer also closes it.
+     */
+    backdrop.addEventListener(
+      "click",
+
+      (event) => {
+        if (event.target === backdrop) {
+          closeViewer();
+        }
+      },
+    );
+
+    /* =========================================
+     SECURE IMAGE DOWNLOAD
+  ========================================= */
+
+    try {
+      const result = await getCachedChatAttachmentImage(safeAttachmentSysId);
+
+      if (!result || result.success !== true || !result.fileBytes) {
+        throw new Error(result?.message || "Unable to load image.");
+      }
+
+      const blob = new Blob([result.fileBytes], {
+        type: result.contentType || safeMimeType || "application/octet-stream",
+      });
+
+      viewerObjectUrl = URL.createObjectURL(blob);
+
+      if (isImage) {
+        const image = document.createElement("img");
+
+        image.src = viewerObjectUrl;
+        image.alt = safeFileName;
+        image.addEventListener("contextmenu", async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+
+          await copyViewerImage();
+        });
+
+        image.style.cssText = `
+    display:block;
+
+    max-width:100%;
+    max-height:100%;
+
+    width:auto;
+    height:auto;
+
+    object-fit:contain;
+
+    border-radius:6px;
+  `;
+
+        content.replaceChildren(image);
+      } else if (isPdf) {
+        const pdfViewer = document.createElement("iframe");
+
+        pdfViewer.src = viewerObjectUrl;
+        pdfViewer.title = safeFileName;
+
+        pdfViewer.style.cssText = `
+    display:block;
+
+    width:100%;
+    height:100%;
+
+    border:none;
+    border-radius:6px;
+
+    background:#ffffff;
+  `;
+
+        content.style.padding = "12px";
+
+        content.replaceChildren(pdfViewer);
+      } else if (isAudio) {
+        const audioViewer = document.createElement("div");
+
+        audioViewer.style.cssText = `
+    width:min(620px, 90%);
+    padding:32px;
+
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:20px;
+
+    box-sizing:border-box;
+  `;
+
+        const audioIcon = document.createElement("div");
+
+        audioIcon.textContent = "♪";
+
+        audioIcon.style.cssText = `
+    font-size:64px;
+    color:#ffffff;
+    line-height:1;
+  `;
+
+        const audioTitle = document.createElement("div");
+
+        audioTitle.textContent = safeFileName;
+        audioTitle.title = safeFileName;
+
+        audioTitle.style.cssText = `
+    width:100%;
+
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+
+    text-align:center;
+
+    color:#ffffff;
+    font-size:14px;
+    font-weight:600;
+  `;
+
+        const audio = document.createElement("audio");
+
+        audio.src = viewerObjectUrl;
+        audio.controls = true;
+        audio.preload = "metadata";
+
+        audio.style.cssText = `
+    width:100%;
+    max-width:560px;
+  `;
+
+        audioViewer.appendChild(audioIcon);
+        audioViewer.appendChild(audioTitle);
+        audioViewer.appendChild(audio);
+
+        content.replaceChildren(audioViewer);
+      } else if (isVideo) {
+        const videoViewer = document.createElement("div");
+
+        videoViewer.style.cssText = `
+    width:100%;
+    height:100%;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    box-sizing:border-box;
+  `;
+
+        const video = document.createElement("video");
+
+        video.src = viewerObjectUrl;
+
+        video.controls = true;
+        video.preload = "metadata";
+
+        video.style.cssText = `
+    display:block;
+
+    max-width:100%;
+    max-height:100%;
+
+    width:auto;
+    height:auto;
+
+    object-fit:contain;
+
+    background:#000000;
+    border-radius:6px;
+  `;
+
+        videoViewer.appendChild(video);
+
+        content.replaceChildren(videoViewer);
+      }
+    } catch (error) {
+      console.error("Unable to load ServiceCall attachment viewer:", error);
+
+      loadingText.textContent = "Unable to preview this image.";
+    }
+  }
+
+  /* =======================================================
    SERVICECALL CHAT - APPEND MESSAGE
 ======================================================= */
 
@@ -10233,7 +10970,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       attachmentsContainer.style.cssText = `
     display:flex;
     flex-direction:column;
-    gap:6px;
+    gap:8px;
     width:100%;
   `;
 
@@ -10251,8 +10988,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         max-width:320px;
 
         display:flex;
-        align-items:center;
-        gap:10px;
+flex-direction:column;
+align-items:stretch;
+gap:8px;
 
         padding:8px 10px;
 
@@ -10343,6 +11081,127 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const mimeType = String(attachment.mime_type || "");
 
+        const isPdfAttachment = mimeType.toLowerCase() === "application/pdf";
+
+        const isAudioAttachment = mimeType.toLowerCase().startsWith("audio/");
+
+        const isVideoAttachment = mimeType.toLowerCase().startsWith("video/");
+
+        /* =========================================
+   SECURE IMAGE PREVIEW
+========================================= */
+
+        if (mimeType.toLowerCase().startsWith("image/")) {
+          const attachmentSysId = String(attachment.sys_id || "").trim();
+
+          if (attachmentSysId) {
+            const imagePreview = document.createElement("img");
+
+            imagePreview.alt = attachment.file_name || "Image attachment";
+
+            /*
+             * The image itself opens the
+             * ServiceCall attachment viewer.
+             */
+            imagePreview.style.cursor = "pointer";
+
+            imagePreview.title = "View image";
+
+            imagePreview.addEventListener(
+              "click",
+
+              (event) => {
+                event.stopPropagation();
+
+                openServiceCallAttachmentViewer({
+                  attachmentSysId: attachmentSysId,
+
+                  fileName: String(attachment.file_name || "Image attachment"),
+
+                  mimeType: mimeType,
+                });
+              },
+            );
+
+            /*
+             * Temporary loading appearance.
+             */
+            imagePreview.style.cssText = `
+        display:block;
+  width:300px;
+  max-width:100%;
+  height:160px;
+  min-height:160px;
+  flex:none;
+  object-fit:cover;
+  border-radius:8px;
+  margin-bottom:8px;
+  background:rgba(0,0,0,0.05);
+  cursor:pointer;
+  visibility:hidden;
+    `;
+
+            /*
+             * Put the preview at the top of
+             * this attachment card.
+             */
+            attachmentCard.insertBefore(
+              imagePreview,
+              attachmentCard.firstChild,
+            );
+
+            /*
+             * Load through ServiceCall's secure
+             * authorized attachment endpoint.
+             */
+            getCachedChatAttachmentImage(attachmentSysId)
+              .then((result) => {
+                if (!result || result.success !== true || !result.fileBytes) {
+                  throw new Error(
+                    result?.message || "Unable to load image preview.",
+                  );
+                }
+
+                const blob = new Blob([result.fileBytes], {
+                  type:
+                    result.contentType ||
+                    mimeType ||
+                    "application/octet-stream",
+                });
+
+                const objectUrl = URL.createObjectURL(blob);
+
+                imagePreview.src = objectUrl;
+
+                /*
+                 * Release the temporary browser URL
+                 * after the image has loaded.
+                 */
+                imagePreview.addEventListener(
+                  "load",
+                  () => {
+                    imagePreview.style.visibility = "visible";
+
+                    URL.revokeObjectURL(objectUrl);
+                  },
+                  { once: true },
+                );
+              })
+              .catch((error) => {
+                console.error(
+                  "Unable to load attachment image preview:",
+                  error,
+                );
+
+                /*
+                 * If preview loading fails, remove only
+                 * the preview. Open / Save As remain usable.
+                 */
+                imagePreview.remove();
+              });
+          }
+        }
+
         let fileTypeLabel = "FILE";
 
         if (mimeType === "application/pdf") {
@@ -10380,15 +11239,32 @@ document.addEventListener("DOMContentLoaded", async () => {
         attachmentCard.appendChild(attachmentInfo);
 
         /* =========================================
-         SECURE OPEN
-      ========================================= */
+ SAVE AS BUTTON
+========================================= */
 
-        attachmentCard.style.cursor = "pointer";
+        const saveAsButton = document.createElement("button");
 
-        attachmentCard.title = "Open attachment";
+        saveAsButton.type = "button";
+        saveAsButton.textContent = "Save As";
+        saveAsButton.title = "Save attachment as";
 
-        attachmentCard.addEventListener("click", async () => {
-          console.log("ATTACHMENT CARD CLICKED", attachment);
+        saveAsButton.style.cssText = `
+  flex-shrink:0;
+  border:0;
+  background:transparent;
+  color:#0b6b58;
+  font-size:11px;
+  font-weight:600;
+  cursor:pointer;
+  padding:4px 6px;
+`;
+
+        saveAsButton.addEventListener("click", async (event) => {
+          /*
+           * Do not let this click bubble up to
+           * the attachment card's Open handler.
+           */
+          event.stopPropagation();
 
           const attachmentSysId = String(attachment.sys_id || "").trim();
 
@@ -10401,15 +11277,94 @@ document.addEventListener("DOMContentLoaded", async () => {
           }
 
           /*
-           * Prevent repeated open requests
-           * while this particular file is
-           * already being processed.
+           * Prevent repeated Save As requests
+           * for this particular file.
            */
-          if (attachmentCard.dataset.opening === "true") {
+          if (saveAsButton.dataset.saving === "true") {
             return;
           }
 
-          attachmentCard.dataset.opening = "true";
+          saveAsButton.dataset.saving = "true";
+          saveAsButton.disabled = true;
+
+          try {
+            const result = await window.serviceCall.saveChatAttachment(
+              attachmentSysId,
+              fileName,
+            );
+
+            console.log("Save attachment result:", result);
+
+            /*
+             * Closing the native Save As dialog
+             * is a normal user action, not an error.
+             */
+            if (result?.cancelled === true) {
+              return;
+            }
+
+            if (!result || result.success !== true) {
+              throw new Error(result?.message || "Unable to save attachment.");
+            }
+          } catch (error) {
+            console.error("Unable to save attachment:", error);
+          } finally {
+            delete saveAsButton.dataset.saving;
+            saveAsButton.disabled = false;
+          }
+        });
+
+        /* =========================================
+ SECURE OPEN BUTTON
+========================================= */
+
+        const openButton = document.createElement("button");
+
+        openButton.type = "button";
+        openButton.textContent = "Open";
+        openButton.title = "Open attachment";
+
+        openButton.style.cssText = `
+  flex-shrink:0;
+  border:0;
+  background:transparent;
+  color:#0b6b58;
+  font-size:11px;
+  font-weight:600;
+  cursor:pointer;
+  padding:4px 6px;
+`;
+
+        openButton.addEventListener("click", async (event) => {
+          event.stopPropagation();
+
+          const attachmentSysId = String(attachment.sys_id || "").trim();
+
+          const fileName = String(attachment.file_name || "attachment").trim();
+
+          if (!attachmentSysId) {
+            console.error("Attachment has no valid sys_id.");
+
+            return;
+          }
+
+          /*
+           * Prevent repeated Open requests.
+           */
+          if (openButton.dataset.opening === "true") {
+            return;
+          }
+
+          openButton.dataset.opening = "true";
+          openButton.disabled = true;
+
+          const originalText = openButton.textContent;
+
+          /*
+           * Immediate feedback while the secure
+           * download/open operation is running.
+           */
+          openButton.textContent = "Opening...";
 
           try {
             const result = await window.serviceCall.openChatAttachment(
@@ -10425,10 +11380,73 @@ document.addEventListener("DOMContentLoaded", async () => {
           } catch (error) {
             console.error("Unable to open attachment:", error);
           } finally {
-            delete attachmentCard.dataset.opening;
+            delete openButton.dataset.opening;
+
+            openButton.disabled = false;
+
+            openButton.textContent = originalText;
           }
         });
 
+        /* =========================================
+   ATTACHMENT ACTIONS
+========================================= */
+
+        const attachmentActions = document.createElement("div");
+
+        attachmentActions.className = "chat-attachment-actions";
+
+        attachmentActions.style.cssText = `
+  display:flex;
+  align-items:center;
+  gap:14px;
+  width:100%;
+  margin-top:2px;
+`;
+
+        /* =========================================
+   PDF PREVIEW ACTION
+========================================= */
+
+        if (isPdfAttachment || isAudioAttachment || isVideoAttachment) {
+          const previewButton = document.createElement("button");
+
+          previewButton.type = "button";
+          previewButton.textContent = "Preview";
+          previewButton.title = isPdfAttachment
+            ? "Preview PDF"
+            : isAudioAttachment
+              ? "Preview Audio"
+              : "Preview Video";
+
+          previewButton.style.cssText = `
+    border:none;
+    background:transparent;
+    color:inherit;
+    padding:0;
+    cursor:pointer;
+    font:inherit;
+  `;
+
+          previewButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+
+            openServiceCallAttachmentViewer({
+              attachmentSysId: String(attachment.sys_id || "").trim(),
+
+              fileName: String(attachment.file_name || "Document.pdf"),
+
+              mimeType: mimeType,
+            });
+          });
+
+          attachmentActions.appendChild(previewButton);
+        }
+
+        attachmentActions.appendChild(openButton);
+        attachmentActions.appendChild(saveAsButton);
+
+        attachmentCard.appendChild(attachmentActions);
         attachmentsContainer.appendChild(attachmentCard);
       });
 
@@ -13705,8 +14723,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
           const hasCurrentAttachments =
             Array.isArray(pendingChatAttachments) &&
-            pendingChatAttachments.length > 0;
-
+            pendingChatAttachments.some(
+              (attachment) =>
+                attachment &&
+                attachment.status !== "failed" &&
+                !!String(attachment.sysId || "").trim(),
+            );
           const uploadsStillRunning = chatAttachmentUploadsInProgress > 0;
 
           chatSendButton.disabled =
@@ -14133,7 +15155,12 @@ document.addEventListener("DOMContentLoaded", async () => {
           return;
         }
 
-        const hasAttachments = pendingChatAttachments.length > 0;
+        const hasAttachments = pendingChatAttachments.some(
+          (attachment) =>
+            attachment &&
+            attachment.status !== "failed" &&
+            !!String(attachment.sysId || "").trim(),
+        );
 
         const uploadsStillRunning = chatAttachmentUploadsInProgress > 0;
 
@@ -18152,6 +19179,34 @@ document.addEventListener("DOMContentLoaded", async () => {
       card.className = "chat-attachment-preview-card";
 
       /* -------------------------
+   IMAGE PREVIEW
+------------------------- */
+
+      const isImageAttachment = String(attachment.mimeType || "")
+        .toLowerCase()
+        .startsWith("image/");
+
+      if (isImageAttachment && attachment.localPreviewUrl) {
+        const imagePreview = document.createElement("img");
+
+        imagePreview.src = attachment.localPreviewUrl;
+
+        imagePreview.alt = attachment.fileName || "Image attachment";
+
+        imagePreview.style.cssText = `
+    display:block;
+    width:100%;
+    max-width:280px;
+    max-height:180px;
+    object-fit:cover;
+    border-radius:8px;
+    margin-bottom:8px;
+  `;
+
+        card.appendChild(imagePreview);
+      }
+
+      /* -------------------------
          ICON
       ------------------------- */
 
@@ -18301,7 +19356,12 @@ document.addEventListener("DOMContentLoaded", async () => {
               chatMessageInput?.value || "",
             ).trim();
 
-            const hasCurrentAttachments = pendingChatAttachments.length > 0;
+            const hasCurrentAttachments = pendingChatAttachments.some(
+              (attachment) =>
+                attachment &&
+                attachment.status !== "failed" &&
+                !!String(attachment.sysId || "").trim(),
+            );
 
             chatSendButton.disabled = !hasCurrentText && !hasCurrentAttachments;
           }
