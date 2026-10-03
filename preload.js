@@ -118,6 +118,11 @@ contextBridge.exposeInMainWorld("serviceCall", {
       attachmentSysId,
     }),
 
+  downloadChatAttachment: (attachmentSysId) =>
+    ipcRenderer.invoke("servicecall-download-chat-attachment", {
+      attachmentSysId,
+    }),
+
   getReactionUpdates: (conversationSysId, afterCheckpoint = "") =>
     ipcRenderer.invoke("servicecall-get-reaction-updates", {
       conversationSysId: conversationSysId,
@@ -130,6 +135,30 @@ contextBridge.exposeInMainWorld("serviceCall", {
       messageSysId: messageSysId,
 
       reaction: reaction,
+    }),
+
+  openChatAttachment: (attachmentSysId, fileName) =>
+    ipcRenderer.invoke("servicecall-open-chat-attachment", {
+      attachmentSysId,
+      fileName,
+    }),
+
+  cancelChatAttachment: (attachmentSysId) =>
+    ipcRenderer.invoke("servicecall-cancel-chat-attachment", {
+      attachmentSysId,
+    }),
+
+  sendChatContent: (
+    conversationSysId,
+    message,
+    attachmentSysIds,
+    replyToMessageSysId = "",
+  ) =>
+    ipcRenderer.invoke("servicecall-send-chat-content", {
+      conversationSysId,
+      message,
+      attachmentSysIds,
+      replyToMessageSysId,
     }),
 
   markConversationRead: (conversationSysId) =>

@@ -3620,6 +3620,148 @@ async function serviceCallBinaryApiRequest(
   return result;
 }
 
+async function serviceCallBinaryDownloadRequest(pathName, allowRefresh = true) {
+  const config = loadConfig();
+
+  const validAccessToken = await ensureValidAccessToken();
+
+  if (!config || !config.instanceUrl || !config.accessToken) {
+    throw new Error("ServiceCall Desktop is not connected to ServiceNow.");
+  }
+
+  const url =
+    config.instanceUrl.replace(/\/$/, "") +
+    "/api/x_1806573_servic_0/servicecall_desktop_api" +
+    pathName;
+
+  const options = {
+    method: "GET",
+
+    headers: {
+      Accept: "*/*",
+
+      Authorization: "Bearer " + validAccessToken,
+    },
+  };
+
+  let response = await fetch(url, options);
+
+  /*
+   * ---------------------------------------------
+   * ACCESS TOKEN EXPIRED
+   * ---------------------------------------------
+   */
+
+  if (response.status === 401 && allowRefresh) {
+    console.log(
+      "ServiceCall binary download authorization expired. Trying automatic renewal...",
+    );
+
+    try {
+      const newAccessToken = await refreshAccessToken();
+
+      options.headers["Authorization"] = "Bearer " + newAccessToken;
+
+      response = await fetch(url, options);
+    } catch (refreshError) {
+      console.error(
+        "Automatic ServiceCall authorization renewal failed:",
+        refreshError.message,
+      );
+
+      const error = new Error(
+        "Your ServiceCall authorization has expired. Please sign in to ServiceNow again.",
+      );
+
+      error.code = "AUTHENTICATION_REQUIRED";
+
+      throw error;
+    }
+  }
+
+  /*
+   * ---------------------------------------------
+   * AUTHENTICATION FAILURE
+   * ---------------------------------------------
+   */
+
+  if (response.status === 401) {
+    const error = new Error(
+      "Your ServiceCall authorization has expired. Please sign in to ServiceNow again.",
+    );
+
+    error.code = "AUTHENTICATION_REQUIRED";
+
+    throw error;
+  }
+
+  /*
+   * ---------------------------------------------
+   * ERROR RESPONSE
+   * ---------------------------------------------
+   */
+
+  if (!response.ok) {
+    let result = {};
+
+    try {
+      const data = await response.json();
+
+      result = data.result || data;
+    } catch (error) {
+      result = {};
+    }
+
+    console.error("ServiceCall binary download failed:", {
+      status: response.status,
+      statusText: response.statusText,
+      url: url,
+      response: result,
+    });
+
+    const error = new Error(
+      result.message ||
+        "ServiceCall attachment download failed. HTTP " +
+          response.status +
+          " " +
+          response.statusText,
+    );
+
+    error.code = result.code || "SERVICECALL_BINARY_DOWNLOAD_ERROR";
+
+    throw error;
+  }
+
+  /*
+   * ---------------------------------------------
+   * BINARY RESPONSE
+   * ---------------------------------------------
+   */
+
+  const arrayBuffer = await response.arrayBuffer();
+
+  const buffer = Buffer.from(arrayBuffer);
+
+  if (buffer.length === 0) {
+    const error = new Error("Downloaded attachment is empty.");
+
+    error.code = "EMPTY_DOWNLOADED_ATTACHMENT";
+
+    throw error;
+  }
+
+  const contentType =
+    response.headers.get("content-type") || "application/octet-stream";
+
+  const contentDisposition = response.headers.get("content-disposition") || "";
+
+  return {
+    buffer,
+    contentType,
+    contentDisposition,
+  };
+}
+
 async function getCurrentServiceCallUser() {
   const result = await serviceCallApiRequest("/me", "GET");
 
@@ -7775,14 +7917,6 @@ ipcMain.handle(
       };
     }
 
-    if (!message) {
-      return {
-        success: false,
-        code: "MESSAGE_REQUIRED",
-        message: "Edited message cannot be empty.",
-      };
-    }
-
     if (message.length > 10000) {
       return {
         success: false,
@@ -7965,3 +8099,309 @@ ipcMain.handle(
     }
   },
 );
+
+ipcMain.handle(
+  "servicecall-download-chat-attachment",
+  async (event, payload = {}) => {
+    const attachmentSysId = String(payload.attachmentSysId || "").trim();
+
+    /*
+     * Validate ServiceCall attachment sys_id.
+     */
+    if (!attachmentSysId || !/^[0-9a-f]{32}$/i.test(attachmentSysId)) {
+      return {
+        success: false,
+        code: "INVALID_ATTACHMENT",
+        message: "A valid attachment is required.",
+      };
+    }
+
+    try {
+      /*
+       * ServiceNow performs the real
+       * authorization:
+       *
+       * user
+       *   -> ServiceCall access
+       *   -> conversation
+       *   -> membership
+       *   -> attachment
+       *   -> physical file
+       */
+      const result = await serviceCallBinaryDownloadRequest(
+        "/download-attachment/" + encodeURIComponent(attachmentSysId),
+      );
+
+      return {
+        success: true,
+
+        /*
+         * Return a Uint8Array instead of
+         * exposing any ServiceNow file URL.
+         *
+         * Electron structured cloning can
+         * safely transfer this to preload /
+         * renderer.
+         */
+        fileBytes: new Uint8Array(result.buffer),
+
+        contentType: result.contentType,
+
+        contentDisposition: result.contentDisposition,
+      };
+    } catch (error) {
+      console.error("ServiceCall attachment download failed:", error);
+
+      return {
+        success: false,
+        code: error.code || "DOWNLOAD_ATTACHMENT_FAILED",
+        message: error.message || "Unable to download attachment.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "servicecall-open-chat-attachment",
+  async (event, payload = {}) => {
+    const attachmentSysId = String(payload.attachmentSysId || "").trim();
+
+    const requestedFileName = String(payload.fileName || "attachment").trim();
+
+    if (!attachmentSysId || !/^[0-9a-f]{32}$/i.test(attachmentSysId)) {
+      return {
+        success: false,
+        code: "INVALID_ATTACHMENT",
+        message: "A valid attachment is required.",
+      };
+    }
+
+    try {
+      /*
+       * Download through our secure
+       * ServiceCall endpoint.
+       */
+      const result = await serviceCallBinaryDownloadRequest(
+        "/download-attachment/" + encodeURIComponent(attachmentSysId),
+      );
+
+      /*
+       * Never trust the original filename
+       * as a filesystem path.
+       */
+      const safeFileName = path
+        .basename(requestedFileName || "attachment")
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
+
+      /*
+       * Use a ServiceCall-owned temporary
+       * directory.
+       */
+      const tempDirectory = path.join(
+        os.tmpdir(),
+        "ServiceCall",
+        "attachments",
+      );
+
+      fs.mkdirSync(tempDirectory, {
+        recursive: true,
+      });
+
+      /*
+       * Prefix with attachment sys_id so
+       * files with identical names do not
+       * overwrite each other.
+       */
+      const tempFilePath = path.join(
+        tempDirectory,
+        attachmentSysId + "-" + safeFileName,
+      );
+
+      fs.writeFileSync(tempFilePath, result.buffer);
+
+      /*
+       * Ask the operating system to open
+       * the file with its default app.
+       */
+      const openError = await shell.openPath(tempFilePath);
+
+      if (openError) {
+        const error = new Error(openError);
+
+        error.code = "OPEN_ATTACHMENT_FAILED";
+
+        throw error;
+      }
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error("ServiceCall open attachment failed:", error);
+
+      return {
+        success: false,
+
+        code: error.code || "OPEN_ATTACHMENT_FAILED",
+
+        message: error.message || "Unable to open attachment.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "servicecall-cancel-chat-attachment",
+  async (event, payload = {}) => {
+    const attachmentSysId = String(payload.attachmentSysId || "").trim();
+
+    if (!attachmentSysId || !/^[0-9a-f]{32}$/i.test(attachmentSysId)) {
+      return {
+        success: false,
+        code: "INVALID_ATTACHMENT",
+        message: "A valid attachment is required.",
+      };
+    }
+
+    try {
+      const result = await serviceCallApiRequest("/cancel-attachment", "POST", {
+        attachment_id: attachmentSysId,
+      });
+
+      console.log("ServiceCall attachment cancelled:", result);
+
+      return result;
+    } catch (error) {
+      console.error("ServiceCall cancel attachment failed:", error);
+
+      return {
+        success: false,
+
+        code: error.code || "CANCEL_ATTACHMENT_FAILED",
+
+        message: error.message || "Unable to cancel attachment.",
+      };
+    }
+  },
+);
+ipcMain.handle("servicecall-send-chat-content", async (event, payload = {}) => {
+  const conversationSysId = String(payload.conversationSysId || "").trim();
+
+  const message = String(payload.message || "").trim();
+
+  const replyToMessageSysId = String(payload.replyToMessageSysId || "").trim();
+
+  const attachmentSysIds = Array.isArray(payload.attachmentSysIds)
+    ? payload.attachmentSysIds
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)
+    : [];
+
+  /* =========================================
+       CONVERSATION
+    ========================================= */
+
+  if (!conversationSysId || !/^[0-9a-f]{32}$/i.test(conversationSysId)) {
+    return {
+      success: false,
+      code: "INVALID_CONVERSATION",
+      message: "A valid conversation is required.",
+    };
+  }
+
+  /* =========================================
+       CONTENT
+    ========================================= */
+
+  if (!message && attachmentSysIds.length === 0) {
+    return {
+      success: false,
+      code: "EMPTY_MESSAGE",
+      message: "Message text or an attachment is required.",
+    };
+  }
+
+  if (message.length > 10000) {
+    return {
+      success: false,
+      code: "MESSAGE_TOO_LONG",
+      message: "Message cannot exceed 10000 characters.",
+    };
+  }
+
+  /* =========================================
+       ATTACHMENTS
+    ========================================= */
+
+  if (attachmentSysIds.length > 10) {
+    return {
+      success: false,
+      code: "TOO_MANY_ATTACHMENTS",
+      message: "A maximum of 10 attachments is allowed per message.",
+    };
+  }
+
+  for (const attachmentSysId of attachmentSysIds) {
+    if (!/^[0-9a-f]{32}$/i.test(attachmentSysId)) {
+      return {
+        success: false,
+        code: "INVALID_ATTACHMENT",
+        message: "One or more attachments are invalid.",
+      };
+    }
+  }
+
+  /*
+   * Prevent the same attachment ID from
+   * being submitted more than once.
+   */
+  if (new Set(attachmentSysIds).size !== attachmentSysIds.length) {
+    return {
+      success: false,
+      code: "DUPLICATE_ATTACHMENT",
+      message: "The same attachment cannot be included more than once.",
+    };
+  }
+
+  /* =========================================
+       REPLY
+    ========================================= */
+
+  if (replyToMessageSysId && !/^[0-9a-f]{32}$/i.test(replyToMessageSysId)) {
+    return {
+      success: false,
+      code: "INVALID_REPLY_MESSAGE",
+      message: "Reply message is invalid.",
+    };
+  }
+
+  /* =========================================
+       SERVICENOW
+    ========================================= */
+
+  try {
+    const result = await serviceCallApiRequest("/send-chat-content", "POST", {
+      conversation_id: conversationSysId,
+
+      message: message,
+
+      attachment_ids: attachmentSysIds,
+
+      reply_to_message_sys_id: replyToMessageSysId,
+    });
+
+    console.log("ServiceCall chat content sent:", result);
+
+    return result;
+  } catch (error) {
+    console.error("ServiceCall send chat content failed:", error);
+
+    return {
+      success: false,
+
+      code: error.code || "SEND_CHAT_CONTENT_FAILED",
+
+      message: error.message || "Unable to send chat content.",
+    };
+  }
+});
