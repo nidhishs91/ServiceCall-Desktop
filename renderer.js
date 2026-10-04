@@ -159,23 +159,45 @@ document.addEventListener("DOMContentLoaded", async () => {
        VALIDATE ALL SELECTED FILES FIRST
     ========================================= */
 
+    const validFiles = [];
+
+    const rejectedFiles = [];
+
     for (const file of selectedFiles) {
       if (file.size <= 0) {
-        console.error("Selected attachment is empty:", file.name);
+        rejectedFiles.push(`${file.name} — file is empty`);
 
-        chatAttachmentInput.value = "";
-
-        return;
+        continue;
       }
 
       if (file.size > MAX_FILE_SIZE) {
-        console.error("Attachment exceeds 25 MB:", file.name);
+        const fileSizeMb = file.size / (1024 * 1024);
 
-        chatAttachmentInput.value = "";
+        rejectedFiles.push(`${file.name} — ${fileSizeMb.toFixed(1)} MB`);
 
-        return;
+        continue;
       }
+
+      validFiles.push(file);
     }
+
+    if (rejectedFiles.length > 0) {
+      alert(
+        `Some files could not be added:\n\n${rejectedFiles.join(
+          "\n",
+        )}\n\nMaximum allowed file size is 25 MB.`,
+      );
+    }
+
+    chatAttachmentInput.value = "";
+
+    if (validFiles.length === 0) {
+      return;
+    }
+
+    selectedFiles.length = 0;
+
+    selectedFiles.push(...validFiles);
 
     /*
      * These files are now entering the
@@ -462,6 +484,215 @@ document.addEventListener("DOMContentLoaded", async () => {
   const chatMessageInput = document.getElementById("chatMessageInput");
 
   /* =======================================================
+   SERVICECALL CHAT - COMPOSER CONTEXT MENU
+======================================================= */
+
+  chatMessageInput?.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+
+    /*
+     * Only one ServiceCall text menu
+     * may exist at a time.
+     */
+    document
+      .querySelectorAll(".servicecall-text-context-menu")
+      .forEach((existingMenu) => {
+        existingMenu.remove();
+      });
+
+    const menu = document.createElement("div");
+
+    menu.className = "servicecall-text-context-menu";
+
+    menu.style.cssText = `
+      position:fixed;
+      left:${event.clientX}px;
+      top:${event.clientY}px;
+      z-index:12000;
+
+      min-width:190px;
+      padding:6px;
+
+      background:#ffffff;
+      border:1px solid #dfe7e4;
+      border-radius:9px;
+
+      box-shadow:
+        0 10px 30px
+        rgba(0,0,0,0.14);
+    `;
+
+    const options = [
+      ["undo", "Undo", "Ctrl+Z"],
+      ["redo", "Redo", "Ctrl+Y"],
+      ["cut", "Cut", "Ctrl+X"],
+      ["copy", "Copy", "Ctrl+C"],
+      ["paste", "Paste", "Ctrl+V"],
+      ["delete", "Delete", "Del"],
+      ["selectAll", "Select All", "Ctrl+A"],
+    ];
+
+    options.forEach(([action, label, shortcut]) => {
+      const button = document.createElement("button");
+
+      button.type = "button";
+
+      button.style.cssText = `
+          width:100%;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:24px;
+
+          padding:8px 10px;
+
+          border:0;
+          border-radius:6px;
+          background:transparent;
+
+          text-align:left;
+          cursor:pointer;
+          font-size:13px;
+        `;
+
+      const labelElement = document.createElement("span");
+
+      labelElement.textContent = label;
+
+      const shortcutElement = document.createElement("span");
+
+      shortcutElement.textContent = shortcut;
+
+      shortcutElement.style.cssText = `
+          color:#8a9491;
+          font-size:11px;
+        `;
+
+      button.appendChild(labelElement);
+
+      button.appendChild(shortcutElement);
+
+      button.addEventListener("mouseenter", () => {
+        button.style.background = "#f2f6f5";
+      });
+
+      button.addEventListener("mouseleave", () => {
+        button.style.background = "transparent";
+      });
+
+      button.addEventListener("click", () => {
+        chatMessageInput.focus();
+
+        const start = chatMessageInput.selectionStart ?? 0;
+
+        const end = chatMessageInput.selectionEnd ?? start;
+
+        const currentValue = chatMessageInput.value || "";
+
+        /*
+         * SELECT ALL
+         */
+        if (action === "selectAll") {
+          chatMessageInput.select();
+
+          menu.remove();
+
+          return;
+        }
+
+        /*
+         * COPY
+         */
+        if (action === "copy") {
+          if (start !== end) {
+            document.execCommand("copy");
+          }
+
+          menu.remove();
+
+          return;
+        }
+
+        /*
+         * CUT
+         */
+        if (action === "cut") {
+          if (start !== end) {
+            document.execCommand("cut");
+
+            chatMessageInput.dispatchEvent(
+              new Event("input", {
+                bubbles: true,
+              }),
+            );
+          }
+
+          menu.remove();
+
+          return;
+        }
+
+        /*
+         * DELETE
+         */
+        if (action === "delete") {
+          if (start !== end) {
+            chatMessageInput.setRangeText("", start, end, "start");
+
+            chatMessageInput.dispatchEvent(
+              new Event("input", {
+                bubbles: true,
+              }),
+            );
+          }
+
+          menu.remove();
+
+          return;
+        }
+
+        /*
+         * Undo / Redo / Paste
+         * are intentionally handled next.
+         */
+      });
+      menu.appendChild(button);
+    });
+
+    document.body.appendChild(menu);
+
+    /*
+     * Keep menu inside Electron window.
+     */
+    const rect = menu.getBoundingClientRect();
+
+    if (rect.right > window.innerWidth) {
+      menu.style.left = Math.max(8, window.innerWidth - rect.width - 8) + "px";
+    }
+
+    if (rect.bottom > window.innerHeight) {
+      menu.style.top = Math.max(8, window.innerHeight - rect.height - 8) + "px";
+    }
+
+    /*
+     * Click outside -> close.
+     */
+    setTimeout(() => {
+      function closeTextMenu(outsideEvent) {
+        if (menu.contains(outsideEvent.target)) {
+          return;
+        }
+
+        menu.remove();
+
+        document.removeEventListener("mousedown", closeTextMenu, true);
+      }
+
+      document.addEventListener("mousedown", closeTextMenu, true);
+    }, 0);
+  });
+
+  /* =======================================================
    CHAT COMPOSER - CLIPBOARD ATTACHMENTS
 ======================================================= */
 
@@ -486,6 +717,97 @@ document.addEventListener("DOMContentLoaded", async () => {
       await processChatAttachmentFiles(clipboardFiles);
     },
   );
+
+  /* =======================================================
+   SERVICECALL CHAT - DRAG & DROP ATTACHMENTS
+======================================================= */
+
+  /* =======================================================
+   SERVICECALL CHAT - DRAG & DROP ATTACHMENTS
+======================================================= */
+
+  const chatDropArea = document.getElementById("chatMessages")?.parentElement;
+
+  const chatDropOverlay = document.createElement("div");
+
+  chatDropOverlay.innerHTML = `
+  <div style="
+    font-size:32px;
+    margin-bottom:10px;
+  ">
+    📎
+  </div>
+
+  <div style="
+    font-size:16px;
+    font-weight:600;
+  ">
+    Drop files here
+  </div>
+`;
+
+  chatDropOverlay.style.cssText = `
+  position:absolute;
+  inset:12px;
+  z-index:100;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  border:2px dashed #4f8cff;
+  border-radius:12px;
+  background:rgba(245,249,255,0.94);
+  color:#245fbd;
+  pointer-events:none;
+`;
+
+  if (chatDropArea) {
+    const currentPosition = window.getComputedStyle(chatDropArea).position;
+
+    if (currentPosition === "static") {
+      chatDropArea.style.position = "relative";
+    }
+
+    chatDropArea.appendChild(chatDropOverlay);
+  }
+
+  chatDropArea?.addEventListener("dragover", (event) => {
+    if (!event.dataTransfer?.types?.includes("Files")) {
+      return;
+    }
+
+    event.preventDefault();
+
+    event.dataTransfer.dropEffect = "copy";
+
+    chatDropOverlay.style.display = "flex";
+  });
+
+  chatDropArea?.addEventListener("dragleave", (event) => {
+    if (event.relatedTarget && chatDropArea.contains(event.relatedTarget)) {
+      return;
+    }
+
+    chatDropOverlay.style.display = "none";
+  });
+
+  chatDropArea?.addEventListener("drop", async (event) => {
+    if (!event.dataTransfer?.types?.includes("Files")) {
+      return;
+    }
+
+    event.preventDefault();
+
+    chatDropOverlay.style.display = "none";
+
+    const droppedFiles = Array.from(event.dataTransfer.files || []);
+
+    if (droppedFiles.length === 0) {
+      return;
+    }
+
+    await processChatAttachmentFiles(droppedFiles);
+  });
 
   const chatEmojiButton = document.getElementById("chatEmojiButton");
 
@@ -9826,12 +10148,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const isVideo = safeMimeType.startsWith("video/");
 
+    const isCsv =
+      safeMimeType === "text/csv" ||
+      safeMimeType === "application/csv" ||
+      /\.csv$/i.test(safeFileName);
+
     const isText =
       safeMimeType.startsWith("text/") ||
       safeMimeType === "application/json" ||
       safeMimeType === "application/xml" ||
       safeMimeType === "application/javascript" ||
-      /\.(txt|log|md|js|json|html|css|xml|py|java)$/i.test(safeFileName);
+      /\.(txt|log|md|js|json|html|css|xml|py|java|csv)$/i.test(safeFileName);
 
     if (!isImage && !isPdf && !isAudio && !isVideo && !isText) {
       return;
@@ -10172,14 +10499,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function handleViewerKeyDown(event) {
       /*
-       * Escape closes the viewer.
-       */
-      if (event.key === "Escape") {
-        closeViewer();
-        return;
-      }
-
-      /*
        * Ctrl+C / Cmd+C copies the actual image
        * while the image viewer is open.
        *
@@ -10228,26 +10547,30 @@ document.addEventListener("DOMContentLoaded", async () => {
     closeButton.addEventListener("click", closeViewer);
 
     document.addEventListener("keydown", handleViewerKeyDown);
-
-    /*
-     * Clicking the dark area outside the
-     * viewer also closes it.
-     */
-    backdrop.addEventListener(
-      "click",
-
-      (event) => {
-        if (event.target === backdrop) {
-          closeViewer();
-        }
-      },
-    );
-
     /* =========================================
      SECURE IMAGE DOWNLOAD
   ========================================= */
 
     try {
+      const loadingPreview = document.createElement("div");
+
+      loadingPreview.textContent = isImage
+        ? "Loading image..."
+        : "Loading preview...";
+
+      loadingPreview.style.cssText = `
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:100%;
+    height:100%;
+    color:#c8cfcd;
+    font-size:14px;
+    font-weight:500;
+  `;
+
+      content.replaceChildren(loadingPreview);
+
       const result = await getCachedChatAttachmentImage(safeAttachmentSysId);
 
       if (!result || result.success !== true || !result.fileBytes) {
@@ -10416,6 +10739,106 @@ document.addEventListener("DOMContentLoaded", async () => {
         videoViewer.appendChild(video);
 
         content.replaceChildren(videoViewer);
+      } else if (isCsv) {
+        const csvText = new TextDecoder("utf-8").decode(result.fileBytes);
+
+        const parseCsvRow = (row) => {
+          const cells = [];
+
+          let currentCell = "";
+          let insideQuotes = false;
+
+          for (let index = 0; index < row.length; index++) {
+            const character = row[index];
+
+            if (character === '"') {
+              if (insideQuotes && row[index + 1] === '"') {
+                currentCell += '"';
+                index++;
+              } else {
+                insideQuotes = !insideQuotes;
+              }
+
+              continue;
+            }
+
+            if (character === "," && !insideQuotes) {
+              cells.push(currentCell);
+
+              currentCell = "";
+              continue;
+            }
+
+            currentCell += character;
+          }
+
+          cells.push(currentCell);
+
+          return cells;
+        };
+
+        const rows = csvText
+          .split(/\r?\n/)
+          .filter((row) => row.trim() !== "")
+          .map(parseCsvRow);
+
+        const tableWrapper = document.createElement("div");
+
+        tableWrapper.style.cssText = `
+    width:100%;
+    height:100%;
+    overflow:auto;
+    padding:20px;
+    box-sizing:border-box;
+    background:#111318;
+  `;
+
+        const table = document.createElement("table");
+
+        table.style.cssText = `
+    width:max-content;
+    min-width:100%;
+    border-collapse:collapse;
+    color:#e8e8e8;
+    font-size:13px;
+  `;
+
+        rows.forEach((row, rowIndex) => {
+          const tableRow = document.createElement("tr");
+
+          row.forEach((cell) => {
+            const cellElement = document.createElement(
+              rowIndex === 0 ? "th" : "td",
+            );
+
+            cellElement.textContent = cell.trim();
+
+            cellElement.style.cssText = `
+          padding:10px 14px;
+          border:1px solid rgba(255,255,255,0.12);
+          text-align:left;
+          white-space:nowrap;
+        `;
+
+            if (rowIndex === 0) {
+              cellElement.style.fontWeight = "600";
+
+              cellElement.style.background = "rgba(255,255,255,0.08)";
+            }
+
+            tableRow.appendChild(cellElement);
+          });
+
+          table.appendChild(tableRow);
+        });
+
+        tableWrapper.appendChild(table);
+
+        content.style.padding = "0";
+        content.style.alignItems = "stretch";
+        content.style.justifyContent = "stretch";
+
+        content.replaceChildren(tableWrapper);
       } else if (isText) {
         const textViewer = document.createElement("pre");
 
@@ -11115,11 +11538,28 @@ gap:8px;
 
         const mimeType = String(attachment.mime_type || "");
 
+        const isImageAttachment = mimeType.toLowerCase().startsWith("image/");
+
         const isPdfAttachment = mimeType.toLowerCase() === "application/pdf";
 
         const isAudioAttachment = mimeType.toLowerCase().startsWith("audio/");
 
         const isVideoAttachment = mimeType.toLowerCase().startsWith("video/");
+
+        const attachmentFileName = String(
+          attachment.file_name || attachment.u_file_name || "",
+        );
+
+        const lowerMimeType = mimeType.toLowerCase();
+
+        const isTextAttachment =
+          lowerMimeType.startsWith("text/") ||
+          lowerMimeType === "application/json" ||
+          lowerMimeType === "application/xml" ||
+          lowerMimeType === "application/javascript" ||
+          /\.(txt|log|md|js|json|html|css|xml|py|java|csv)$/i.test(
+            attachmentFileName,
+          );
 
         /* =========================================
    SECURE IMAGE PREVIEW
@@ -11442,16 +11882,26 @@ gap:8px;
    PDF PREVIEW ACTION
 ========================================= */
 
-        if (isPdfAttachment || isAudioAttachment || isVideoAttachment) {
+        if (
+          isImageAttachment ||
+          isPdfAttachment ||
+          isAudioAttachment ||
+          isVideoAttachment ||
+          isTextAttachment
+        ) {
           const previewButton = document.createElement("button");
 
           previewButton.type = "button";
           previewButton.textContent = "Preview";
-          previewButton.title = isPdfAttachment
-            ? "Preview PDF"
-            : isAudioAttachment
-              ? "Preview Audio"
-              : "Preview Video";
+          previewButton.title = isImageAttachment
+            ? "Preview Image"
+            : isPdfAttachment
+              ? "Preview PDF"
+              : isAudioAttachment
+                ? "Preview Audio"
+                : isVideoAttachment
+                  ? "Preview Video"
+                  : "Preview Text";
 
           previewButton.style.cssText = `
     border:none;
@@ -14575,6 +15025,24 @@ gap:8px;
             sendingAttachments.map((attachment) => attachment.sysId),
           );
 
+          pendingChatAttachments.forEach((attachment) => {
+            const attachmentSysId = String(attachment.sysId || "").trim();
+
+            if (!sentAttachmentIds.has(attachmentSysId)) {
+              return;
+            }
+
+            const localPreviewUrl = String(
+              attachment.localPreviewUrl || "",
+            ).trim();
+
+            if (localPreviewUrl.startsWith("blob:")) {
+              URL.revokeObjectURL(localPreviewUrl);
+
+              attachment.localPreviewUrl = "";
+            }
+          });
+
           pendingChatAttachments = pendingChatAttachments.filter(
             (attachment) =>
               !sentAttachmentIds.has(String(attachment.sysId || "").trim()),
@@ -15203,6 +15671,326 @@ gap:8px;
       },
     );
   }
+
+  /* =======================================================
+   SERVICECALL CHAT - IN-CONVERSATION FIND
+======================================================= */
+
+  const chatConversationHeader = chatConversationPanel?.querySelector(
+    ".chat-conversation-header",
+  );
+
+  const chatFindBar = document.createElement("div");
+
+  chatFindBar.id = "chatFindBar";
+
+  chatFindBar.style.cssText = `
+  display:none;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border-bottom:1px solid #dfe5e3;
+  background:#ffffff;
+`;
+
+  chatFindBar.innerHTML = `
+  <input
+    id="chatFindInput"
+    type="search"
+    placeholder="Search in conversation..."
+    autocomplete="off"
+    spellcheck="false"
+    style="
+      flex:1;
+      min-width:0;
+      padding:8px 10px;
+      border:1px solid #ccd5d2;
+      border-radius:8px;
+      outline:none;
+    "
+  >
+
+  <span
+    id="chatFindCount"
+    style="
+      font-size:12px;
+      color:#6b7774;
+      white-space:nowrap;
+    "
+  >
+    0 of 0
+  </span>
+
+  <button
+    id="chatFindPrevious"
+    type="button"
+    title="Previous result"
+  >
+    ↑
+  </button>
+
+  <button
+    id="chatFindNext"
+    type="button"
+    title="Next result"
+  >
+    ↓
+  </button>
+
+  <button
+    id="chatFindClose"
+    type="button"
+    title="Close search"
+  >
+    ×
+  </button>
+`;
+
+  if (chatConversationPanel && chatConversationHeader) {
+    chatConversationHeader.insertAdjacentElement("afterend", chatFindBar);
+  }
+
+  const chatFindInput = document.getElementById("chatFindInput");
+
+  const chatFindClose = document.getElementById("chatFindClose");
+
+  let chatFindMatches = [];
+
+  let chatFindCurrentIndex = -1;
+
+  function updateChatFindMatches() {
+    const query = String(chatFindInput?.value || "")
+      .trim()
+      .toLowerCase();
+
+    chatFindMatches = [];
+
+    chatFindMatches = [];
+
+    /*
+     * Remove the previous Find highlight.
+     */
+    if (chatMessages) {
+      chatMessages.querySelectorAll(".chat-message-row").forEach((row) => {
+        if (row.dataset.chatFindHighlighted === "true") {
+          row.style.outline = "";
+          row.style.outlineOffset = "";
+
+          delete row.dataset.chatFindHighlighted;
+        }
+      });
+    }
+
+    if (!query || !chatMessages) {
+      const count = document.getElementById("chatFindCount");
+
+      if (count) {
+        count.textContent = "0 of 0";
+      }
+
+      return;
+    }
+
+    const messageRows = chatMessages.querySelectorAll(".chat-message-row");
+
+    messageRows.forEach((row) => {
+      const message = row._serviceCallMessage;
+
+      if (!message) {
+        return;
+      }
+
+      const searchableParts = [String(message.text || "")];
+
+      const attachments = Array.isArray(message.attachments)
+        ? message.attachments
+        : [];
+
+      attachments.forEach((attachment) => {
+        searchableParts.push(
+          String(attachment.file_name || attachment.name || ""),
+        );
+      });
+
+      const searchableText = searchableParts.join(" ").toLowerCase();
+
+      if (searchableText.includes(query)) {
+        chatFindMatches.push(row);
+      }
+    });
+
+    const count = document.getElementById("chatFindCount");
+
+    if (count) {
+      count.textContent =
+        chatFindMatches.length > 0
+          ? `1 of ${chatFindMatches.length}`
+          : "0 of 0";
+    }
+
+    if (chatFindMatches.length > 0) {
+      showChatFindMatch(0);
+    } else {
+      chatFindCurrentIndex = -1;
+    }
+  }
+
+  function showChatFindMatch(index) {
+    if (!Array.isArray(chatFindMatches) || chatFindMatches.length === 0) {
+      chatFindCurrentIndex = -1;
+      return;
+    }
+
+    /*
+     * Wrap around:
+     * after last -> first
+     * before first -> last
+     */
+    if (index >= chatFindMatches.length) {
+      index = 0;
+    }
+
+    if (index < 0) {
+      index = chatFindMatches.length - 1;
+    }
+
+    /*
+     * Remove previous Find highlight.
+     */
+    chatFindMatches.forEach((row) => {
+      row.style.outline = "";
+      row.style.outlineOffset = "";
+
+      delete row.dataset.chatFindHighlighted;
+    });
+
+    chatFindCurrentIndex = index;
+
+    const currentMatch = chatFindMatches[chatFindCurrentIndex];
+
+    currentMatch.dataset.chatFindHighlighted = "true";
+
+    currentMatch.style.outline = "2px solid #4f8cff";
+
+    currentMatch.style.outlineOffset = "3px";
+
+    currentMatch.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+
+    const count = document.getElementById("chatFindCount");
+
+    if (count) {
+      count.textContent = `${chatFindCurrentIndex + 1} of ${chatFindMatches.length}`;
+    }
+  }
+
+  const chatFindPrevious = document.getElementById("chatFindPrevious");
+
+  const chatFindNext = document.getElementById("chatFindNext");
+
+  chatFindNext?.addEventListener("click", () => {
+    showChatFindMatch(chatFindCurrentIndex + 1);
+  });
+
+  chatFindPrevious?.addEventListener("click", () => {
+    showChatFindMatch(chatFindCurrentIndex - 1);
+  });
+
+  chatFindInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.shiftKey) {
+      showChatFindMatch(chatFindCurrentIndex - 1);
+    } else {
+      showChatFindMatch(chatFindCurrentIndex + 1);
+    }
+  });
+
+  chatFindInput?.addEventListener("input", () => {
+    updateChatFindMatches();
+  });
+
+  function openChatFind() {
+    if (
+      !activeChatConversation ||
+      !chatConversationPanel ||
+      chatConversationPanel.style.display === "none"
+    ) {
+      return;
+    }
+
+    chatFindBar.style.display = "flex";
+
+    chatFindInput?.focus();
+
+    chatFindInput?.select();
+  }
+
+  function closeChatFind() {
+    chatFindBar.style.display = "none";
+
+    if (chatFindInput) {
+      chatFindInput.value = "";
+    }
+
+    /*
+     * Remove any active Find highlight.
+     */
+    if (chatMessages) {
+      chatMessages.querySelectorAll(".chat-message-row").forEach((row) => {
+        if (row.dataset.chatFindHighlighted === "true") {
+          row.style.outline = "";
+          row.style.outlineOffset = "";
+
+          delete row.dataset.chatFindHighlighted;
+        }
+      });
+    }
+
+    chatFindMatches = [];
+    chatFindCurrentIndex = -1;
+
+    const count = document.getElementById("chatFindCount");
+
+    if (count) {
+      count.textContent = "0 of 0";
+    }
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (
+      event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey &&
+      event.key.toLowerCase() === "f"
+    ) {
+      if (!activeChatConversation) {
+        return;
+      }
+
+      event.preventDefault();
+
+      openChatFind();
+
+      return;
+    }
+
+    if (event.key === "Escape" && chatFindBar.style.display === "flex") {
+      event.preventDefault();
+
+      closeChatFind();
+    }
+  });
+
+  chatFindClose?.addEventListener("click", () => {
+    closeChatFind();
+  });
 
   /* =======================================================
    SERVICECALL CHAT - KEYBOARD SEND
@@ -19195,6 +19983,8 @@ gap:8px;
       return;
     }
 
+    preview.dataset.removingAttachment = "false";
+
     if (
       !Array.isArray(pendingChatAttachments) ||
       pendingChatAttachments.length === 0
@@ -19304,7 +20094,24 @@ gap:8px;
       ------------------------- */
 
       removeButton.addEventListener("click", async () => {
+        if (preview.dataset.removingAttachment === "true") {
+          return;
+        }
+
+        preview.dataset.removingAttachment = "true";
         const attachmentSysId = String(attachment.sysId || "").trim();
+
+        const releaseLocalPreviewUrl = () => {
+          const localPreviewUrl = String(
+            attachment.localPreviewUrl || "",
+          ).trim();
+
+          if (localPreviewUrl.startsWith("blob:")) {
+            URL.revokeObjectURL(localPreviewUrl);
+
+            attachment.localPreviewUrl = "";
+          }
+        };
 
         /*
          * FAILED UPLOAD
@@ -19313,6 +20120,8 @@ gap:8px;
          * so remove only the local failed placeholder.
          */
         if (attachment.status === "failed") {
+          releaseLocalPreviewUrl();
+
           pendingChatAttachments = pendingChatAttachments.filter(
             (item) => item !== attachment,
           );
@@ -19362,6 +20171,8 @@ gap:8px;
           if (!result || result.success !== true) {
             throw new Error(result?.message || "Unable to cancel attachment.");
           }
+
+          releaseLocalPreviewUrl();
 
           /*
            * Remove ONLY this attachment
