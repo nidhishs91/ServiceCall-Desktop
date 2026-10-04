@@ -9826,7 +9826,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const isVideo = safeMimeType.startsWith("video/");
 
-    if (!isImage && !isPdf && !isAudio && !isVideo) {
+    const isText =
+      safeMimeType.startsWith("text/") ||
+      safeMimeType === "application/json" ||
+      safeMimeType === "application/xml" ||
+      safeMimeType === "application/javascript" ||
+      /\.(txt|log|md|js|json|html|css|xml|py|java)$/i.test(safeFileName);
+
+    if (!isImage && !isPdf && !isAudio && !isVideo && !isText) {
       return;
     }
     /* =========================================
@@ -10409,6 +10416,50 @@ document.addEventListener("DOMContentLoaded", async () => {
         videoViewer.appendChild(video);
 
         content.replaceChildren(videoViewer);
+      } else if (isText) {
+        const textViewer = document.createElement("pre");
+
+        /*
+         * Decode the authorized attachment bytes
+         * as UTF-8 text.
+         */
+        const decodedText = new TextDecoder("utf-8").decode(result.fileBytes);
+
+        textViewer.textContent = decodedText;
+
+        textViewer.style.cssText = `
+    width:100%;
+    min-height:100%;
+
+    margin:0;
+    padding:20px;
+
+    box-sizing:border-box;
+
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+
+    font-family:
+      Consolas,
+      "Courier New",
+      monospace;
+
+    font-size:13px;
+    line-height:1.55;
+
+    color:#e8e8e8;
+    background:#111318;
+
+    user-select:text;
+
+    overflow:auto;
+  `;
+
+        content.style.padding = "0";
+        content.style.alignItems = "stretch";
+        content.style.justifyContent = "stretch";
+
+        content.replaceChildren(textViewer);
       }
     } catch (error) {
       console.error("Unable to load ServiceCall attachment viewer:", error);
