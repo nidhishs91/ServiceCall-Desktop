@@ -181,6 +181,16 @@ contextBridge.exposeInMainWorld("serviceCall", {
       participantSysIds,
     }),
 
+  /*
+   * Read an image currently stored
+   * in the operating-system clipboard.
+   *
+   * Used by ServiceCall right-click
+   * Paste in the Chat composer.
+   */
+  readClipboardImage: () =>
+    ipcRenderer.invoke("servicecall-read-clipboard-image"),
+
   showImageContextMenu: () =>
     ipcRenderer.invoke("servicecall-show-image-context-menu"),
 
@@ -393,12 +403,25 @@ contextBridge.exposeInMainWorld("serviceCall", {
     });
   },
 
+  /*
+   * Execute the operating system's
+   * native Paste command.
+   *
+   * Used to preserve native clipboard
+   * behavior such as Windows Explorer
+   * copied files.
+   */
+  nativePaste: () => ipcRenderer.invoke("servicecall-native-paste"),
+
   markNotificationRead: (notificationSysId) => {
     return ipcRenderer.invoke(
       "servicecall-mark-notification-read",
       notificationSysId,
     );
   },
+
+  getUserPresence: (userSysId) =>
+    ipcRenderer.invoke("servicecall-get-user-presence", userSysId),
 
   testNotificationPopup: () => {
     return ipcRenderer.invoke("servicecall-test-notification-popup");

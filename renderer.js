@@ -9,6 +9,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const message = document.getElementById("instanceMessage");
 
+  let chatNativePasteHandledFiles = false;
+
   let chatAttachmentUploadsInProgress = 0;
 
   const loginButton = document.getElementById("loginButton");
@@ -484,6 +486,211 @@ document.addEventListener("DOMContentLoaded", async () => {
   const chatMessageInput = document.getElementById("chatMessageInput");
 
   /* =======================================================
+   SERVICECALL CHAT - COMPOSER UNDO / REDO HISTORY
+======================================================= */
+
+  let chatComposerUndoStack = [];
+  let chatComposerRedoStack = [];
+
+  let chatComposerPreviousValue = String(chatMessageInput?.value || "");
+
+  let chatComposerHistoryInternalChange = false;
+
+  /*
+   * Save one composer state.
+   *
+   * For normal typing we intentionally
+   * build character-level history.
+   */
+  chatMessageInput?.addEventListener("input", () => {
+    if (chatComposerHistoryInternalChange) {
+      chatComposerPreviousValue = String(chatMessageInput.value || "");
+
+      return;
+    }
+
+    const newValue = String(chatMessageInput.value || "");
+
+    const oldValue = String(chatComposerPreviousValue || "");
+
+    if (newValue === oldValue) {
+      return;
+    }
+
+    /*
+     * NORMAL TYPING
+     *
+     * If characters were added, create
+     * one history state per character.
+     *
+     * Example:
+     *
+     * HEL
+     *
+     * history becomes:
+     *
+     * ""
+     * "H"
+     * "HE"
+     *
+     * Therefore Undo removes exactly
+     * one character.
+     */
+    if (newValue.length > oldValue.length && newValue.startsWith(oldValue)) {
+      const addedText = newValue.substring(oldValue.length);
+
+      let workingValue = oldValue;
+
+      for (let i = 0; i < addedText.length; i += 1) {
+        chatComposerUndoStack.push(workingValue);
+
+        workingValue += addedText[i];
+      }
+    } else {
+      /*
+       * Deletion, replacement, Cut,
+       * Paste etc.
+       *
+       * Save the previous complete state.
+       *
+       * We'll refine Paste behavior when
+       * we wire the context-menu Paste.
+       */
+      chatComposerUndoStack.push(oldValue);
+    }
+
+    /*
+     * A new edit invalidates Redo.
+     */
+    chatComposerRedoStack = [];
+
+    chatComposerPreviousValue = newValue;
+
+    /*
+     * Prevent unlimited memory growth.
+     */
+    if (chatComposerUndoStack.length > 500) {
+      chatComposerUndoStack.splice(0, chatComposerUndoStack.length - 500);
+    }
+  });
+
+  function undoChatComposer() {
+    if (!chatMessageInput || chatComposerUndoStack.length === 0) {
+      return;
+    }
+
+    const currentValue = String(chatMessageInput.value || "");
+
+    const previousValue = chatComposerUndoStack.pop();
+
+    /*
+     * Current state becomes available
+     * for Redo.
+     */
+    chatComposerRedoStack.push(currentValue);
+
+    chatComposerHistoryInternalChange = true;
+
+    chatMessageInput.value = previousValue;
+
+    chatComposerPreviousValue = previousValue;
+
+    /*
+     * Put cursor at the end for now.
+     */
+    const cursorPosition = previousValue.length;
+
+    chatMessageInput.setSelectionRange(cursorPosition, cursorPosition);
+
+    chatMessageInput.dispatchEvent(
+      new Event("input", {
+        bubbles: true,
+      }),
+    );
+
+    chatComposerHistoryInternalChange = false;
+
+    chatMessageInput.focus();
+  }
+
+  function redoChatComposer() {
+    if (!chatMessageInput || chatComposerRedoStack.length === 0) {
+      return;
+    }
+
+    const currentValue = String(chatMessageInput.value || "");
+
+    const nextValue = chatComposerRedoStack.pop();
+
+    /*
+     * Current state becomes available
+     * for Undo again.
+     */
+    chatComposerUndoStack.push(currentValue);
+
+    chatComposerHistoryInternalChange = true;
+
+    chatMessageInput.value = nextValue;
+
+    chatComposerPreviousValue = nextValue;
+
+    const cursorPosition = nextValue.length;
+
+    chatMessageInput.setSelectionRange(cursorPosition, cursorPosition);
+
+    chatMessageInput.dispatchEvent(
+      new Event("input", {
+        bubbles: true,
+      }),
+    );
+
+    chatComposerHistoryInternalChange = false;
+
+    chatMessageInput.focus();
+  }
+
+  chatMessageInput?.addEventListener("keydown", (event) => {
+    const key = String(event.key || "").toLowerCase();
+
+    /*
+     * CTRL + Z
+     * ServiceCall character-level Undo.
+     */
+    if (event.ctrlKey && !event.shiftKey && key === "z") {
+      event.preventDefault();
+
+      undoChatComposer();
+
+      return;
+    }
+
+    /*
+     * CTRL + Y
+     * ServiceCall character-level Redo.
+     */
+    if (event.ctrlKey && !event.shiftKey && key === "y") {
+      event.preventDefault();
+
+      redoChatComposer();
+
+      return;
+    }
+
+    /*
+     * Also support:
+     *
+     * CTRL + SHIFT + Z
+     *
+     * as Redo.
+     */
+    if (event.ctrlKey && event.shiftKey && key === "z") {
+      event.preventDefault();
+
+      redoChatComposer();
+    }
+  });
+
+  /* =======================================================
    SERVICECALL CHAT - COMPOSER CONTEXT MENU
 ======================================================= */
 
@@ -580,7 +787,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         button.style.background = "transparent";
       });
 
-      button.addEventListener("click", () => {
+      button.addEventListener("click", async () => {
         chatMessageInput.focus();
 
         const start = chatMessageInput.selectionStart ?? 0;
@@ -652,9 +859,154 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         /*
-         * Undo / Redo / Paste
-         * are intentionally handled next.
+         * UNDO
          */
+        if (action === "undo") {
+          undoChatComposer();
+
+          menu.remove();
+
+          return;
+        }
+
+        /*
+         * REDO
+         */
+        if (action === "redo") {
+          redoChatComposer();
+
+          menu.remove();
+
+          return;
+        }
+
+        /*
+         * PASTE
+         *
+         * Priority:
+         *
+         * 1. Clipboard image -> attachment pipeline
+         * 2. Otherwise -> normal clipboard text
+         */
+        if (action === "paste") {
+          /*
+           * Close the context menu immediately
+           * when Paste is selected.
+           */
+          menu.remove();
+
+          chatMessageInput.focus();
+
+          try {
+            /*
+             * First check whether the OS clipboard
+             * currently contains an image.
+             */
+            /*
+             * Reset before asking Electron
+             * to perform the native Paste.
+             */
+            chatNativePasteHandledFiles = false;
+
+            const valueBeforeNativePaste = chatMessageInput.value;
+
+            await window.serviceCall.nativePaste();
+
+            /*
+             * Allow the native paste event
+             * to finish first.
+             */
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            /*
+             * Screenshot / Explorer file was
+             * already received by our normal
+             * paste listener and sent into
+             * processChatAttachmentFiles().
+             *
+             * Do NOT process it again.
+             */
+            if (chatNativePasteHandledFiles) {
+              return;
+            }
+
+            const valueAfterNativePaste = chatMessageInput.value;
+
+            if (valueAfterNativePaste !== valueBeforeNativePaste) {
+              return;
+            }
+            const imageResult = await window.serviceCall.readClipboardImage();
+
+            if (
+              imageResult &&
+              imageResult.success === true &&
+              imageResult.hasImage === true &&
+              Array.isArray(imageResult.imageBytes)
+            ) {
+              /*
+               * Convert bytes returned by main.js
+               * into the SAME File type used by
+               * normal attachment selection/paste.
+               */
+              const imageBlob = new Blob(
+                [new Uint8Array(imageResult.imageBytes)],
+                {
+                  type: imageResult.mimeType || "image/png",
+                },
+              );
+
+              const imageFile = new File(
+                [imageBlob],
+                imageResult.fileName || "ServiceCall Screenshot.png",
+                {
+                  type: imageResult.mimeType || "image/png",
+                },
+              );
+
+              /*
+               * IMPORTANT:
+               *
+               * Reuse our existing attachment
+               * pipeline. Do NOT create another
+               * upload path.
+               */
+              await processChatAttachmentFiles([imageFile]);
+
+              return;
+            }
+
+            /*
+             * No clipboard image.
+             *
+             * Fall back to normal text Paste.
+             */
+            const clipboardText = await navigator.clipboard.readText();
+
+            if (clipboardText) {
+              const start =
+                chatMessageInput.selectionStart ??
+                chatMessageInput.value.length;
+
+              const end = chatMessageInput.selectionEnd ?? start;
+
+              chatMessageInput.setRangeText(clipboardText, start, end, "end");
+
+              /*
+               * Keep existing composer behavior
+               * and ServiceCall Undo history.
+               */
+              chatMessageInput.dispatchEvent(
+                new Event("input", {
+                  bubbles: true,
+                }),
+              );
+            }
+          } catch (error) {
+            console.error("Unable to paste clipboard content:", error);
+          }
+
+          return;
+        }
       });
       menu.appendChild(button);
     });
@@ -707,6 +1059,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       const clipboardFiles = Array.from(clipboardData.files || []);
+
+      /*
+       * Tell right-click Paste that the
+       * native paste event already supplied
+       * one or more files.
+       */
+      if (clipboardFiles.length > 0) {
+        chatNativePasteHandledFiles = true;
+      }
 
       if (clipboardFiles.length === 0) {
         return;
@@ -16836,6 +17197,112 @@ gap:8px;
     return "offline";
   }
 
+  let chatPresenceRefreshInProgress = false;
+
+  async function refreshActiveChatPresence() {
+    /*
+     * Nothing to refresh when there is
+     * no active direct-chat user.
+     */
+    const userSysId = String(activeChatUser?.sys_id || "").trim();
+
+    if (!userSysId) {
+      return;
+    }
+
+    /*
+     * Prevent overlapping presence
+     * requests.
+     */
+    if (chatPresenceRefreshInProgress) {
+      return;
+    }
+
+    chatPresenceRefreshInProgress = true;
+
+    try {
+      const result = await window.serviceCall.getUserPresence(userSysId);
+
+      /*
+       * The user may have switched chats
+       * while this request was running.
+       *
+       * Never update the new chat using
+       * the old user's response.
+       */
+      if (String(activeChatUser?.sys_id || "").trim() !== userSysId) {
+        return;
+      }
+
+      if (!result?.success || !result?.user) {
+        return;
+      }
+
+      const displayStatus = String(
+        result.user.display_status || "Offline",
+      ).trim();
+
+      /*
+       * Keep the active user object
+       * synchronized too.
+       */
+      activeChatUser.display_status = displayStatus;
+
+      activeChatUser.effective_status = result.user.effective_status || "";
+
+      /*
+       * Update ONLY the presence UI.
+       *
+       * Do not reload messages,
+       * conversation, attachments,
+       * typing state or scroll position.
+       */
+      if (chatUserPresenceText) {
+        chatUserPresenceText.textContent = displayStatus;
+      }
+
+      if (chatUserPresenceDot) {
+        chatUserPresenceDot.className =
+          "chat-user-presence-dot " + getChatPresenceClass(displayStatus);
+      }
+    } catch (error) {
+      /*
+       * Presence refresh is intentionally
+       * silent. A temporary network issue
+       * should not disturb the chat.
+       */
+      console.warn("Unable to refresh active chat presence:", error);
+    } finally {
+      chatPresenceRefreshInProgress = false;
+    }
+  }
+
+  /*
+   * ---------------------------------------------
+   * ACTIVE CHAT PRESENCE POLLING
+   * ---------------------------------------------
+   *
+   * Refresh only the currently open direct-chat
+   * user's presence.
+   *
+   * This does NOT reload the conversation,
+   * messages, attachments or chat UI.
+   */
+
+  const CHAT_PRESENCE_REFRESH_INTERVAL = 5000;
+
+  setInterval(() => {
+    /*
+     * No active direct-chat user means
+     * there is nothing to refresh.
+     */
+    if (!activeChatUser?.sys_id) {
+      return;
+    }
+
+    refreshActiveChatPresence();
+  }, CHAT_PRESENCE_REFRESH_INTERVAL);
+
   /* -------------------------------------------------
    ADD TEMPORARY CHAT TO SIDEBAR
 ------------------------------------------------- */
@@ -17098,6 +17565,8 @@ gap:8px;
     };
 
     activeChatUser = user;
+
+    refreshActiveChatPresence();
 
     addTemporaryChatToSidebar(user);
     /*

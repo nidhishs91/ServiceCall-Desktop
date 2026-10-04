@@ -8534,6 +8534,69 @@ ipcMain.handle(
   },
 );
 
+/* =====================================================
+   SERVICECALL - READ CLIPBOARD IMAGE
+===================================================== */
+
+ipcMain.handle(
+  "servicecall-read-clipboard-image",
+
+  async () => {
+    try {
+      const image = clipboard.readImage();
+
+      /*
+       * No image currently exists
+       * in the clipboard.
+       */
+      if (!image || image.isEmpty()) {
+        return {
+          success: true,
+          hasImage: false,
+        };
+      }
+
+      /*
+       * Convert clipboard image
+       * into PNG bytes.
+       *
+       * Renderer will turn these
+       * bytes into a File and send
+       * it through our EXISTING
+       * attachment pipeline.
+       */
+      const pngBuffer = image.toPNG();
+
+      if (!pngBuffer || pngBuffer.length === 0) {
+        return {
+          success: true,
+          hasImage: false,
+        };
+      }
+
+      return {
+        success: true,
+        hasImage: true,
+
+        mimeType: "image/png",
+
+        fileName: "ServiceCall Screenshot.png",
+
+        imageBytes: Array.from(pngBuffer),
+      };
+    } catch (error) {
+      console.error("Unable to read clipboard image:", error);
+
+      return {
+        success: false,
+        hasImage: false,
+
+        message: error?.message || "Unable to read clipboard image.",
+      };
+    }
+  },
+);
+
 ipcMain.handle(
   "servicecall-show-image-context-menu",
 
@@ -8575,5 +8638,74 @@ ipcMain.handle(
         },
       });
     });
+  },
+);
+
+/* =====================================================
+   SERVICECALL - NATIVE PASTE
+===================================================== */
+
+ipcMain.handle(
+  "servicecall-native-paste",
+
+  async (event) => {
+    try {
+      const webContents = event.sender;
+
+      if (!webContents || webContents.isDestroyed()) {
+        return {
+          success: false,
+          message: "ServiceCall window is unavailable.",
+        };
+      }
+
+      /*
+       * Execute Electron's native Paste
+       * command in the focused renderer.
+       */
+      webContents.paste();
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error("ServiceCall native paste failed:", error);
+
+      return {
+        success: false,
+        message: error?.message || "Unable to paste clipboard content.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "servicecall-get-user-presence",
+
+  async (event, userSysId) => {
+    const sysId = String(userSysId || "").trim();
+
+    if (!sysId) {
+      return {
+        success: false,
+        code: "USER_REQUIRED",
+        message: "User sys_id is required.",
+      };
+    }
+
+    try {
+      return await serviceCallApiRequest(
+        "/user-presence?user_sys_id=" + encodeURIComponent(sysId),
+        "GET",
+      );
+    } catch (error) {
+      console.error("Unable to get ServiceCall user presence:", error.message);
+
+      return {
+        success: false,
+        code: error.code || "GET_USER_PRESENCE_FAILED",
+        message: error.message || "Unable to retrieve user presence.",
+      };
+    }
   },
 );
