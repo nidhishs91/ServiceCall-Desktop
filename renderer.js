@@ -10052,29 +10052,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.body.appendChild(backdrop);
 
     let copyToastTimer = null;
-    let lastCopyToastMessage = "";
-    let lastCopyToastTime = 0;
 
     function showViewerCopyToast(message) {
-      const now = Date.now();
-
-      /*
-       * Don't repeatedly flash the same copy
-       * notification when Ctrl+C is pressed
-       * several times quickly.
-       */
-      if (message === lastCopyToastMessage && now - lastCopyToastTime < 1500) {
-        return;
-      }
-
-      /*
-       * Only final copy-result messages participate
-       * in duplicate-toast suppression.
-       */
-      if (message !== "Copying…") {
-        lastCopyToastMessage = message;
-        lastCopyToastTime = now;
-      }
       let toast = viewer.querySelector(".servicecall-viewer-copy-toast");
 
       if (!toast) {
@@ -10178,9 +10157,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           throw new Error(copyResult?.message || "Unable to copy image.");
         }
 
-        showViewerCopyToast(
-          copyResult.alreadyCopied ? "✓ Already copied" : "✓ Image copied",
-        );
+        showViewerCopyToast("✓ Image copied");
       } catch (error) {
         console.error("Unable to copy ServiceCall image:", error);
       }
@@ -10225,8 +10202,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             result?.message || "Unable to load image for copying.",
           );
         }
-
-        showViewerCopyToast("Copying…");
 
         const copyResult = await window.serviceCall.copyImageToClipboard(
           result.fileBytes,
@@ -10287,7 +10262,15 @@ document.addEventListener("DOMContentLoaded", async () => {
           event.preventDefault();
           event.stopPropagation();
 
-          await copyViewerImage();
+          try {
+            const result = await window.serviceCall.showImageContextMenu();
+
+            if (result?.success === true && result?.action === "copy-image") {
+              await copyViewerImage();
+            }
+          } catch (error) {
+            console.error("Unable to show image context menu:", error);
+          }
         });
 
         image.style.cssText = `

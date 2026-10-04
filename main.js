@@ -8518,38 +8518,10 @@ ipcMain.handle(
         };
       }
 
-      /*
-       * Check the actual current clipboard image
-       * before overwriting it.
-       */
-      const currentClipboardImage = clipboard.readImage();
-
-      let alreadyCopied = false;
-
-      if (!currentClipboardImage.isEmpty()) {
-        try {
-          const currentPng = currentClipboardImage.toPNG();
-
-          const newPng = image.toPNG();
-
-          alreadyCopied =
-            currentPng.length === newPng.length && currentPng.equals(newPng);
-        } catch (error) {
-          console.warn("Unable to compare clipboard image:", error);
-        }
-      }
-
-      /*
-       * Don't rewrite the clipboard when it already
-       * contains exactly this image.
-       */
-      if (!alreadyCopied) {
-        clipboard.writeImage(image);
-      }
+      clipboard.writeImage(image);
 
       return {
         success: true,
-        alreadyCopied: alreadyCopied,
       };
     } catch (error) {
       console.error("Unable to copy image to clipboard:", error);
@@ -8559,5 +8531,49 @@ ipcMain.handle(
         message: error?.message || "Unable to copy image.",
       };
     }
+  },
+);
+
+ipcMain.handle(
+  "servicecall-show-image-context-menu",
+
+  async (event) => {
+    return new Promise((resolve) => {
+      let resolved = false;
+
+      const finish = (action) => {
+        if (resolved) {
+          return;
+        }
+
+        resolved = true;
+        resolve({
+          success: true,
+          action: action,
+        });
+      };
+
+      const menu = Menu.buildFromTemplate([
+        {
+          label: "Copy image",
+          click: () => {
+            finish("copy-image");
+          },
+        },
+      ]);
+
+      const window = BrowserWindow.fromWebContents(event.sender);
+
+      menu.popup({
+        window: window || undefined,
+
+        callback: () => {
+          /*
+           * Menu closed without choosing anything.
+           */
+          finish("");
+        },
+      });
+    });
   },
 );

@@ -181,6 +181,9 @@ contextBridge.exposeInMainWorld("serviceCall", {
       participantSysIds,
     }),
 
+  showImageContextMenu: () =>
+    ipcRenderer.invoke("servicecall-show-image-context-menu"),
+
   setMessageReaction: (messageSysId, reaction) =>
     ipcRenderer.invoke("servicecall-set-message-reaction", {
       messageSysId: messageSysId,
