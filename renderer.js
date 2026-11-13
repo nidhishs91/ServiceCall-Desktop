@@ -5907,6 +5907,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (targetView === "historyView") {
           await loadCallHistory();
+
+          cachedCallHistory.filter(isMissedIncomingCall).forEach((entry) => {
+            const id = getMissedCallId(entry);
+            if (id) seenMissedCallIds.add(id);
+          });
+
+          updateMissedCallBadge(0);
         }
 
         /*
@@ -5938,6 +5945,91 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   let currentHistoryFilter = "all";
   let cachedCallHistory = [];
+  let historyFilterChangePending = false;
+
+  /* ==========================================
+   SERVICECALL - MISSED CALL MONITOR
+========================================== */
+
+  let missedCallMonitorBusy = false;
+  let missedCallBaselineReady = false;
+  let seenMissedCallIds = new Set();
+
+  function getMissedCallId(entry) {
+    return String(entry.sys_id || entry.call_sys_id || "").trim();
+  }
+
+  function updateMissedCallBadge(count) {
+    const badge = document.getElementById("historyMissedBadge");
+
+    if (!badge) return;
+
+    badge.textContent = count > 99 ? "99+" : String(count);
+    badge.style.display = count > 0 ? "inline-flex" : "none";
+  }
+
+  async function checkMissedCalls() {
+    if (missedCallMonitorBusy) return;
+
+    missedCallMonitorBusy = true;
+
+    try {
+      const result = await window.serviceCall.getCallHistory();
+
+      if (!result?.success) return;
+
+      const history = Array.isArray(result.history) ? result.history : [];
+
+      const missed = history.filter(isMissedIncomingCall);
+
+      // Establish baseline without showing old calls as new.
+      if (!missedCallBaselineReady) {
+        missed.forEach((entry) => {
+          const id = getMissedCallId(entry);
+          if (id) seenMissedCallIds.add(id);
+        });
+
+        missedCallBaselineReady = true;
+      }
+
+      const unseen = missed.filter((entry) => {
+        const id = getMissedCallId(entry);
+        return id && !seenMissedCallIds.has(id);
+      });
+
+      updateMissedCallBadge(unseen.length);
+
+      // Refresh the visible History page automatically.
+      if (
+        document.getElementById("historyView")?.classList.contains("active")
+      ) {
+        await loadCallHistory(true);
+
+        missed.forEach((entry) => {
+          const id = getMissedCallId(entry);
+          if (id) seenMissedCallIds.add(id);
+        });
+
+        updateMissedCallBadge(0);
+      }
+    } catch (error) {
+      console.error("Missed call monitor error:", error);
+    } finally {
+      missedCallMonitorBusy = false;
+    }
+  }
+
+  // Initial check and background refresh.
+  checkMissedCalls();
+
+  setInterval(checkMissedCalls, 5000);
+
+  function isMissedIncomingCall(entry) {
+    return (
+      entry.direction === "incoming" &&
+      (entry.participant_status === "missed" || entry.status === "missed")
+    );
+  }
 
   function filterCallHistory(entries) {
     if (currentHistoryFilter === "outgoing") {
@@ -5945,22 +6037,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     if (currentHistoryFilter === "missed") {
-      return entries.filter((entry) => {
-        if (entry.direction !== "incoming") {
-          return false;
-        }
-
-        return (
-          entry.participant_status === "missed" ||
-          entry.participant_status === "declined"
-        );
-      });
+      return entries.filter(isMissedIncomingCall);
     }
 
     return entries;
   }
 
-  async function loadCallHistory() {
+  async function loadCallHistory(silent = false) {
     if (callHistoryLoading) return;
 
     const list = document.getElementById("callHistoryList");
@@ -5969,7 +6052,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!list || !message) return;
 
     callHistoryLoading = true;
-    message.textContent = "Loading call history...";
+
+    if (!silent) {
+      message.textContent = "Loading call history...";
+    }
 
     try {
       const result = await window.serviceCall.getCallHistory();
@@ -5978,7 +6064,39 @@ document.addEventListener("DOMContentLoaded", async () => {
         throw new Error(result?.message || "Unable to load call history.");
       }
 
-      cachedCallHistory = Array.isArray(result.history) ? result.history : [];
+      const newHistory = Array.isArray(result.history) ? result.history : [];
+
+      const historyChanged =
+        JSON.stringify(newHistory) !== JSON.stringify(cachedCallHistory);
+
+      if (silent && !historyChanged) {
+        return;
+      }
+
+      cachedCallHistory = newHistory;
+
+      const missedCount = cachedCallHistory.filter(isMissedIncomingCall).length;
+
+      const outgoingCount = cachedCallHistory.filter(
+        (entry) => entry.direction === "outgoing",
+      ).length;
+
+      document.querySelectorAll("[data-history-filter]").forEach((button) => {
+        const filter = button.dataset.historyFilter;
+
+        if (filter === "all") {
+          button.textContent = "All (" + cachedCallHistory.length + ")";
+        }
+
+        if (filter === "missed") {
+          button.textContent = "Missed (" + missedCount + ")";
+          button.style.color = missedCount > 0 ? "#b42318" : "";
+        }
+
+        if (filter === "outgoing") {
+          button.textContent = "Outgoing (" + outgoingCount + ")";
+        }
+      });
 
       const entries = filterCallHistory(cachedCallHistory);
 
@@ -5994,20 +6112,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         const item = document.createElement("div");
 
         item.style.cssText =
-          "display:flex;justify-content:space-between;" +
-          "align-items:center;gap:16px;padding:14px 4px;" +
+          "display:flex;justify-content:flex-start;" +
+          "align-items:center;gap:20px;padding:14px 12px;" +
           "border-bottom:1px solid #e1e7e5;";
 
         const details = document.createElement("div");
+        details.style.cssText = "flex:0 1 440px;min-width:0;";
         const name = document.createElement("div");
         const info = document.createElement("div");
         const status = document.createElement("div");
+        status.style.cssText =
+          "flex:0 0 170px;font-size:12px;" + "text-align:left;font-weight:600;";
 
         name.style.cssText = "font-weight:600;font-size:14px;";
 
         info.style.cssText = "font-size:12px;color:#687a76;margin-top:5px;";
-
-        status.style.cssText = "font-size:12px;text-align:right;";
 
         const direction =
           entry.direction === "outgoing" ? "Outgoing" : "Incoming";
@@ -6097,6 +6216,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         const callStatus = String(entry.status || "").toLowerCase();
 
         const isIncoming = entry.direction === "incoming";
+
+        /* ------------------------------------------
+   HIGHLIGHT MISSED INCOMING CALLS
+------------------------------------------ */
+
+        if (isMissedIncomingCall(entry)) {
+          item.style.background = "#fff5f5";
+          item.style.borderLeft = "3px solid #d92d20";
+          item.style.borderRadius = "6px";
+          item.style.paddingLeft = "12px";
+
+          name.style.color = "#b42318";
+        }
 
         let statusLabel = "Unknown";
         let statusColor = "#40514d";
@@ -6191,6 +6323,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       message.textContent = error.message || "Unable to load call history.";
     } finally {
       callHistoryLoading = false;
+
+      if (historyFilterChangePending) {
+        historyFilterChangePending = false;
+        loadCallHistory(false);
+      }
     }
   }
 
@@ -6218,7 +6355,11 @@ document.addEventListener("DOMContentLoaded", async () => {
           filterButton.style.borderColor = selected ? "#087f6d" : "";
         });
 
-      loadCallHistory();
+      if (callHistoryLoading) {
+        historyFilterChangePending = true;
+      } else {
+        loadCallHistory();
+      }
     });
   });
   /* -------------------------------------------------

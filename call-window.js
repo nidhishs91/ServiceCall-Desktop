@@ -499,7 +499,8 @@ function setMode(newMode) {
   if (newMode === "cancelled") {
     stopRingtone();
 
-    statusText.textContent = "Call cancelled";
+    statusText.textContent =
+      mode === "calling" ? "No answer" : "Call cancelled";
 
     stopAllTimers();
 
@@ -691,7 +692,9 @@ async function checkCallStatus() {
    PARTICIPANT LEFT
 ------------------------- */
 
-    const participantStatus = result.participant_status || "";
+    const participantStatus = String(
+      result.participant_status || "",
+    ).toLowerCase();
 
     if (
       participantStatus === "left" ||
@@ -700,16 +703,22 @@ async function checkCallStatus() {
       (currentMode === "incoming" && participantStatus === "declined")
     ) {
       await stopAgoraAudio();
-
       stopRingtone();
       stopAllTimers();
 
       if (participantStatus === "missed") {
         statusText.textContent = "Missed call";
-      } else if (participantStatus === "left") {
-        statusText.textContent = "You left the call";
+      } else if (
+        currentMode === "outgoing" &&
+        participantStatus === "disconnected" &&
+        result.state === "cancelled" &&
+        !result.answered_at
+      ) {
+        statusText.textContent = "No answer. Please try again later.";
       } else if (participantStatus === "declined") {
         statusText.textContent = "Call declined";
+      } else if (participantStatus === "left") {
+        statusText.textContent = "You left the call";
       } else {
         statusText.textContent = "Call ended";
       }
@@ -2736,7 +2745,7 @@ function closeCallWindowAfterDelay() {
     stopAllTimers();
 
     window.close();
-  }, 1000);
+  }, 5000);
 }
 
 /* -------------------------

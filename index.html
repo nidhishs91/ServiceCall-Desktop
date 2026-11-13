@@ -4174,8 +4174,27 @@
                     Chat
                 </button>
 
-                <button class="nav-button" data-view="historyView">
-                    History
+                <button class="nav-button" data-view="historyView"
+                    style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+
+                    <span>History</span>
+
+                    <span id="historyMissedBadge" style="
+            display:none;
+            min-width:20px;
+            height:20px;
+            padding:0 6px;
+            border-radius:999px;
+            background:#e5484d;
+            color:white;
+            font-size:11px;
+            font-weight:700;
+            align-items:center;
+            justify-content:center;
+        ">
+                        0
+                    </span>
+
                 </button>
 
                 <button class="nav-button" data-view="recordingsView">
