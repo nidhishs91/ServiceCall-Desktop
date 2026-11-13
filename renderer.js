@@ -15361,6 +15361,28 @@ gap:8px;
               continue;
             }
 
+            /*
+             * Avoid desktop notifications when the user
+             * is already viewing the latest messages
+             * in this conversation.
+             *
+             * Keep notifications enabled when reading
+             * older messages or viewing another chat.
+             */
+            const isViewingThisConversation =
+              activeChatConversation &&
+              String(activeChatConversation.sys_id || "") === id;
+
+            if (
+              isViewingThisConversation &&
+              isChatNearBottom() &&
+              chatNewMessageCount === 0 &&
+              document.hasFocus()
+            ) {
+              chatNotifiedMessageIds.add(messageId);
+              continue;
+            }
+
             if (typeof window.serviceCall.showChatNotification !== "function") {
               continue;
             }
