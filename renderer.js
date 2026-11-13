@@ -15199,7 +15199,7 @@ gap:8px;
 
   let chatNotificationBaselineReady = false;
 
-  const chatNotifiedMessagesIds = new Set();
+  const chatNotifiedMessageIds = new Set();
 
   /*
    * Track the most recently observed message ID
