@@ -693,28 +693,36 @@ async function checkCallStatus() {
 
     const participantStatus = result.participant_status || "";
 
-    if (participantStatus === "left" || participantStatus === "disconnected") {
-      /*
-       * The overall conference may still be
-       * connected, but THIS participant is
-       * no longer part of it.
-       */
-
+    if (
+      participantStatus === "left" ||
+      participantStatus === "disconnected" ||
+      participantStatus === "missed" ||
+      (currentMode === "incoming" && participantStatus === "declined")
+    ) {
       await stopAgoraAudio();
 
       stopRingtone();
-
       stopAllTimers();
 
-      statusText.textContent =
-        participantStatus === "left" ? "You left the call" : "Call ended";
+      if (participantStatus === "missed") {
+        statusText.textContent = "Missed call";
+      } else if (participantStatus === "left") {
+        statusText.textContent = "You left the call";
+      } else if (participantStatus === "declined") {
+        statusText.textContent = "Call declined";
+      } else {
+        statusText.textContent = "Call ended";
+      }
 
       closeCallWindowAfterDelay();
-
       return;
     }
 
-    if (state === "connected" && currentMode !== "connected") {
+    if (
+      state === "connected" &&
+      currentMode !== "connected" &&
+      (currentMode !== "incoming" || participantStatus === "connected")
+    ) {
       setMode("connected");
 
       return;

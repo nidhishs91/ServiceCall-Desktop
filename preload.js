@@ -80,6 +80,12 @@ contextBridge.exposeInMainWorld("serviceCall", {
   endCall: (callSysId) => ipcRenderer.invoke("servicecall-end-call", callSysId),
 
   /* -------------------------
+       CALL HISTORY
+  ------------------------- */
+
+  getCallHistory: () => ipcRenderer.invoke("servicecall-get-call-history"),
+
+  /* -------------------------
    CHAT
 ------------------------- */
 

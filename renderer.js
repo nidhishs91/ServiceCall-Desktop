@@ -5905,6 +5905,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           await loadChatConversations();
         }
 
+        if (targetView === "historyView") {
+          await loadCallHistory();
+        }
+
         /*
          * Notifications are different from Meetings.
          *
@@ -5917,10 +5921,306 @@ document.addEventListener("DOMContentLoaded", async () => {
 
           await loadNotifications(false);
         }
+
+        // Load recordings automatically when the Recordings page opens.
+        if (targetView === "recordingsView") {
+          await loadRecordingHistory();
+        }
       },
     );
   });
 
+  /* ==========================================
+   SERVICECALL - CALL HISTORY
+========================================== */
+
+  let callHistoryLoading = false;
+
+  let currentHistoryFilter = "all";
+  let cachedCallHistory = [];
+
+  function filterCallHistory(entries) {
+    if (currentHistoryFilter === "outgoing") {
+      return entries.filter((entry) => entry.direction === "outgoing");
+    }
+
+    if (currentHistoryFilter === "missed") {
+      return entries.filter((entry) => {
+        if (entry.direction !== "incoming") {
+          return false;
+        }
+
+        return (
+          entry.participant_status === "missed" ||
+          entry.participant_status === "declined"
+        );
+      });
+    }
+
+    return entries;
+  }
+
+  async function loadCallHistory() {
+    if (callHistoryLoading) return;
+
+    const list = document.getElementById("callHistoryList");
+    const message = document.getElementById("callHistoryMessage");
+
+    if (!list || !message) return;
+
+    callHistoryLoading = true;
+    message.textContent = "Loading call history...";
+
+    try {
+      const result = await window.serviceCall.getCallHistory();
+
+      if (!result || result.success !== true) {
+        throw new Error(result?.message || "Unable to load call history.");
+      }
+
+      cachedCallHistory = Array.isArray(result.history) ? result.history : [];
+
+      const entries = filterCallHistory(cachedCallHistory);
+
+      list.replaceChildren();
+
+      if (entries.length === 0) {
+        list.textContent = "No call history available yet.";
+        message.textContent = "";
+        return;
+      }
+
+      entries.forEach((entry) => {
+        const item = document.createElement("div");
+
+        item.style.cssText =
+          "display:flex;justify-content:space-between;" +
+          "align-items:center;gap:16px;padding:14px 4px;" +
+          "border-bottom:1px solid #e1e7e5;";
+
+        const details = document.createElement("div");
+        const name = document.createElement("div");
+        const info = document.createElement("div");
+        const status = document.createElement("div");
+
+        name.style.cssText = "font-weight:600;font-size:14px;";
+
+        info.style.cssText = "font-size:12px;color:#687a76;margin-top:5px;";
+
+        status.style.cssText = "font-size:12px;text-align:right;";
+
+        const direction =
+          entry.direction === "outgoing" ? "Outgoing" : "Incoming";
+
+        const rawDate = entry.started_at_display || entry.started_at || "";
+
+        let dateText = "Date unavailable";
+
+        // ServiceNow display timestamp:
+        // YYYY-MM-DD HH:mm:ss
+        const match = rawDate.match(
+          /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/,
+        );
+
+        if (match) {
+          const day = Number(match[3]);
+          const month = Number(match[2]);
+          const year = match[1];
+          const hour24 = Number(match[4]);
+          const minute = match[5];
+
+          const months = [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+          ];
+
+          const hour12 = hour24 % 12 || 12;
+          const ampm = hour24 >= 12 ? "PM" : "AM";
+
+          dateText =
+            day +
+            " " +
+            months[month - 1] +
+            " " +
+            year +
+            ", " +
+            hour12 +
+            ":" +
+            minute +
+            " " +
+            ampm;
+        } else if (rawDate) {
+          dateText = rawDate;
+        }
+
+        const isMeeting = entry.is_meeting === true;
+
+        const isGroupCall = entry.is_group_call === true || isMeeting;
+
+        const participantNames = Array.isArray(entry.participant_names)
+          ? entry.participant_names.filter(Boolean)
+          : [];
+
+        const groupTitle = isMeeting
+          ? entry.meeting_title || "Group Meeting"
+          : "Group Call";
+
+        const groupParticipants = participantNames.join(", ");
+
+        name.textContent = isGroupCall
+          ? groupTitle
+          : entry.other_user_name || "Unknown User";
+
+        const historyDetails = [
+          isGroupCall && groupParticipants ? groupParticipants : null,
+          direction,
+          dateText,
+          entry.call_number || null,
+        ].filter(Boolean);
+
+        info.textContent = historyDetails.join(" • ");
+
+        /* ------------------------------------------
+   FRIENDLY CALL STATUS
+------------------------------------------ */
+
+        const callStatus = String(entry.status || "").toLowerCase();
+
+        const isIncoming = entry.direction === "incoming";
+
+        let statusLabel = "Unknown";
+        let statusColor = "#40514d";
+
+        switch (callStatus) {
+          case "missed":
+            statusLabel = isGroupCall ? "Missed Group Call" : "Missed Call";
+
+            statusColor = "#b42318";
+            break;
+
+          case "no_answer":
+            statusLabel = "Outgoing — No Answer";
+            statusColor = "#b45309";
+            break;
+
+          case "declined":
+            if (isIncoming) {
+              statusLabel = isGroupCall
+                ? "Declined Group Call"
+                : "Declined Call";
+            } else {
+              statusLabel = "Outgoing — Declined";
+            }
+
+            statusColor = "#b42318";
+            break;
+
+          case "cancelled":
+            statusLabel = isIncoming ? "Cancelled Incoming" : "Cancelled";
+            break;
+
+          case "completed":
+          case "ended":
+            statusLabel = isGroupCall ? "Group Call Ended" : "Completed";
+            break;
+
+          case "connected":
+            statusLabel = "Connected";
+            break;
+
+          case "ringing":
+            statusLabel = "Ringing";
+            break;
+
+          case "failed":
+            statusLabel = "Call Failed";
+            statusColor = "#b42318";
+            break;
+
+          default:
+            statusLabel = callStatus || "Unknown";
+        }
+
+        /* ------------------------------------------
+   DURATION — ONLY FOR ANSWERED CALLS
+------------------------------------------ */
+
+        const seconds = Math.max(0, Number(entry.duration_seconds) || 0);
+
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.floor(seconds % 60);
+
+        const wasAnswered =
+          Boolean(entry.answered_at) || Boolean(entry.joined_at);
+
+        const isFinished = callStatus === "completed" || callStatus === "ended";
+
+        let durationLabel = "";
+
+        if (!isMeeting && isFinished && wasAnswered && seconds > 0) {
+          durationLabel = " • " + minutes + "m " + remainingSeconds + "s";
+        }
+
+        status.textContent = statusLabel + durationLabel;
+        status.style.color = statusColor;
+
+        details.appendChild(name);
+        details.appendChild(info);
+
+        item.appendChild(details);
+        item.appendChild(status);
+
+        list.appendChild(item);
+      });
+
+      message.textContent =
+        "Showing " + entries.length + " of " + result.total + " calls.";
+    } catch (error) {
+      console.error("Call History error:", error);
+
+      message.textContent = error.message || "Unable to load call history.";
+    } finally {
+      callHistoryLoading = false;
+    }
+  }
+
+  const refreshCallHistoryButton = document.getElementById(
+    "refreshCallHistoryButton",
+  );
+
+  if (refreshCallHistoryButton) {
+    refreshCallHistoryButton.addEventListener("click", loadCallHistory);
+  }
+
+  document.querySelectorAll("[data-history-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      currentHistoryFilter = button.dataset.historyFilter;
+
+      document
+        .querySelectorAll("[data-history-filter]")
+        .forEach((filterButton) => {
+          const selected = filterButton === button;
+
+          filterButton.setAttribute("aria-pressed", String(selected));
+
+          filterButton.style.fontWeight = selected ? "700" : "400";
+
+          filterButton.style.borderColor = selected ? "#087f6d" : "";
+        });
+
+      loadCallHistory();
+    });
+  });
   /* -------------------------------------------------
            MEETING HELPERS
         ------------------------------------------------- */
@@ -7840,18 +8140,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       const name = document.createElement("span");
 
-      name.textContent = person.name || "Unknown User";
+      name.textContent = isGroupCall
+        ? groupTitle
+        : entry.other_user_name || "Unknown User";
 
       const removeButton = document.createElement("button");
 
       removeButton.type = "button";
 
       removeButton.textContent = "×";
-
-      if (isUploading) {
-        removeButton.disabled = true;
-        removeButton.title = "Upload in progress";
-      }
 
       removeButton.title = "Remove";
 
@@ -19544,16 +19841,6 @@ gap:8px;
   const recordingsMessage = document.getElementById("recordingsMessage");
 
   const recordingsList = document.getElementById("recordingsList");
-
-  window.addEventListener(
-    "scroll",
-    () => {
-      if (scheduleMeetingPeopleResults) {
-        scheduleMeetingPeopleResults.style.display = "none";
-      }
-    },
-    true,
-  );
 
   document.addEventListener("click", (event) => {
     if (!scheduleMeetingPeopleSearch || !scheduleMeetingPeopleResults) {

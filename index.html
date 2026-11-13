@@ -5182,8 +5182,46 @@
                     </div>
 
 
-                    <div class="card placeholder">
-                        Call history will appear here.
+                    <div class="card">
+
+                        <div style="display:flex; justify-content:space-between;
+                align-items:center; margin-bottom:16px;">
+
+                            <strong>Recent Calls</strong>
+
+                            <button id="refreshCallHistoryButton" class="secondary-button" type="button">
+                                Refresh
+                            </button>
+
+                        </div>
+
+                        <!-- SERVICECALL HISTORY FILTERS -->
+                        <div id="callHistoryFilters" style="display:flex;gap:10px;margin-bottom:18px;">
+
+                            <button type="button" class="secondary-button" data-history-filter="all"
+                                aria-pressed="true">
+                                All
+                            </button>
+
+                            <button type="button" class="secondary-button" data-history-filter="missed"
+                                aria-pressed="false">
+                                Missed
+                            </button>
+
+                            <button type="button" class="secondary-button" data-history-filter="outgoing"
+                                aria-pressed="false">
+                                Outgoing
+                            </button>
+
+                        </div>
+
+                        <div id="callHistoryMessage" style="margin-bottom:12px; font-size:13px;">
+                        </div>
+
+                        <div id="callHistoryList">
+                            Call history will appear here.
+                        </div>
+
                     </div>
 
 

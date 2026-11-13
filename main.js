@@ -737,8 +737,60 @@ async function checkIncomingCallOnce() {
 
     /*
      * No incoming ringing invitation.
+     *
+     * Verify the participant's current status
+     * before closing an existing call window.
      */
-    activeIncomingCallId = null;
+    const previousIncomingCallId = activeIncomingCallId;
+
+    if (
+      previousIncomingCallId &&
+      callWindow &&
+      !callWindow.isDestroyed() &&
+      activeCallWindowId === previousIncomingCallId
+    ) {
+      try {
+        const statusResult = await serviceCallApiRequest(
+          "/call-status?call_sys_id=" +
+            encodeURIComponent(previousIncomingCallId),
+          "GET",
+        );
+
+        const participantStatus = statusResult?.participant_status || "";
+
+        const callState = statusResult?.state || "";
+
+        const invitationFinished =
+          ["missed", "declined", "disconnected", "left"].includes(
+            participantStatus,
+          ) ||
+          ["cancelled", "completed", "declined", "failed"].includes(callState);
+
+        if (
+          statusResult?.success === true &&
+          invitationFinished &&
+          activeCallWindowId === previousIncomingCallId &&
+          callWindow &&
+          !callWindow.isDestroyed()
+        ) {
+          callWindowClosing = true;
+          callWindow.close();
+
+          console.log(
+            "ServiceCall incoming invitation window closed:",
+            previousIncomingCallId,
+            participantStatus,
+            callState,
+          );
+        }
+      } catch (error) {
+        console.error("Unable to verify incoming invitation status:", error);
+      }
+    }
+
+    if (activeIncomingCallId === previousIncomingCallId) {
+      activeIncomingCallId = null;
+    }
   } catch (error) {
     console.error("Incoming call check failed:", error);
 
@@ -6162,6 +6214,73 @@ ipcMain.handle(
     }
   },
 );
+
+/* ==========================================
+   SERVICECALL - CALL HISTORY
+========================================== */
+
+ipcMain.handle("servicecall-get-call-history", async () => {
+  try {
+    const allHistory = [];
+    const pageSize = 100;
+    let offset = 0;
+    let total = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const result = await serviceCallApiRequest(
+        `/call-history?limit=${pageSize}&offset=${offset}`,
+        "GET",
+      );
+
+      if (!result || result.success !== true) {
+        return (
+          result || {
+            success: false,
+            code: "CALL_HISTORY_ERROR",
+            message: "Unable to retrieve call history.",
+          }
+        );
+      }
+
+      const page = Array.isArray(result.history) ? result.history : [];
+
+      allHistory.push(...page);
+
+      total = Number(result.total) || 0;
+      hasMore = result.has_more === true;
+
+      if (page.length === 0) {
+        break;
+      }
+
+      offset += page.length;
+
+      // Safety limit for initial desktop implementation.
+      if (offset >= 1000) {
+        break;
+      }
+    }
+
+    return {
+      success: true,
+      code: "CALL_HISTORY_FETCHED",
+      history: allHistory,
+      total: total,
+      limit: allHistory.length,
+      offset: 0,
+      has_more: hasMore,
+    };
+  } catch (error) {
+    console.error("ServiceCall Call History error:", error);
+
+    return {
+      success: false,
+      code: "CALL_HISTORY_ERROR",
+      message: error.message,
+    };
+  }
+});
 
 ipcMain.handle(
   "servicecall-update-presence",
