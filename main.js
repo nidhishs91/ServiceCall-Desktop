@@ -341,6 +341,14 @@ function saveActiveNotificationCheckpoint(notification) {
 
     const activeAccountKey = String(config.activeAccountKey || "").trim();
 
+    console.log("ServiceCall checkpoint account diagnostic:", {
+      hasActiveAccountKey: Boolean(activeAccountKey),
+      activeAccountExists: Boolean(
+        activeAccountKey && config.savedAccounts[activeAccountKey],
+      ),
+      savedAccountCount: Object.keys(config.savedAccounts || {}).length,
+    });
+
     if (!activeAccountKey || !config.savedAccounts[activeAccountKey]) {
       console.warn(
         "ServiceCall notification checkpoint not saved because no active saved account exists.",
