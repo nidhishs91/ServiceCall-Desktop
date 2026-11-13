@@ -15068,10 +15068,10 @@ gap:8px;
    DETECT NEW CHAT ACTIVITY
 ========================================= */
 
-      conversations.forEach((conversation) => {
+      for (const conversation of conversations) {
         const id = String(conversation.sys_id || "").trim();
 
-        if (!id) return;
+        if (!id) continue;
 
         const unread = Math.max(
           0,
@@ -15092,6 +15092,25 @@ gap:8px;
               conversationSysId: id,
               conversation: conversation,
             });
+
+            try {
+              const messageResult = await window.serviceCall.getMessages(id);
+
+              if (messageResult && messageResult.success === true) {
+                const messages = Array.isArray(messageResult.messages)
+                  ? messageResult.messages
+                  : [];
+
+                const latestMessage = messages[messages.length - 1];
+
+                console.log(
+                  "ServiceCall notification message details:",
+                  latestMessage,
+                );
+              }
+            } catch (error) {
+              console.error("Chat notification lookup failed:", error);
+            }
           }
         }
 
@@ -15099,8 +15118,7 @@ gap:8px;
           unread,
           lastMessageAt,
         });
-      });
-
+      }
       chatNotificationBaselineReady = true;
 
       updateChatUnreadBadge(conversations);
@@ -16028,7 +16046,7 @@ gap:8px;
           const preview = information.children[1];
 
           if (preview) {
-            preview.textContent = sentPreviewText;
+            preview.textContent = String(savedMessage.text || message || "");
           }
 
           /*
