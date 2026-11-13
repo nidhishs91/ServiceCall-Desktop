@@ -2545,6 +2545,27 @@ async function createWindow() {
 }
 
 /* =====================================================
+   SERVICECALL CHAT DESKTOP NOTIFICATION
+===================================================== */
+
+ipcMain.on("servicecall-show-chat-notification", (event, payload = {}) => {
+  const conversationSysId = String(payload.conversationSysId || "").trim();
+
+  if (!conversationSysId) {
+    return;
+  }
+
+  showNotificationPopup({
+    sys_id: String(payload.messageSysId || "").trim(),
+    type: "chat",
+    type_display: "Chat",
+    title: String(payload.senderName || "New message"),
+    message: String(payload.messagePreview || "New chat message"),
+    conversation_sys_id: conversationSysId,
+  });
+});
+
+/* =====================================================
    SERVICECALL DESKTOP NOTIFICATION POPUP
 ===================================================== */
 

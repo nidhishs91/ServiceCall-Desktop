@@ -110,6 +110,13 @@ contextBridge.exposeInMainWorld("serviceCall", {
       editedAfter: editedAfter,
     }),
 
+  /* =========================================
+   CHAT DESKTOP NOTIFICATIONS
+========================================= */
+
+  showChatNotification: (payload) =>
+    ipcRenderer.send("servicecall-show-chat-notification", payload),
+
   prepareChatAttachment: (payload) =>
     ipcRenderer.invoke("servicecall-prepare-chat-attachment", payload),
 

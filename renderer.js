@@ -15007,6 +15007,49 @@ gap:8px;
     );
   }
 
+  function updateChatUnreadBadge(conversations) {
+    const badge = document.getElementById("chatUnreadBadge");
+
+    if (!badge) return;
+
+    let totalUnread = 0;
+
+    conversations.forEach((conversation) => {
+      let count = Math.max(0, parseInt(conversation.unread_count, 10) || 0);
+
+      const isActiveConversation =
+        activeChatConversation &&
+        String(activeChatConversation.sys_id) === String(conversation.sys_id);
+
+      // Suppress unread count only when the user
+      // is actively viewing the latest messages.
+      if (
+        isActiveConversation &&
+        document.getElementById("chatView")?.classList.contains("active") &&
+        chatNewMessageCount <= 0 &&
+        isChatNearBottom()
+      ) {
+        count = 0;
+      }
+
+      if (count > 0) {
+        totalUnread += 1;
+      }
+    });
+
+    badge.textContent = totalUnread > 99 ? "99+" : String(totalUnread);
+
+    badge.style.display = totalUnread > 0 ? "inline-flex" : "none";
+  }
+
+  /* =========================================
+   CHAT NOTIFICATION CHANGE TRACKING
+========================================= */
+
+  const chatNotificationSnapshots = new Map();
+
+  let chatNotificationBaselineReady = false;
+
   async function syncChatConversationList() {
     try {
       const result = await window.serviceCall.getConversations();
@@ -15020,6 +15063,47 @@ gap:8px;
       const conversations = Array.isArray(result.conversations)
         ? result.conversations
         : [];
+
+      /* =========================================
+   DETECT NEW CHAT ACTIVITY
+========================================= */
+
+      conversations.forEach((conversation) => {
+        const id = String(conversation.sys_id || "").trim();
+
+        if (!id) return;
+
+        const unread = Math.max(
+          0,
+          parseInt(conversation.unread_count, 10) || 0,
+        );
+
+        const lastMessageAt = String(conversation.last_message_at || "");
+
+        const previous = chatNotificationSnapshots.get(id);
+
+        if (chatNotificationBaselineReady && previous) {
+          if (
+            unread > previous.unread &&
+            lastMessageAt &&
+            lastMessageAt !== previous.lastMessageAt
+          ) {
+            console.log("ServiceCall new chat activity detected:", {
+              conversationSysId: id,
+              conversation: conversation,
+            });
+          }
+        }
+
+        chatNotificationSnapshots.set(id, {
+          unread,
+          lastMessageAt,
+        });
+      });
+
+      chatNotificationBaselineReady = true;
+
+      updateChatUnreadBadge(conversations);
 
       conversations.forEach((conversation) => {
         const conversationSysId = String(conversation.sys_id || "").trim();
@@ -16929,6 +17013,8 @@ gap:8px;
       const conversations = Array.isArray(result.conversations)
         ? result.conversations
         : [];
+
+      updateChatUnreadBadge(conversations);
 
       /*
        * Keep the latest authoritative conversation
