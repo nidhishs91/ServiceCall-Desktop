@@ -386,6 +386,9 @@
                 'meetingSysId'
             ) || '';
 
+        const conversationSysId =
+            params.get('conversationSysId') || '';
+
 
         const type =
             (
@@ -834,7 +837,10 @@
                                     type,
 
                                 meetingSysId:
-                                    meetingSysId
+                                    meetingSysId,
+
+                                conversationSysId:
+                                    conversationSysId
                             }
                         );
                 }

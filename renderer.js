@@ -8130,6 +8130,126 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   /* =================================================
+ OPEN CHAT FROM DESKTOP NOTIFICATION
+================================================= */
+
+  if (
+    window.serviceCall &&
+    typeof window.serviceCall.onOpenNotificationChat === "function"
+  ) {
+    window.serviceCall.onOpenNotificationChat(async (data) => {
+      try {
+        const conversationSysId = String(data?.conversationSysId || "").trim();
+
+        if (!/^[0-9a-f]{32}$/i.test(conversationSysId)) {
+          console.error("Invalid chat conversation sys_id.");
+          return;
+        }
+
+        console.log(
+          "ServiceCall chat notification received:",
+          conversationSysId,
+        );
+
+        /*
+         * FAST CHAT NOTIFICATION NAVIGATION
+         *
+         * If the target conversation already exists
+         * in the sidebar, reuse it directly.
+         *
+         * No conversation-list API request.
+         * No sidebar rebuilding.
+         */
+
+        const existingConversationRow = Array.from(
+          document.querySelectorAll("button[data-conversation-sys-id]"),
+        ).find(
+          (row) =>
+            String(row.dataset.conversationSysId || "") === conversationSysId,
+        );
+
+        if (existingConversationRow) {
+          /*
+           * If we're already viewing this conversation,
+           * there's nothing to reload.
+           */
+          if (
+            activeChatConversation &&
+            String(activeChatConversation.sys_id || "") === conversationSysId
+          ) {
+            return;
+          }
+
+          /*
+           * Reuse the existing row's click handler.
+           * It already knows how to open the conversation.
+           */
+          existingConversationRow.click();
+
+          console.log(
+            "ServiceCall notification opened existing chat:",
+            conversationSysId,
+          );
+
+          return;
+        }
+
+        // Open the existing Chat section.
+        const chatNavigationButton = document.querySelector(
+          '.nav-button[data-view="chatView"]',
+        );
+
+        if (!chatNavigationButton) {
+          console.error("Chat navigation button not found.");
+          return;
+        }
+
+        chatNavigationButton.click();
+
+        // Retrieve the user's authorized conversations.
+        const result = await window.serviceCall.getConversations();
+
+        if (!result || result.success !== true) {
+          console.error("Unable to retrieve chat conversations.");
+          return;
+        }
+
+        const conversations = Array.isArray(result.conversations)
+          ? result.conversations
+          : [];
+
+        const conversation = conversations.find(
+          (item) => String(item.sys_id || "").trim() === conversationSysId,
+        );
+
+        if (!conversation) {
+          console.error(
+            "Notification conversation not found:",
+            conversationSysId,
+          );
+          return;
+        }
+
+        // Preserve the current conversation if already open.
+        if (
+          String(activeChatConversation?.sys_id || "") === conversationSysId
+        ) {
+          return;
+        }
+
+        await openChatConversation(conversation);
+
+        console.log(
+          "ServiceCall chat opened from notification:",
+          conversationSysId,
+        );
+      } catch (error) {
+        console.error("Unable to open chat from notification:", error);
+      }
+    });
+  }
+
+  /* =================================================
    OPEN MEETING FROM DESKTOP NOTIFICATION
 ================================================= */
 
@@ -11751,7 +11871,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       if (message.deleted === true) {
-        messageRow.dataset.messageDeleted = "true";
+        systemRow.dataset.messageDeleted = "true";
       }
 
       systemRow.style.cssText = `
@@ -14706,7 +14826,36 @@ gap:8px;
         return;
       }
 
-      const newMessages = Array.isArray(result.messages) ? result.messages : [];
+      const receivedMessages = Array.isArray(result.messages)
+        ? result.messages
+        : [];
+
+      /*
+       * The server may return overlapping messages
+       * when multiple messages share a timestamp.
+       *
+       * Exclude messages already displayed in this
+       * conversation and duplicates within this batch.
+       */
+      const seenMessageIds = new Set();
+
+      const newMessages = receivedMessages.filter((message) => {
+        const messageSysId = String(message?.sys_id || "").trim();
+
+        if (!messageSysId || seenMessageIds.has(messageSysId)) {
+          return false;
+        }
+
+        seenMessageIds.add(messageSysId);
+
+        const alreadyDisplayed = Array.from(
+          chatMessages?.querySelectorAll(".chat-message-row") || [],
+        ).some(
+          (row) => String(row.dataset.messageSysId || "") === messageSysId,
+        );
+
+        return !alreadyDisplayed;
+      });
 
       const editedMessages = Array.isArray(result.edited_messages)
         ? result.edited_messages
@@ -15050,6 +15199,19 @@ gap:8px;
 
   let chatNotificationBaselineReady = false;
 
+  const chatNotifiedMessagesIds = new Set();
+
+  /*
+   * Track the most recently observed message ID
+   * for each conversation.
+   *
+   * Used to establish a notification baseline
+   * and avoid notifying for historical messages.
+   */
+  const chatNotificationMessageCheckpoints = new Map();
+
+  const chatNotificationSyncInProgress = new Set();
+
   async function syncChatConversationList() {
     try {
       const result = await window.serviceCall.getConversations();
@@ -15070,7 +15232,6 @@ gap:8px;
 
       for (const conversation of conversations) {
         const id = String(conversation.sys_id || "").trim();
-
         if (!id) continue;
 
         const unread = Math.max(
@@ -15080,45 +15241,163 @@ gap:8px;
 
         const lastMessageAt = String(conversation.last_message_at || "");
 
-        const previous = chatNotificationSnapshots.get(id);
+        const snapshot = chatNotificationSnapshots.get(id);
+        const checkpoint = chatNotificationMessageCheckpoints.get(id);
 
-        if (chatNotificationBaselineReady && previous) {
-          if (
-            unread > previous.unread &&
-            lastMessageAt &&
-            lastMessageAt !== previous.lastMessageAt
-          ) {
-            console.log("ServiceCall new chat activity detected:", {
-              conversationSysId: id,
-              conversation: conversation,
-            });
-
-            try {
-              const messageResult = await window.serviceCall.getMessages(id);
-
-              if (messageResult && messageResult.success === true) {
-                const messages = Array.isArray(messageResult.messages)
-                  ? messageResult.messages
-                  : [];
-
-                const latestMessage = messages[messages.length - 1];
-
-                console.log(
-                  "ServiceCall notification message details:",
-                  latestMessage,
-                );
-              }
-            } catch (error) {
-              console.error("Chat notification lookup failed:", error);
-            }
-          }
+        if (chatNotificationSyncInProgress.has(id)) {
+          continue;
         }
 
-        chatNotificationSnapshots.set(id, {
-          unread,
-          lastMessageAt,
-        });
+        const needsBaseline = !checkpoint;
+
+        const activityChanged =
+          !snapshot ||
+          snapshot.lastMessageAt !== lastMessageAt ||
+          snapshot.unread !== unread;
+
+        if (!needsBaseline && !activityChanged) {
+          continue;
+        }
+
+        chatNotificationSyncInProgress.add(id);
+
+        try {
+          /*
+           * First successful fetch establishes baseline.
+           * Later fetches use the message checkpoint.
+           */
+          const result = await window.serviceCall.getMessages(
+            id,
+            checkpoint?.lastId || "",
+            "",
+            100,
+            "",
+          );
+
+          if (!result || result.success !== true) {
+            console.warn("Notification message fetch failed:", id, result);
+            continue;
+          }
+
+          const messages = Array.isArray(result.messages)
+            ? result.messages
+            : [];
+
+          /*
+           * First observation:
+           * remember existing messages without notifying.
+           */
+          if (needsBaseline) {
+            const newest = messages[messages.length - 1];
+
+            const baselineTime = String(newest?.sent_at || lastMessageAt || "");
+
+            const knownAtTimestamp = new Set(
+              messages
+                .filter((m) => String(m?.sent_at || "") === baselineTime)
+                .map((m) => String(m.sys_id)),
+            );
+
+            chatNotificationMessageCheckpoints.set(id, {
+              lastId: String(newest?.sys_id || ""),
+              lastSentAt: baselineTime,
+              knownAtTimestamp,
+            });
+
+            chatNotificationSnapshots.set(id, {
+              unread,
+              lastMessageAt,
+            });
+
+            continue;
+          }
+
+          /*
+           * Process messages newer than the checkpoint,
+           * including previously unseen IDs sharing
+           * the same timestamp.
+           */
+          let newestId = checkpoint.lastId;
+          let newestTime = checkpoint.lastSentAt;
+
+          let knownAtTimestamp = new Set(checkpoint.knownAtTimestamp);
+
+          for (const message of messages) {
+            if (!message?.sys_id) continue;
+
+            const messageId = String(message.sys_id);
+            const sentAt = String(message.sent_at || "");
+
+            if (!sentAt) continue;
+
+            const isNew =
+              sentAt > checkpoint.lastSentAt ||
+              (sentAt === checkpoint.lastSentAt &&
+                !checkpoint.knownAtTimestamp.has(messageId));
+
+            if (!isNew) continue;
+
+            /*
+             * Advance our local checkpoint.
+             */
+            if (sentAt > newestTime) {
+              newestTime = sentAt;
+              newestId = messageId;
+              knownAtTimestamp = new Set([messageId]);
+            } else if (sentAt === newestTime) {
+              knownAtTimestamp.add(messageId);
+              newestId = messageId;
+            }
+
+            /*
+             * Never notify for our own messages,
+             * system messages, or duplicates.
+             */
+            if (
+              message.is_mine !== false ||
+              message.type === "system" ||
+              chatNotifiedMessageIds.has(messageId)
+            ) {
+              continue;
+            }
+
+            if (typeof window.serviceCall.showChatNotification !== "function") {
+              continue;
+            }
+
+            window.serviceCall.showChatNotification({
+              conversationSysId: id,
+              messageSysId: messageId,
+              senderName: String(message.sender_name || "New message"),
+              messagePreview: String(
+                message.text || "You received a new message.",
+              ),
+            });
+
+            chatNotifiedMessageIds.add(messageId);
+          }
+
+          /*
+           * Commit checkpoints only after successful
+           * processing of the fetched batch.
+           */
+          chatNotificationMessageCheckpoints.set(id, {
+            lastId: newestId,
+            lastSentAt: newestTime,
+            knownAtTimestamp,
+          });
+
+          chatNotificationSnapshots.set(id, {
+            unread,
+            lastMessageAt,
+          });
+        } catch (error) {
+          console.error("ServiceCall notification sync error:", id, error);
+        } finally {
+          chatNotificationSyncInProgress.delete(id);
+        }
       }
+
       chatNotificationBaselineReady = true;
 
       updateChatUnreadBadge(conversations);
@@ -15311,7 +15590,7 @@ gap:8px;
          * is the active conversation.
          */
         if (isActiveConversation) {
-          activeChatConversation.unread_count = 0;
+          activeChatConversation.unread_count = unreadCount;
         }
       });
 

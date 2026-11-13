@@ -126,6 +126,21 @@ contextBridge.exposeInMainWorld("serviceCall", {
       fileBytes,
     }),
 
+  onOpenNotificationChat: (callback) => {
+    const listener = (event, data) => {
+      callback(data);
+    };
+
+    ipcRenderer.on("servicecall-open-notification-chat", listener);
+
+    return () => {
+      ipcRenderer.removeListener(
+        "servicecall-open-notification-chat",
+        listener,
+      );
+    };
+  },
+
   sendAttachmentMessage: (attachmentSysId) =>
     ipcRenderer.invoke("servicecall-send-attachment-message", {
       attachmentSysId,

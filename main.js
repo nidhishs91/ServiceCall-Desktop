@@ -2688,6 +2688,8 @@ function createNotificationPopupWindow(notification) {
       meetingSysId: String(notification.meeting_sys_id || ""),
 
       callSysId: String(notification.call_sys_id || ""),
+
+      conversationSysId: String(notification.conversation_sys_id || ""),
     },
   });
 
@@ -6198,6 +6200,35 @@ ipcMain.on("servicecall-open-notification", (event, notificationData) => {
       type: String(
         notificationData && notificationData.type ? notificationData.type : "",
       ),
+    });
+  }
+
+  /*
+   * -----------------------------------------
+   * CHAT NOTIFICATION
+   * -----------------------------------------
+   *
+   * Forward the selected conversation to
+   * the main ServiceCall renderer.
+   */
+
+  const conversationSysId = String(
+    notificationData?.conversationSysId ||
+      notificationData?.conversation_sys_id ||
+      "",
+  ).trim();
+
+  if (
+    String(notificationData?.type || "").toLowerCase() === "chat" &&
+    /^[0-9a-f]{32}$/i.test(conversationSysId)
+  ) {
+    console.log(
+      "Opening chat from ServiceCall notification:",
+      conversationSysId,
+    );
+
+    mainWindow.webContents.send("servicecall-open-notification-chat", {
+      conversationSysId: conversationSysId,
     });
   }
 });
