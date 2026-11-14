@@ -5898,11 +5898,28 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         /*
-         * Load real Chat conversations
-         * whenever Chat is opened.
+         * =========================================
+         * CHAT NAVIGATION - PRESERVE SIDEBAR
+         * =========================================
+         *
+         * First visit:
+         * Load conversations normally.
+         *
+         * Subsequent visits:
+         * Reuse existing conversation rows.
+         *
+         * Background synchronization continues
+         * through syncChatConversationList().
          */
+
         if (targetView === "chatView") {
-          await loadChatConversations();
+          if (!chatConversationList.dataset.initialized) {
+            await loadChatConversations();
+
+            if (loadedChatConversations) {
+              chatConversationList.dataset.initialized = "true";
+            }
+          }
         }
 
         if (targetView === "historyView") {
@@ -17396,8 +17413,6 @@ gap:8px;
          * This will also help us later
          * with silent sidebar updates.
          */
-        row.dataset.conversationSysId = String(conversation.sys_id || "");
-
         row.dataset.conversationSysId = String(conversation.sys_id || "");
 
         /* =====================================================
