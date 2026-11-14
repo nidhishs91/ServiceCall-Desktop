@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>ServiceCall WebRTC Peer Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #101817;
+            color: white;
+            padding: 25px;
+            max-width: 850px;
+            margin: auto;
+        }
+
+        button {
+            background: #16876b;
+            color: white;
+            border: 0;
+            border-radius: 7px;
+            padding: 11px 15px;
+            margin: 5px;
+            cursor: pointer;
+        }
+
+        textarea {
+            width: 100%;
+            height: 125px;
+            box-sizing: border-box;
+            background: #202e2b;
+            color: white;
+            border: 1px solid #52645d;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 8px 0;
+        }
+
+        #status {
+            color: #8ce0b9;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>ServiceCall WebRTC — Two Laptop Test</h2>
+    <p id="status">Ready</p>
+
+    <button id="offerBtn">Laptop 1: Create Offer</button>
+    <button id="answerBtn">Laptop 2: Accept Offer</button>
+    <button id="finishBtn">Laptop 1: Apply Answer</button>
+
+    <h3>Incoming signaling data</h3>
+    <textarea id="incoming" placeholder="Paste the offer or answer here"></textarea>
+
+    <h3>Outgoing signaling data</h3>
+    <textarea id="outgoing" readonly></textarea>
+
+    <button id="copyBtn">Copy Outgoing Data</button>
+    <button id="muteBtn">Mute / Unmute</button>
+    <button id="hangupBtn">Hang Up</button>
+
+    <audio id="remoteAudio" autoplay></audio>
+
+    <script src="./servicecall-config.js"></script>
+    <script src="./servicecall-media.js"></script>
+    <script src="./webrtc-peer-test.js"></script>
+</body>
+
+</html>

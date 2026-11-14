@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ServiceCall WebRTC Engine Test</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #101817;
+            color: white;
+            text-align: center;
+            padding: 40px;
+        }
+
+        button {
+            padding: 12px 18px;
+            margin: 8px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #1b8f70;
+            color: white;
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin-top: 25px;
+            color: #8ce0b9;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>ServiceCall WebRTC Engine</h2>
+
+    <p>Version 1 - Microphone Test</p>
+
+    <button id="startBtn">
+        Start Microphone
+    </button>
+
+    <button id="muteBtn" disabled>
+        Mute
+    </button>
+
+    <button id="stopBtn" disabled>
+        Stop Microphone
+    </button>
+
+    <div id="status">
+        Microphone not initialized
+    </div>
+
+    <script src="./servicecall-config.js"></script>
+    <script src="./servicecall-media.js"></script>
+
+    <script>
+        const startBtn =
+            document.getElementById("startBtn");
+
+        const muteBtn =
+            document.getElementById("muteBtn");
+
+        const stopBtn =
+            document.getElementById("stopBtn");
+
+        const status =
+            document.getElementById("status");
+
+        startBtn.onclick = async () => {
+            try {
+                await window.ServiceCallMedia
+                    .initializeMicrophone();
+
+                status.textContent =
+                    "Microphone initialized successfully";
+
+                startBtn.disabled = true;
+                muteBtn.disabled = false;
+                stopBtn.disabled = false;
+
+            } catch (error) {
+                status.textContent =
+                    "Error: " + error.message;
+
+                console.error(error);
+            }
+        };
+
+        muteBtn.onclick = () => {
+            try {
+                const currentlyMuted =
+                    window.ServiceCallMedia.isMuted();
+
+                const result =
+                    window.ServiceCallMedia.setMuted(
+                        !currentlyMuted
+                    );
+
+                muteBtn.textContent =
+                    result.muted ? "Unmute" : "Mute";
+
+                status.textContent =
+                    result.muted
+                        ? "Microphone muted"
+                        : "Microphone unmuted";
+
+            } catch (error) {
+                status.textContent =
+                    "Error: " + error.message;
+            }
+        };
+
+        stopBtn.onclick = () => {
+            window.ServiceCallMedia.stopMicrophone();
+
+            status.textContent =
+                "Microphone stopped";
+
+            startBtn.disabled = false;
+            muteBtn.disabled = true;
+            stopBtn.disabled = true;
+            muteBtn.textContent = "Mute";
+        };
+
+        window.addEventListener("beforeunload", () => {
+            window.ServiceCallMedia.stopMicrophone();
+        });
+    </script>
+
+</body>
+
+</html>
