@@ -14794,6 +14794,27 @@ gap:8px;
 
   async function checkForNewChatMessages() {
     /*
+     * =========================================
+     * ONLY SYNC VISIBLE CHAT CONVERSATIONS
+     * =========================================
+     *
+     * Background sidebar synchronization runs
+     * separately and must continue everywhere.
+     *
+     * Do not treat a previously opened chat as
+     * visible when the user is on another page.
+     */
+
+    const chatView = document.getElementById("chatView");
+
+    if (
+      !chatView ||
+      !chatView.classList.contains("active") ||
+      document.hidden
+    ) {
+      return;
+    }
+    /*
      * Nothing to synchronize unless
      * a conversation is currently open.
      */
@@ -14994,7 +15015,15 @@ gap:8px;
        * If the user was scrolled upward, leave
        * the messages unread in ServiceNow.
        */
-      if (wasNearBottom) {
+      if (
+        wasNearBottom &&
+        document.getElementById("chatView")?.classList.contains("active") &&
+        !document.hidden &&
+        document.hasFocus() &&
+        activeChatConversation &&
+        String(activeChatConversation.sys_id || "") ===
+          String(conversationSysId)
+      ) {
         try {
           const readResult =
             await window.serviceCall.markConversationRead(conversationSysId);
