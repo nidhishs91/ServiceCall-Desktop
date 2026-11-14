@@ -5323,6 +5323,25 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const presenceDot = document.getElementById("presenceDot");
 
+  /* -----------------------------------------
+   INITIAL PRESENCE DISPLAY
+----------------------------------------- */
+
+  if (presenceText) {
+    presenceText.textContent = "Checking...";
+  }
+
+  if (presenceDot) {
+    presenceDot.className = "presence-dot offline";
+  }
+
+  /*
+   * Main process will wait for this marker
+   * before showing the workspace.
+   */
+
+  document.documentElement.dataset.servicecallPresenceReady = "false";
+
   const presenceOptions = document.querySelectorAll(".presence-option");
 
   const oofReasonPanel = document.getElementById("oofReasonPanel");
@@ -5656,6 +5675,72 @@ document.addEventListener("DOMContentLoaded", async () => {
     connectionPill.classList.toggle("connected", connected);
   }
 
+  /* =====================================================
+   SERVICECALL — STARTUP HEADER COORDINATION
+===================================================== */
+
+  let startupHeaderReady = false;
+
+  let pendingStartupConnection = null;
+
+  function setStartupHeaderLoading() {
+    if (presenceText) {
+      presenceText.textContent = "Restoring...";
+    }
+
+    if (presenceDot) {
+      presenceDot.className = "presence-dot offline";
+    }
+
+    if (connectionPill) {
+      connectionPill.textContent = "Connecting...";
+      connectionPill.classList.remove("connected");
+    }
+  }
+
+  function finishStartupHeader() {
+    if (startupHeaderReady) {
+      return;
+    }
+
+    startupHeaderReady = true;
+
+    /*
+     * Both values have been prepared.
+     * Show them together.
+     */
+
+    if (presenceButton) {
+      presenceButton.style.visibility = "visible";
+    }
+
+    if (connectionPill) {
+      connectionPill.style.visibility = "visible";
+    }
+
+    document.documentElement.dataset.servicecallPresenceReady = "true";
+  }
+
+  /* =====================================================
+   INITIALIZE STARTUP HEADER
+===================================================== */
+
+  setStartupHeaderLoading();
+
+  /*
+   * Keep both indicators visible.
+   * Show neutral loading states instead
+   * of hiding the header.
+   */
+
+  if (presenceButton) {
+    presenceButton.style.visibility = "visible";
+  }
+
+  if (connectionPill) {
+    connectionPill.style.visibility = "visible";
+  }
+
   /* -------------------------------------------------
            LOAD SAVED INSTANCE
         ------------------------------------------------- */
@@ -5679,27 +5764,35 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (connectionStatus.connected) {
       loginButton.disabled = true;
-
       loginButton.textContent = "Connected to ServiceNow";
 
-      setConnectionDisplay(true, "Connected");
+      // Fetch presence while the header is still loading.
+      const presenceLoaded = await loadMyPresence();
 
-      await loadMyPresence();
+      if (!presenceLoaded) {
+        updatePresenceDisplay("offline");
+      }
+
+      // Set connection status only after presence is ready.
+      setConnectionDisplay(true, "Connected");
 
       if (message) {
         message.textContent = connectionStatus.message || "";
       }
     } else {
       loginButton.disabled = false;
-
       loginButton.textContent = "Sign in to ServiceNow";
 
+      updatePresenceDisplay("offline");
       setConnectionDisplay(false, "Not connected");
     }
   } catch (error) {
     console.error("Unable to check ServiceCall connection:", error);
 
+    updatePresenceDisplay("offline");
     setConnectionDisplay(false, "Connection unavailable");
+  } finally {
+    finishStartupHeader();
   }
 
   /* -------------------------------------------------
@@ -5765,11 +5858,23 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (data.status === "connected") {
       loginButton.disabled = true;
-
       loginButton.textContent = "Connected to ServiceNow";
 
-      setConnectionDisplay(true, "Connected");
-      await loadMyPresence();
+      /*
+       * While initial startup is running,
+       * do not update the header separately.
+       */
+
+      if (!startupHeaderReady) {
+        pendingStartupConnection = {
+          connected: true,
+          text: "Connected",
+        };
+      } else {
+        setConnectionDisplay(true, "Connected");
+
+        await loadMyPresence();
+      }
     } else if (
       data.status === "warning" ||
       data.status === "error" ||
@@ -10557,6 +10662,10 @@ document.addEventListener("DOMContentLoaded", async () => {
      * not one "active user".
      */
     if (conversation.type === "direct" && conversation.other_user_sys_id) {
+      const cachedPresence = getCachedChatPresence(
+        conversation.other_user_sys_id,
+      );
+
       activeChatUser = {
         sys_id: conversation.other_user_sys_id,
 
@@ -10567,7 +10676,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         user_name: conversation.other_user_user_name || "",
 
-        display_status: "Offline",
+        display_status: cachedPresence?.displayStatus || "",
+
+        effective_status: cachedPresence?.effectiveStatus || "",
       };
     } else {
       activeChatUser = null;
@@ -10620,30 +10731,19 @@ document.addEventListener("DOMContentLoaded", async () => {
        PRESENCE
     ========================================= */
 
-    if (chatUserPresenceText) {
-      chatUserPresenceText.textContent =
-        conversation.type === "group" ? "" : "Offline";
-    }
-
-    if (chatUserPresenceDot) {
-      if (conversation.type === "group") {
-        /*
-         * Groups do not have a single
-         * presence state.
-         *
-         * Individual member presence will
-         * be shown later in Group Details.
-         */
-        chatUserPresenceDot.style.display = "none";
-      } else {
-        /*
-         * Direct conversation:
-         * show normal user presence.
-         */
-        chatUserPresenceDot.style.display = "";
-
-        chatUserPresenceDot.className = "chat-user-presence-dot offline";
+    if (conversation.type === "group") {
+      if (chatUserPresenceText) {
+        chatUserPresenceText.textContent = "";
       }
+
+      if (chatUserPresenceDot) {
+        chatUserPresenceDot.style.display = "none";
+      }
+    } else {
+      showActiveChatPresence(activeChatUser?.display_status || "");
+
+      // Fetch fresh presence immediately when opening a chat.
+      refreshActiveChatPresence(true);
     }
 
     /* =========================================
@@ -18053,6 +18153,35 @@ gap:8px;
       chatMessageInput.scrollHeight > MAX_HEIGHT ? "auto" : "hidden";
   }
 
+  /* =====================================================
+   SERVICECALL — DIRECT CHAT PRESENCE CACHE
+===================================================== */
+
+  const chatPresenceCache = new Map();
+
+  const CHAT_PRESENCE_CACHE_TTL = 15000;
+
+  function getCachedChatPresence(userSysId) {
+    const key = String(userSysId || "").trim();
+    return chatPresenceCache.get(key) || null;
+  }
+
+  function showActiveChatPresence(displayStatus) {
+    const status = String(displayStatus || "").trim();
+
+    if (chatUserPresenceText) {
+      chatUserPresenceText.textContent = status || "Checking...";
+    }
+
+    if (chatUserPresenceDot) {
+      chatUserPresenceDot.style.display = "";
+
+      chatUserPresenceDot.className =
+        "chat-user-presence-dot" +
+        (status ? " " + getChatPresenceClass(status) : "");
+    }
+  }
+
   /* =======================================================
    SERVICECALL CHAT - PEOPLE SEARCH
 ======================================================= */
@@ -18092,7 +18221,72 @@ gap:8px;
     return "offline";
   }
 
-  let chatPresenceRefreshInProgress = false;
+  const chatPresenceRequests = new Map();
+
+  async function refreshActiveChatPresence(force = false) {
+    const userSysId = String(activeChatUser?.sys_id || "").trim();
+
+    if (!userSysId) {
+      return;
+    }
+
+    const cached = getCachedChatPresence(userSysId);
+
+    // Avoid unnecessary requests when data is fresh.
+    if (
+      !force &&
+      cached &&
+      Date.now() - cached.updatedAt < CHAT_PRESENCE_CACHE_TTL
+    ) {
+      showActiveChatPresence(cached.displayStatus);
+      return;
+    }
+
+    // Prevent duplicate requests for the SAME user.
+    if (chatPresenceRequests.has(userSysId)) {
+      return;
+    }
+
+    const request = (async () => {
+      try {
+        const result = await window.serviceCall.getUserPresence(userSysId);
+
+        if (!result?.success || !result?.user) {
+          return;
+        }
+
+        const displayStatus = String(
+          result.user.display_status ||
+            result.user.effective_status ||
+            "Offline",
+        ).trim();
+
+        chatPresenceCache.set(userSysId, {
+          displayStatus: displayStatus,
+          effectiveStatus: result.user.effective_status || "",
+          updatedAt: Date.now(),
+        });
+
+        // Ignore responses belonging to an older conversation.
+        if (String(activeChatUser?.sys_id || "").trim() !== userSysId) {
+          return;
+        }
+
+        activeChatUser.display_status = displayStatus;
+        activeChatUser.effective_status = result.user.effective_status || "";
+
+        showActiveChatPresence(displayStatus);
+      } catch (error) {
+        console.warn("Unable to refresh active chat presence:", error);
+      } finally {
+        chatPresenceRequests.delete(userSysId);
+      }
+    })();
+
+    chatPresenceRequests.set(userSysId, request);
+
+    await request;
+  }
 
   async function refreshActiveChatPresence() {
     /*
@@ -20708,40 +20902,177 @@ gap:8px;
     }
   }
 
+  /* =====================================================
+   SERVICECALL — MY PRESENCE STATE
+===================================================== */
+
+  let mySelectedPresence = "available";
+  let myEffectivePresence = "offline";
+
+  let myPresenceVersion = 0;
+
+  /* =====================================================
+   SERVICECALL — PRESENCE UPDATE LOCK
+===================================================== */
+
+  let myPresenceUpdateInProgress = false;
+
+  async function updateMyPresenceSafely(status, reason = "") {
+    if (myPresenceUpdateInProgress) {
+      console.warn("Presence update already in progress.");
+
+      return null;
+    }
+
+    myPresenceUpdateInProgress = true;
+
+    /*
+     * Invalidate any GET request started
+     * before this manual update.
+     */
+    myPresenceVersion++;
+
+    try {
+      const result = await window.serviceCall.updatePresence(status, reason);
+
+      if (!result || result.success !== true) {
+        throw new Error(
+          result?.message || "Unable to update ServiceCall presence.",
+        );
+      }
+
+      /*
+       * Invalidate GET requests started
+       * while the update was running.
+       */
+      myPresenceVersion++;
+
+      mySelectedPresence = String(result.presence_status || status)
+        .trim()
+        .toLowerCase();
+
+      myEffectivePresence = String(
+        result.effective_status || mySelectedPresence,
+      )
+        .trim()
+        .toLowerCase();
+
+      updatePresenceDisplay(myEffectivePresence);
+
+      return result;
+    } finally {
+      myPresenceUpdateInProgress = false;
+    }
+  }
+
   async function loadMyPresence() {
+    const requestVersion = myPresenceVersion;
+
     try {
       const result = await window.serviceCall.getMyPresence();
+
+      /*
+       * CASE 1: API request unsuccessful
+       */
 
       if (!result || result.success !== true) {
         console.warn("Unable to load presence:", result);
 
-        return;
+        return false; // ADD HERE
       }
 
       /*
-       * Display the effective status.
-       *
-       * This respects:
-       * Offline → In Call → Ringing →
-       * user-selected presence.
+       * Ignore responses from before
+       * a manual presence update.
        */
-      updatePresenceDisplay(
-        result.effective_status || result.presence_status || "available",
-      );
+
+      if (requestVersion !== myPresenceVersion) {
+        console.log("Ignoring outdated presence response.");
+
+        return false;
+      }
 
       /*
-       * Keep the saved OOF reason ready
-       * for editing/reuse.
+       * Restore saved manual status.
        */
+
+      mySelectedPresence = String(result.presence_status || "available")
+        .trim()
+        .toLowerCase();
+
+      /*
+       * Restore effective status.
+       */
+
+      myEffectivePresence = String(
+        result.effective_status || mySelectedPresence,
+      )
+        .trim()
+        .toLowerCase();
+
+      updatePresenceDisplay(myEffectivePresence);
+
+      /*
+       * Restore Out of Office reason.
+       */
+
       if (oofReasonInput) {
         oofReasonInput.value = result.oof_reason || "";
       }
 
       console.log("ServiceCall presence loaded:", result);
+
+      /*
+       * CASE 2: Everything succeeded.
+       *
+       * Put return true AFTER the OOF
+       * assignment and console.log.
+       */
+
+      return true; // ADD HERE
     } catch (error) {
       console.error("Unable to load ServiceCall presence:", error);
+
+      /*
+       * CASE 3: API threw an error.
+       */
+
+      return false; // ADD HERE
     }
   }
+
+  /* =====================================================
+   SERVICECALL — MY PRESENCE AUTO SYNC
+===================================================== */
+
+  const MY_PRESENCE_REFRESH_INTERVAL = 15000;
+
+  let myPresenceRefreshInProgress = false;
+
+  async function refreshMyPresence() {
+    if (myPresenceUpdateInProgress) {
+      return;
+    }
+    if (myPresenceRefreshInProgress) {
+      return;
+    }
+
+    if (document.hidden) {
+      return;
+    }
+
+    myPresenceRefreshInProgress = true;
+
+    try {
+      await loadMyPresence();
+    } catch (error) {
+      console.error("ServiceCall presence refresh failed:", error);
+    } finally {
+      myPresenceRefreshInProgress = false;
+    }
+  }
+
+  setInterval(refreshMyPresence, MY_PRESENCE_REFRESH_INTERVAL);
 
   /* =====================================================
    PRESENCE MENU
@@ -20798,7 +21129,11 @@ gap:8px;
          */
 
         try {
-          const result = await window.serviceCall.updatePresence(status, "");
+          const result = await updateMyPresenceSafely(status, "");
+
+          if (!result) {
+            return;
+          }
 
           if (!result || result.success !== true) {
             throw new Error(
@@ -20807,8 +21142,6 @@ gap:8px;
                 : "Unable to update presence.",
             );
           }
-
-          updatePresenceDisplay(result.effective_status || status);
 
           if (oofReasonPanel) {
             oofReasonPanel.style.display = "none";
@@ -20848,10 +21181,11 @@ gap:8px;
         }
 
         try {
-          const result = await window.serviceCall.updatePresence(
-            "out of office",
-            reason,
-          );
+          const result = await updateMyPresenceSafely("out of office", reason);
+
+          if (!result) {
+            return;
+          }
 
           if (!result || result.success !== true) {
             throw new Error(
@@ -20861,7 +21195,19 @@ gap:8px;
             );
           }
 
-          updatePresenceDisplay(result.effective_status || "out of office");
+          // myPresenceVersion++;
+
+          // mySelectedPresence = String(result.presence_status || "out of office")
+          //   .trim()
+          //   .toLowerCase();
+
+          // myEffectivePresence = String(
+          //   result.effective_status || mySelectedPresence,
+          // )
+          //   .trim()
+          //   .toLowerCase();
+
+          // updatePresenceDisplay(myEffectivePresence);
 
           if (oofReasonPanel) {
             oofReasonPanel.style.display = "none";
@@ -20907,17 +21253,29 @@ gap:8px;
       try {
         resetPresenceButton.disabled = true;
 
-        const result = await window.serviceCall.updatePresence("available", "");
+        const result = await updateMyPresenceSafely("available", "");
+
+        if (!result) {
+          return;
+        }
 
         if (!result || result.success !== true) {
           console.error("Unable to reset presence:", result);
 
           return;
         }
+        // myPresenceVersion++;
+        // mySelectedPresence = String(result.presence_status || "available")
+        //   .trim()
+        //   .toLowerCase();
 
-        updatePresenceDisplay(
-          result.effective_status || result.presence_status || "available",
-        );
+        // myEffectivePresence = String(
+        //   result.effective_status || mySelectedPresence,
+        // )
+        //   .trim()
+        //   .toLowerCase();
+
+        // updatePresenceDisplay(myEffectivePresence);
 
         if (oofReasonPanel) {
           oofReasonPanel.style.display = "none";

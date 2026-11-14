@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>ServiceCall — Starting</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #101827;
+            color: #ffffff;
+            font-family: "Segoe UI", Arial, sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .container {
+            width: 100%;
+            text-align: center;
+            padding: 30px;
+        }
+
+        .logo {
+            width: 76px;
+            height: 76px;
+            margin: 0 auto 22px;
+            border-radius: 20px;
+            background: #203a60;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            color: #77b5ff;
+        }
+
+        h1 {
+            font-size: 32px;
+            margin: 0;
+            letter-spacing: 0.4px;
+            font-weight: 650;
+        }
+
+        .subtitle {
+            color: #a7bbd5;
+            font-size: 13px;
+            margin-top: 12px;
+        }
+
+        .progress {
+            width: 240px;
+            height: 5px;
+            background: #34465f;
+            border-radius: 20px;
+            margin: 35px auto 16px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            width: 40%;
+            height: 100%;
+            background: #60a5fa;
+            border-radius: 20px;
+            animation: loading 1.4s ease-in-out infinite;
+        }
+
+        @keyframes loading {
+            0% {
+                transform: translateX(-110%);
+            }
+
+            100% {
+                transform: translateX(350%);
+            }
+        }
+
+        .status {
+            color: #a7bbd5;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="logo">&#9742;</div>
+
+        <h1>ServiceCall</h1>
+
+        <div class="subtitle">
+            Connecting people. Simplifying work.
+        </div>
+
+        <div class="progress">
+            <div class="progress-bar"></div>
+        </div>
+
+        <div class="status">
+            Starting your workspace...
+        </div>
+    </div>
+</body>
+
+</html>

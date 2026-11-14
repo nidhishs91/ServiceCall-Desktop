@@ -4114,12 +4114,175 @@
                 opacity: 1;
             }
         }
+
+
+        /* SERVICECALL STARTUP OVERLAY */
+
+        #servicecallStartupOverlay {
+            position: fixed;
+            inset: 0;
+            z-index: 999999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background:
+                radial-gradient(circle at 50% 38%, #174c46 0%, #102b2b 42%, #091719 100%);
+            color: #fff;
+            text-align: center;
+            transition: opacity .35s ease, visibility .35s ease;
+        }
+
+        #servicecallStartupOverlay.sc-hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .sc-startup-card {
+            width: min(440px, 100%);
+            padding: 38px 30px;
+        }
+
+        .sc-startup-logo {
+            width: 74px;
+            height: 74px;
+            margin: 0 auto 24px;
+            border-radius: 22px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, #65e6bc, #159579);
+            color: #092b27;
+            font-size: 30px;
+            font-weight: 800;
+            box-shadow: 0 14px 50px #29b68a35;
+        }
+
+        .sc-startup-title {
+            margin: 0;
+            font-size: 30px;
+            letter-spacing: -.8px;
+        }
+
+        .sc-startup-subtitle {
+            margin: 12px 0 28px;
+            color: #a8c8c2;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .sc-startup-spinner {
+            width: 42px;
+            height: 42px;
+            margin: 0 auto 25px;
+            border: 3px solid #ffffff20;
+            border-top-color: #65e6bc;
+            border-radius: 50%;
+            animation: scStartupSpin .85s linear infinite;
+        }
+
+        @keyframes scStartupSpin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .sc-startup-progress {
+            height: 4px;
+            overflow: hidden;
+            border-radius: 99px;
+            background: #ffffff18;
+        }
+
+        .sc-startup-progress::after {
+            content: "";
+            display: block;
+            width: 35%;
+            height: 100%;
+            border-radius: inherit;
+            background: #65e6bc;
+            animation: scStartupProgress 1.7s ease-in-out infinite;
+        }
+
+        @keyframes scStartupProgress {
+            0% {
+                transform: translateX(-110%);
+            }
+
+            100% {
+                transform: translateX(400%);
+            }
+        }
+
+        .sc-startup-message {
+            margin-top: 20px;
+            color: #b9d1cc;
+            font-size: 13px;
+        }
+
+        .sc-startup-retry {
+            display: none;
+            margin: 20px auto 0;
+            padding: 11px 24px;
+            border: 1px solid #65e6bc;
+            border-radius: 9px;
+            background: #174d42;
+            color: white;
+            cursor: pointer;
+        }
+
+        #servicecallStartupOverlay.sc-error .sc-startup-spinner,
+        #servicecallStartupOverlay.sc-error .sc-startup-progress {
+            display: none;
+        }
+
+        #servicecallStartupOverlay.sc-error .sc-startup-retry {
+            display: inline-block;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            .sc-startup-spinner,
+            .sc-startup-progress::after {
+                animation: none;
+            }
+        }
     </style>
 
 </head>
 
 
 <body>
+
+    <!-- SERVICECALL STARTUP OVERLAY -->
+    <div id="servicecallStartupOverlay" role="status" aria-live="polite" aria-label="ServiceCall is starting">
+
+        <div class="sc-startup-card">
+
+            <div class="sc-startup-logo">S</div>
+
+            <h1 class="sc-startup-title">ServiceCall</h1>
+
+            <p class="sc-startup-subtitle">
+                Your workspace. Connected.<br>
+                Preparing your secure communication experience.
+            </p>
+
+            <div class="sc-startup-spinner"></div>
+
+            <div class="sc-startup-progress"></div>
+
+            <p id="servicecallStartupMessage" class="sc-startup-message">
+                Connecting to ServiceNow and restoring your presence...
+            </p>
+
+            <button id="servicecallStartupRetry" class="sc-startup-retry" type="button">
+                Retry connection
+            </button>
+
+        </div>
+    </div>
+    <!-- END SERVICECALL STARTUP OVERLAY -->
 
     <div class="app">
 
