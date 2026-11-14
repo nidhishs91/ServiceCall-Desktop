@@ -8152,6 +8152,26 @@ document.addEventListener("DOMContentLoaded", async () => {
         );
 
         /*
+         * ALWAYS NAVIGATE TO CHATS FIRST
+         *
+         * A notification may be clicked while the user
+         * is on Home, Contacts, Meetings, or another section.
+         *
+         * Make the Chats section visible before opening
+         * the target conversation.
+         */
+        chatNavigationButton = document.querySelector(
+          '.nav-button[data-view="chatView"]',
+        );
+
+        if (!chatNavigationButton) {
+          console.error("Chat navigation button not found.");
+          return;
+        }
+
+        chatNavigationButton.click();
+
+        /*
          * FAST CHAT NOTIFICATION NAVIGATION
          *
          * If the target conversation already exists
@@ -8193,18 +8213,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
           return;
         }
-
-        // Open the existing Chat section.
-        const chatNavigationButton = document.querySelector(
-          '.nav-button[data-view="chatView"]',
-        );
-
-        if (!chatNavigationButton) {
-          console.error("Chat navigation button not found.");
-          return;
-        }
-
-        chatNavigationButton.click();
 
         // Retrieve the user's authorized conversations.
         const result = await window.serviceCall.getConversations();
