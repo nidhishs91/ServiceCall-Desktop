@@ -5679,6 +5679,11 @@ document.addEventListener("DOMContentLoaded", async () => {
    SERVICECALL — STARTUP HEADER COORDINATION
 ===================================================== */
 
+  let myPresenceVersion = 0;
+
+  let mySelectedPresence = "available";
+  let myEffectivePresence = "offline";
+
   let startupHeaderReady = false;
 
   let pendingStartupConnection = null;
@@ -5696,6 +5701,66 @@ document.addEventListener("DOMContentLoaded", async () => {
       connectionPill.textContent = "Connecting...";
       connectionPill.classList.remove("connected");
     }
+  }
+
+  /* =========================================
+   SERVICECALL STARTUP OVERLAY
+========================================= */
+
+  let serviceCallStartupComplete = false;
+
+  function setServiceCallStartupMessage(text) {
+    const message = document.getElementById("servicecallStartupMessage");
+
+    if (message) {
+      message.textContent = text;
+    }
+  }
+
+  function showServiceCallStartupError(text) {
+    const overlay = document.getElementById("servicecallStartupOverlay");
+
+    if (!overlay || serviceCallStartupComplete) return;
+
+    setServiceCallStartupMessage(text || "Unable to connect to ServiceNow.");
+
+    overlay.classList.add("sc-error");
+  }
+
+  function completeServiceCallStartup() {
+    if (serviceCallStartupComplete) return;
+
+    const overlay = document.getElementById("servicecallStartupOverlay");
+
+    if (!overlay) {
+      console.error("ServiceCall startup overlay not found.");
+      return;
+    }
+
+    serviceCallStartupComplete = true;
+
+    overlay.classList.remove("sc-error");
+    overlay.classList.add("sc-hidden");
+
+    console.log("ServiceCall startup overlay dismissed.");
+  }
+
+  const serviceCallStartupRetry = document.getElementById(
+    "servicecallStartupRetry",
+  );
+
+  if (serviceCallStartupRetry) {
+    serviceCallStartupRetry.addEventListener("click", () => {
+      if (serviceCallStartupComplete) return;
+
+      const overlay = document.getElementById("servicecallStartupOverlay");
+
+      if (overlay) {
+        overlay.classList.add("sc-hidden");
+      }
+
+      finishStartupHeader();
+    });
   }
 
   function finishStartupHeader() {
@@ -5755,43 +5820,89 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.error("Unable to load saved ServiceNow instance:", error);
   }
 
+  async function waitForServiceCallConnection() {
+    const maxAttempts = 8;
+    const retryDelay = 750;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const status = await window.serviceCall.getConnectionStatus();
+
+        if (status && status.connected) {
+          return status;
+        }
+
+        console.log(`ServiceCall connection attempt ${attempt}: not ready`);
+      } catch (error) {
+        console.warn(
+          `ServiceCall connection attempt ${attempt} failed:`,
+          error,
+        );
+      }
+
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      }
+    }
+
+    return null;
+  }
+
   /* -------------------------------------------------
            CHECK CONNECTION
         ------------------------------------------------- */
 
   try {
-    const connectionStatus = await window.serviceCall.getConnectionStatus();
+    setServiceCallStartupMessage("Checking your ServiceNow connection...");
 
-    if (connectionStatus.connected) {
+    const connectionStatus = await waitForServiceCallConnection();
+
+    if (connectionStatus && connectionStatus.connected) {
       loginButton.disabled = true;
       loginButton.textContent = "Connected to ServiceNow";
 
-      // Fetch presence while the header is still loading.
+      setServiceCallStartupMessage("Restoring your presence...");
+
       const presenceLoaded = await loadMyPresence();
 
-      if (!presenceLoaded) {
-        updatePresenceDisplay("offline");
-      }
+      if (presenceLoaded) {
+        setConnectionDisplay(true, "Connected");
 
-      // Set connection status only after presence is ready.
-      setConnectionDisplay(true, "Connected");
+        if (message) {
+          message.textContent = connectionStatus.message || "";
+        }
 
-      if (message) {
-        message.textContent = connectionStatus.message || "";
+        // Both checks succeeded.
+        finishStartupHeader();
+        completeServiceCallStartup();
+      } else {
+        setConnectionDisplay(true, "Connected");
+
+        showServiceCallStartupError(
+          "Connected, but your presence could not be restored. Please retry.",
+        );
       }
     } else {
       loginButton.disabled = false;
       loginButton.textContent = "Sign in to ServiceNow";
 
-      updatePresenceDisplay("offline");
       setConnectionDisplay(false, "Not connected");
+
+      showServiceCallStartupError(
+        "Your ServiceNow session is not connected. Please sign in or retry.",
+      );
     }
   } catch (error) {
-    console.error("Unable to check ServiceCall connection:", error);
+    console.error("Unable to initialize ServiceCall:", error);
 
-    updatePresenceDisplay("offline");
     setConnectionDisplay(false, "Connection unavailable");
+
+    showServiceCallStartupError(
+      "Unable to connect to ServiceNow. Please retry.",
+    );
   } finally {
+    // Preserve the existing Electron readiness signal.
+    // The overlay is controlled separately.
     finishStartupHeader();
   }
 
@@ -20901,15 +21012,6 @@ gap:8px;
       presenceDot.className = "presence-dot " + cssClass;
     }
   }
-
-  /* =====================================================
-   SERVICECALL — MY PRESENCE STATE
-===================================================== */
-
-  let mySelectedPresence = "available";
-  let myEffectivePresence = "offline";
-
-  let myPresenceVersion = 0;
 
   /* =====================================================
    SERVICECALL — PRESENCE UPDATE LOCK
