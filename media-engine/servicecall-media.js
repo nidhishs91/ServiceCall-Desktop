@@ -1,8 +1,8 @@
 /*
  * ServiceCall Native WebRTC Media Engine
- * Version 1 - Microphone initialization
+ * Version 1.1
  *
- * No Agora dependency.
+ * Microphone + Noise Suppression Controls
  */
 
 (() => {
@@ -10,11 +10,30 @@
 
   let localStream = null;
   let muted = false;
+  let noiseMode = "standard";
+
+  const audioModes = {
+    off: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    },
+
+    standard: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
+  };
+
+  function getLocalAudioTrack() {
+    return localStream?.getAudioTracks()[0] || null;
+  }
 
   async function initializeMicrophone() {
-    if (
-      localStream?.getAudioTracks().some((track) => track.readyState === "live")
-    ) {
+    const existingTrack = getLocalAudioTrack();
+
+    if (existingTrack?.readyState === "live") {
       return { success: true };
     }
 
@@ -23,23 +42,53 @@
     }
 
     localStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
+      audio: audioModes[noiseMode],
       video: false,
     });
 
     muted = false;
 
-    console.log("ServiceCall microphone initialized.");
+    console.log(
+      "[ServiceCall] Microphone initialized:",
+      getLocalAudioTrack()?.getSettings(),
+    );
 
     return { success: true };
   }
 
-  function getLocalAudioTrack() {
-    return localStream?.getAudioTracks()[0] || null;
+  async function setNoiseMode(mode) {
+    if (!Object.prototype.hasOwnProperty.call(audioModes, mode)) {
+      throw new Error("Unsupported noise mode: " + mode);
+    }
+
+    const track = getLocalAudioTrack();
+
+    if (track?.readyState === "live") {
+      await track.applyConstraints(audioModes[mode]);
+    }
+
+    noiseMode = mode;
+
+    console.log(
+      "[ServiceCall] Noise mode:",
+      mode,
+      "Actual microphone settings:",
+      track?.getSettings(),
+    );
+
+    return {
+      success: true,
+      mode,
+      settings: track?.getSettings() || null,
+    };
+  }
+
+  function getNoiseMode() {
+    return noiseMode;
+  }
+
+  function getAudioSettings() {
+    return getLocalAudioTrack()?.getSettings() || null;
   }
 
   function setMuted(shouldMute) {
@@ -71,6 +120,9 @@
   window.ServiceCallMedia = Object.freeze({
     initializeMicrophone,
     getLocalAudioTrack,
+    setNoiseMode,
+    getNoiseMode,
+    getAudioSettings,
     setMuted,
     isMuted,
     stopMicrophone,

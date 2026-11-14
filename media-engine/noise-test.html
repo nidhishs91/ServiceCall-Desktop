@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>ServiceCall Noise Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #101817;
+            color: white;
+            padding: 30px;
+            max-width: 650px;
+            margin: auto;
+        }
+
+        button,
+        select {
+            padding: 12px;
+            margin: 8px 5px;
+            border-radius: 7px;
+        }
+
+        button {
+            background: #16876b;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: .4;
+        }
+
+        audio {
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        #status {
+            color: #8ce0b9;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>ServiceCall Noise Suppression Test</h2>
+
+    <p>Choose a mode, record a sample, and listen.</p>
+
+    <select id="mode">
+        <option value="off">Off</option>
+        <option value="standard">Standard</option>
+    </select>
+
+    <div>
+        <button id="record">Record 10 Seconds</button>
+        <button id="stop" disabled>Stop Recording</button>
+    </div>
+
+    <p id="status">Ready</p>
+
+    <h3>Off recording</h3>
+    <audio id="offAudio" controls></audio>
+
+    <h3>Standard recording</h3>
+    <audio id="standardAudio" controls></audio>
+
+    <script src="./servicecall-media.js"></script>
+
+    <script>
+        (() => {
+            const $ = id => document.getElementById(id);
+
+            let recorder = null;
+            let chunks = [];
+            let timer = null;
+            const urls = {};
+
+            async function startRecording() {
+                $("record").disabled = true;
+                $("mode").disabled = true;
+
+                try {
+                    const mode = $("mode").value;
+
+                    await window.ServiceCallMedia.setNoiseMode(mode);
+                    await window.ServiceCallMedia.initializeMicrophone();
+
+                    const track =
+                        window.ServiceCallMedia.getLocalAudioTrack();
+
+                    const settings = track.getSettings();
+
+                    console.log("Actual microphone settings:", settings);
+
+                    const stream = new MediaStream([track]);
+
+                    chunks = [];
+
+                    const options = MediaRecorder.isTypeSupported(
+                        "audio/webm;codecs=opus"
+                    ) ? { mimeType: "audio/webm;codecs=opus" } : {};
+
+                    recorder = new MediaRecorder(stream, options);
+
+                    recorder.ondataavailable = event => {
+                        if (event.data.size > 0) chunks.push(event.data);
+                    };
+
+                    recorder.onstop = () => {
+                        clearTimeout(timer);
+
+                        const blob = new Blob(chunks, {
+                            type: recorder.mimeType || "audio/webm"
+                        });
+
+                        if (urls[mode]) URL.revokeObjectURL(urls[mode]);
+
+                        urls[mode] = URL.createObjectURL(blob);
+
+                        $(mode + "Audio").src = urls[mode];
+
+                        window.ServiceCallMedia.stopMicrophone();
+
+                        $("record").disabled = false;
+                        $("stop").disabled = true;
+                        $("mode").disabled = false;
+
+                        $("status").textContent =
+                            mode + " recording complete. Play it below.";
+                    };
+
+                    recorder.start();
+
+                    $("stop").disabled = false;
+
+                    $("status").textContent =
+                        "Recording " + mode + " for up to 10 seconds...";
+
+                    timer = setTimeout(stopRecording, 10000);
+
+                } catch (error) {
+                    window.ServiceCallMedia.stopMicrophone();
+
+                    $("record").disabled = false;
+                    $("stop").disabled = true;
+                    $("mode").disabled = false;
+
+                    $("status").textContent = "Error: " + error.message;
+                }
+            }
+
+            function stopRecording() {
+                if (recorder?.state === "recording") {
+                    recorder.stop();
+                }
+            }
+
+            $("record").onclick = startRecording;
+            $("stop").onclick = stopRecording;
+
+            window.addEventListener("beforeunload", () => {
+                clearTimeout(timer);
+                window.ServiceCallMedia.stopMicrophone();
+                Object.values(urls).forEach(URL.revokeObjectURL);
+            });
+        })();
+    </script>
+</body>
+
+</html>

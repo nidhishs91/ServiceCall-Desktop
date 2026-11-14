@@ -64,6 +64,19 @@ contextBridge.exposeInMainWorld("serviceCall", {
 
   openActiveCall: () => ipcRenderer.invoke("servicecall-open-active-call"),
 
+  /* -----------------------------------------
+   WEBRTC SIGNALING
+----------------------------------------- */
+
+  sendWebRTCSignal: (data) =>
+    ipcRenderer.invoke("servicecall-webrtc-send-signal", data),
+
+  getWebRTCSignals: (callId, after = "") =>
+    ipcRenderer.invoke("servicecall-webrtc-get-signals", { callId, after }),
+
+  ackWebRTCSignal: (signalId) =>
+    ipcRenderer.invoke("servicecall-webrtc-ack-signal", signalId),
+
   /* -------------------------
            CALL ACTIONS
         ------------------------- */

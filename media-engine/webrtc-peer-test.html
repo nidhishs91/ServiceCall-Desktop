@@ -60,6 +60,17 @@
     <button id="muteBtn">Mute / Unmute</button>
     <button id="hangupBtn">Hang Up</button>
 
+    <h3>Microphone Noise Suppression</h3>
+
+    <select id="noiseMode">
+        <option value="standard">Standard</option>
+        <option value="off">Off</option>
+    </select>
+
+    <p id="noiseStatus">
+        Noise suppression: Standard
+    </p>
+
     <audio id="remoteAudio" autoplay></audio>
 
     <script src="./servicecall-config.js"></script>

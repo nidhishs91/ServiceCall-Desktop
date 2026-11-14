@@ -9143,3 +9143,119 @@ ipcMain.handle(
     }
   },
 );
+
+/* =====================================================
+   SERVICECALL WEBRTC SIGNALING API
+===================================================== */
+
+async function serviceCallWebRTCRequest(pathName, method = "GET", body = null) {
+  const config = loadConfig();
+
+  const accessToken = await ensureValidAccessToken();
+
+  if (!config?.instanceUrl || !accessToken) {
+    throw new Error("ServiceCall is not connected to ServiceNow.");
+  }
+
+  const url =
+    config.instanceUrl.replace(/\/$/, "") +
+    "/api/x_1806573_servic_0/servicecall_webrtc_signaling" +
+    pathName;
+
+  const options = {
+    method,
+    headers: {
+      Accept: "application/json",
+      Authorization: "Bearer " + accessToken,
+    },
+  };
+
+  if (body !== null) {
+    options.headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(body);
+  }
+
+  let apiResponse = await fetch(url, options);
+
+  if (apiResponse.status === 401) {
+    const renewedToken = await refreshAccessToken();
+
+    options.headers.Authorization = "Bearer " + renewedToken;
+
+    apiResponse = await fetch(url, options);
+  }
+
+  const data = await apiResponse.json().catch(() => ({}));
+  const result = data.result || data;
+
+  if (!apiResponse.ok || result.success === false) {
+    throw new Error(
+      result.error || result.message || "WebRTC signaling request failed.",
+    );
+  }
+
+  return result;
+}
+
+/* =====================================================
+   SEND WEBRTC SIGNAL
+===================================================== */
+
+ipcMain.handle("servicecall-webrtc-send-signal", async (event, data) => {
+  const validId = (value) =>
+    typeof value === "string" && /^[a-f0-9]{32}$/i.test(value);
+
+  if (!data || !validId(data.call_id) || !validId(data.receiver_id)) {
+    throw new Error("Invalid WebRTC signaling request.");
+  }
+
+  if (!["offer", "answer", "ice candidate"].includes(data.signal_type)) {
+    throw new Error("Invalid WebRTC signal type.");
+  }
+
+  if (
+    typeof data.payload !== "string" ||
+    !data.payload.length ||
+    data.payload.length > 40000
+  ) {
+    throw new Error("Invalid WebRTC payload.");
+  }
+
+  return await serviceCallWebRTCRequest("/signal", "POST", {
+    call_id: data.call_id,
+    receiver_id: data.receiver_id,
+    signal_type: data.signal_type,
+    payload: data.payload,
+  });
+});
+
+/* =====================================================
+   RECEIVE WEBRTC SIGNALS
+===================================================== */
+
+ipcMain.handle("servicecall-webrtc-get-signals", async (event, data) => {
+  const callId = String(data?.callId || "");
+
+  if (!/^[a-f0-9]{32}$/i.test(callId)) {
+    throw new Error("Invalid WebRTC call ID.");
+  }
+
+  return await serviceCallWebRTCRequest(
+    "/signals?call_id=" + encodeURIComponent(callId),
+    "GET",
+  );
+});
+
+/* =====================================================
+   ACKNOWLEDGE WEBRTC SIGNAL
+===================================================== */
+
+ipcMain.handle("servicecall-webrtc-ack-signal", async (event, signalId) => {
+  if (typeof signalId !== "string" || !/^[a-f0-9]{32}$/i.test(signalId)) {
+    throw new Error("Invalid WebRTC signal ID.");
+  }
+
+  return await serviceCallWebRTCRequest("/ack", "POST", {
+    signal_id: signalId,
+  });
+});

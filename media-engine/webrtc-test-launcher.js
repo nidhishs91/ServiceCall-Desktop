@@ -15,7 +15,7 @@ app.whenReady().then(() => {
     },
   });
 
-  testWindow.loadFile(path.join(__dirname, "webrtc-peer-test.html"));
+  testWindow.loadFile(path.join(__dirname, "noise-test.html"));
 });
 
 app.on("window-all-closed", () => {

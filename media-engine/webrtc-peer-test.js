@@ -193,5 +193,15 @@
 
   $("hangupBtn").onclick = hangUp;
 
+  $("noiseMode").onchange = run(async () => {
+    const selectedMode = $("noiseMode").value;
+
+    const result = await window.ServiceCallMedia.setNoiseMode(selectedMode);
+
+    $("noiseStatus").textContent = "Noise suppression: " + result.mode;
+
+    console.log("Microphone processing settings:", result.settings);
+  });
+
   window.addEventListener("beforeunload", hangUp);
 })();
