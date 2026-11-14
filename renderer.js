@@ -18287,11 +18287,11 @@ gap:8px;
     const status = String(displayStatus || "").trim();
 
     if (chatUserPresenceText) {
-      chatUserPresenceText.textContent = status || "Checking...";
+      chatUserPresenceText.textContent = status;
     }
 
     if (chatUserPresenceDot) {
-      chatUserPresenceDot.style.display = "";
+      chatUserPresenceDot.style.display = status ? "" : "none";
 
       chatUserPresenceDot.className =
         "chat-user-presence-dot" +
