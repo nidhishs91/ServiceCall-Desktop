@@ -10787,9 +10787,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         user_name: conversation.other_user_user_name || "",
 
-        display_status: cachedPresence?.displayStatus || "",
+        display_status:
+          cachedPresence?.displayStatus ||
+          conversation.other_user_display_status ||
+          "",
 
-        effective_status: cachedPresence?.effectiveStatus || "",
+        effective_status:
+          cachedPresence?.effectiveStatus ||
+          conversation.other_user_effective_status ||
+          "",
       };
     } else {
       activeChatUser = null;
@@ -18270,7 +18276,7 @@ gap:8px;
 
   const chatPresenceCache = new Map();
 
-  const CHAT_PRESENCE_CACHE_TTL = 15000;
+  const CHAT_PRESENCE_CACHE_TTL = 1500;
 
   function getCachedChatPresence(userSysId) {
     const key = String(userSysId || "").trim();
@@ -18411,7 +18417,7 @@ gap:8px;
    * messages, attachments or chat UI.
    */
 
-  const CHAT_PRESENCE_REFRESH_INTERVAL = 5000;
+  const CHAT_PRESENCE_REFRESH_INTERVAL = 2000;
 
   setInterval(() => {
     /*
