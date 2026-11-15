@@ -477,6 +477,15 @@
 
         log("Connection state:", connection.connectionState);
 
+        console.log("[ServiceCall WebRTC DEBUG] Connection details:", {
+          connectionState: connection.connectionState,
+          iceConnectionState: connection.iceConnectionState,
+          iceGatheringState: connection.iceGatheringState,
+          signalingState: connection.signalingState,
+          localDescription: connection.localDescription?.type || null,
+          remoteDescription: connection.remoteDescription?.type || null,
+        });
+
         if (typeof options.onStateChange === "function") {
           options.onStateChange(connection.connectionState);
         }
