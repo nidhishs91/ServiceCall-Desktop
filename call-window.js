@@ -16,7 +16,7 @@ const isConference = params.get("isConference") === "true";
    NATIVE WEBRTC DEVELOPMENT MODE
 ===================================================== */
 
-const WEBRTC_TEST_MODE = false;
+const WEBRTC_TEST_MODE = true;
 
 const isMeeting = params.get("isMeeting") === "true";
 

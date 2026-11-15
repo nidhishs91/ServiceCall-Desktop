@@ -10,6 +10,7 @@
   const POLL_INTERVAL_MS = 1000;
 
   let running = false;
+  let signalingSessionId = 0;
   let polling = false;
   let pollTimer = null;
 
@@ -62,12 +63,22 @@
       throw new Error("Unsupported signal type.");
     }
 
-    return getBridge().sendWebRTCSignal({
+    const result = await getBridge().sendWebRTCSignal({
       call_id: callId,
       receiver_id: receiverId,
       signal_type: type,
       payload: JSON.stringify(payload),
     });
+
+    if (!result || result.success !== true) {
+      throw new Error(
+        result?.error ||
+          result?.message ||
+          "ServiceNow rejected the WebRTC signal.",
+      );
+    }
+
+    return result;
   }
 
   async function sendOffer(description) {
@@ -96,13 +107,17 @@
   async function poll() {
     if (!running || polling) return;
 
+    const currentSession = signalingSessionId;
+
     polling = true;
 
     try {
       const bridge = getBridge();
       const result = await bridge.getWebRTCSignals(callId);
 
-      if (!running) return;
+      if (!running || currentSession !== signalingSessionId) {
+        return;
+      }
 
       if (!result || result.success !== true) {
         throw new Error("Unable to retrieve WebRTC signals.");
@@ -111,7 +126,9 @@
       const signals = Array.isArray(result.signals) ? result.signals : [];
 
       for (const signal of signals) {
-        if (!running) break;
+        if (!running || currentSession !== signalingSessionId) {
+          break;
+        }
 
         if (!signal || !validateId(signal.id)) {
           continue;
@@ -145,7 +162,15 @@
             senderId: signal.sender_id,
           });
 
-          await bridge.ackWebRTCSignal(signal.id);
+          const ackResult = await bridge.ackWebRTCSignal(signal.id);
+
+          if (!ackResult || ackResult.success !== true) {
+            throw new Error(
+              ackResult?.error ||
+                ackResult?.message ||
+                "WebRTC signal acknowledgment failed.",
+            );
+          }
         } catch (error) {
           /*
            * Do not acknowledge a failed signal.
@@ -189,16 +214,19 @@
     onSignal = options.onSignal;
     onError = options.onError || null;
 
+    ++signalingSessionId;
+
     running = true;
 
     pollTimer = setInterval(poll, POLL_INTERVAL_MS);
 
-    await poll();
+    //await poll();
 
     console.log("[ServiceCall WebRTC] Signaling started:", callId);
   }
 
   function stop() {
+    ++signalingSessionId;
     running = false;
 
     if (pollTimer) {
