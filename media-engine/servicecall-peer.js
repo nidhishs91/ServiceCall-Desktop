@@ -373,6 +373,12 @@
 
     const signaling = getSignaling();
 
+    console.log("[ServiceCall WebRTC DEBUG] Peer start options:", {
+      callId: options.callId,
+      remoteUserId: options.remoteUserId,
+      isCaller: options.isCaller,
+    });
+
     started = true;
 
     const currentSession = ++sessionId;
@@ -498,8 +504,9 @@
       ----------------------------------------- */
 
       if (options.isCaller) {
-        const offer = await connection.createOffer();
+        console.log("[ServiceCall WebRTC DEBUG] Creating SDP offer");
 
+        const offer = await connection.createOffer();
         if (!isCurrentSession(currentSession)) {
           return;
         }
@@ -509,6 +516,8 @@
         if (!isCurrentSession(currentSession)) {
           return;
         }
+
+        console.log("[ServiceCall WebRTC DEBUG] Sending SDP offer");
 
         await signaling.sendOffer(connection.localDescription.toJSON());
 
