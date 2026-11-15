@@ -586,6 +586,13 @@ async function startNativeWebRTC() {
 
     const isCaller = result.participant_role === "caller";
 
+    console.log("[ServiceCall WebRTC DEBUG] Call status:", {
+      state: result.state,
+      participantRole: result.participant_role,
+      isCaller: isCaller,
+      remoteUserId: remoteUserId,
+    });
+
     if (!/^[a-f0-9]{32}$/i.test(remoteUserId || "")) {
       throw new Error("Remote user sys_id unavailable.");
     }
