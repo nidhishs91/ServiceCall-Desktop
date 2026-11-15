@@ -198,6 +198,14 @@
 
     let payload = signal.payload;
 
+    console.log("[WebRTC RECEIVER DEBUG] Incoming signal:", {
+      id: id,
+      type: type,
+      payload: payload,
+      payloadType: typeof payload,
+      rawSignal: signal,
+    });
+
     if (typeof payload === "string") {
       try {
         payload = JSON.parse(payload);
