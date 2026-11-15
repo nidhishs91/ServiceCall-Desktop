@@ -192,9 +192,26 @@
     const currentSession = sessionId;
     const connection = pc;
 
-    const { id, type, payload } = signal;
+    const id = signal.id;
 
-    if (!id || !type || !payload) {
+    const type = signal.type || signal.signal_type;
+
+    let payload = signal.payload;
+
+    if (typeof payload === "string") {
+      try {
+        payload = JSON.parse(payload);
+      } catch (error) {
+        throw new Error("Invalid WebRTC signal JSON payload.");
+      }
+    }
+
+    if (
+      !id ||
+      !["offer", "answer", "ice candidate"].includes(type) ||
+      !payload ||
+      typeof payload !== "object"
+    ) {
       throw new Error("Invalid WebRTC signal.");
     }
 
