@@ -9188,9 +9188,24 @@ async function serviceCallWebRTCRequest(pathName, method = "GET", body = null) {
   const data = await apiResponse.json().catch(() => ({}));
   const result = data.result || data;
 
+  console.log("[ServiceCall WebRTC API]", {
+    path: pathName,
+    method: method,
+    httpStatus: apiResponse.status,
+    response: result,
+  });
+
   if (!apiResponse.ok || result.success === false) {
+    const details =
+      result.error?.message ||
+      result.error?.detail ||
+      (typeof result.error === "string"
+        ? result.error
+        : JSON.stringify(result.error || result));
+
     throw new Error(
-      result.error || result.message || "WebRTC signaling request failed.",
+      `WebRTC API ${method} ${pathName} failed ` +
+        `(HTTP ${apiResponse.status}): ${details}`,
     );
   }
 
